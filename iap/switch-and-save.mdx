@@ -21,6 +21,7 @@ icon: 'gift'
 ```swift SwiftUI
 ZSMigrateTipView(
     userId: currentUser.id,
+    stripeCustomerId: "cus_abc123",                  // optional
     backgroundColor: .black,                        // optional
     titleFont: .system(size: 20, weight: .bold),    // optional
     bodyFont: .system(size: 16),                     // optional
@@ -44,6 +45,7 @@ import { ZSMigrateTipView } from 'react-native-zerosettle-kit';
 
 <ZSMigrateTipView
   userId={currentUser.id}
+  stripeCustomerId="cus_abc123"            // optional
   backgroundColorHex="#1E1E1E"
   style={{ marginHorizontal: 16 }}
 />
@@ -174,6 +176,7 @@ Column(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `userId` | `String` | Required | The user identifier passed to the checkout backend. |
+| `stripeCustomerId` | `String?` | `nil` | Optional existing Stripe Customer ID (`cus_xxx`). When provided, the checkout is attached to this customer instead of creating a new one. Useful for a unified [Billing Portal](https://docs.stripe.com/customer-management/integrate-customer-portal) view. |
 | `backgroundColor` | `Color` (SwiftUI, Flutter) / `string` (React Native) | `.black` / `"#000000"` | Background color for the card. Pass a `Color` in SwiftUI and Flutter, or a hex string in React Native. |
 
 ### SwiftUI only

@@ -10,7 +10,9 @@ icon: 'wand-magic-sparkles'
 
 ```swift
 struct SwitchAndSaveBanner: View {
+    // Pass stripeCustomerId to attach checkouts to an existing Stripe customer
     @StateObject private var manager = ZSMigrationManager(userId: "user_42")
+    // Or: ZSMigrationManager(userId: "user_42", stripeCustomerId: "cus_abc123")
 
     var body: some View {
         switch manager.state {
@@ -75,6 +77,7 @@ The manager locks mid-flow states (`presented`, `accepted`, `completed`) so that
 | `isLoading` | `Bool` | `true` while `startCheckout()` is creating a payment intent. |
 | `checkoutError` | `Error?` | The last error from `startCheckout()`, if any. |
 | `userId` | `String` | The user identifier this manager was created with. |
+| `stripeCustomerId` | `String?` | Optional Stripe Customer ID passed at init. When set, checkouts are attached to this existing customer. |
 
 ## Offer Data
 
