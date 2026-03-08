@@ -23,7 +23,7 @@ In Xcode, add the Associated Domains capability to your app target:
 2. Go to **Signing & Capabilities**
 3. Click **+ Capability**
 4. Select **Associated Domains**
-5. Add: `applinks:api.zerosettle.io`
+5. Add both domains: `applinks:api.zerosettle.io` and `applinks:zerosettle.io`
 
 Your entitlements file should include:
 
@@ -32,6 +32,7 @@ Your entitlements file should include:
 <key>com.apple.developer.associated-domains</key>
 <array>
     <string>applinks:api.zerosettle.io</string>
+    <string>applinks:zerosettle.io</string>
 </array>
 ```
 
@@ -57,6 +58,10 @@ Your entitlements file should include:
 ```
 </CodeGroup>
 
+<Note>
+  Two domains are required. `api.zerosettle.io` handles the primary checkout callback from Stripe. `zerosettle.io` handles the "Return to App" fallback button, which uses a cross-origin redirect to trigger Universal Links in Safari.
+</Note>
+
 ### Developer Mode
 
 During development, add `?mode=developer` to bypass Apple's AASA caching:
@@ -66,6 +71,7 @@ During development, add `?mode=developer` to bypass Apple's AASA caching:
 <key>com.apple.developer.associated-domains</key>
 <array>
     <string>applinks:api.zerosettle.io?mode=developer</string>
+    <string>applinks:zerosettle.io?mode=developer</string>
 </array>
 ```
 
@@ -553,7 +559,7 @@ This allows the SDK to poll for transaction status when the user returns from th
   </Accordion>
   <Accordion title="handleUniversalLink returns false">
     - The URL may not be a ZeroSettle callback URL
-    - Check that the URL host is `api.zerosettle.io`
+    - Check that the URL host is `api.zerosettle.io` or `zerosettle.io`
     - Verify the path starts with `/checkout/callback`
   </Accordion>
   <Accordion title="Delegate methods not called">
