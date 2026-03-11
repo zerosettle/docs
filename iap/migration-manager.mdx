@@ -159,6 +159,34 @@ Clears the persisted dismissal, allowing the offer to reappear. Useful for debug
 ZSMigrationManager.resetDismissedState()
 ```
 
+### `forceUSARegion()`
+
+Forces the jurisdiction check to `.us` so the migration tip appears regardless of device locale. Debug only — do not ship with this enabled.
+
+```swift
+ZSMigrationManager.forceUSARegion()
+```
+
+### `resetRegionOverride()`
+
+Restores real jurisdiction detection after a `forceUSARegion()` call.
+
+```swift
+ZSMigrationManager.resetRegionOverride()
+```
+
+### `isUSARegionForced`
+
+Backing `Bool` flag for the region override (default `false`). You can also set this directly:
+
+```swift
+ZSMigrationManager.isUSARegionForced = true
+```
+
+<Note>
+Unlike `demoMode`, `forceUSARegion()` only bypasses the region check. All other eligibility checks (active StoreKit subscription, rollout, tenure, etc.) still apply.
+</Note>
+
 ## Full Example
 
 A complete custom switch and save card with loading, error, checkout, and completion states:

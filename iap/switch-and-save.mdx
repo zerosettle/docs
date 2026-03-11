@@ -255,6 +255,42 @@ await ZeroSettle.instance.resetMigrateTipState();
   `ZSMigrateTipView.resetMigrateTipState()` still works but is deprecated. Use `ZSMigrationManager.resetDismissedState()` instead.
 </Note>
 
+### Region Override
+
+The migration tip is restricted to US-region devices. To test from other regions, force the jurisdiction check:
+
+<CodeGroup>
+
+```swift SwiftUI
+// Force US jurisdiction — tip will appear regardless of device locale
+ZSMigrationManager.forceUSARegion()
+
+// Reset to real jurisdiction detection
+ZSMigrationManager.resetRegionOverride()
+```
+
+```tsx React Native
+import { forceUSARegion, resetRegionOverride } from 'react-native-zerosettle-kit';
+
+forceUSARegion();
+
+// Reset to real jurisdiction detection
+resetRegionOverride();
+```
+
+```dart Flutter
+await ZeroSettle.instance.forceUSARegion();
+
+// Reset to real jurisdiction detection
+await ZeroSettle.instance.resetRegionOverride();
+```
+
+</CodeGroup>
+
+<Note>
+This is a debug tool — do not ship with `forceUSARegion()` enabled. Unlike `demoMode`, this only bypasses the region check. All other eligibility checks (active StoreKit subscription, rollout, tenure, etc.) still apply.
+</Note>
+
 The view logs its visibility decisions to the console with the prefix `[ZSMigrateTipView Business Logic]`, including which condition caused it to show or hide.
 
 ## Next Steps
