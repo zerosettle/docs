@@ -1,0 +1,173 @@
+---
+title: 'Stripe Integration'
+description: 'How ZeroSettle uses Stripe Connect, identifying ZeroSettle activity, and keeping data in sync'
+icon: 'stripe'
+---
+
+ZeroSettle uses [Stripe Connect](https://stripe.com/connect) to process payments on behalf of your app. Whether you're on Managed (Express) or BYOS mode, ZeroSettle acts as the **Connect platform** and your Stripe account is the **connected account**. This architecture lets ZeroSettle handle payment orchestration, webhook processing, and entitlement management while keeping revenue flowing to your account.
+
+## Stripe Connect Architecture
+
+<AccordionGroup>
+  <Accordion title="Managed (Express)">
+    ZeroSettle creates a Stripe Express account for you during onboarding. Products, prices, customers, and subscriptions are all created and managed automatically on this account. You don't interact with Stripe directly.
+
+    ```
+    User → ZeroSettle SDK → ZeroSettle Platform → Stripe Express Account → Your Bank
+    ```
+  </Accordion>
+
+  <Accordion title="BYOS (Bring Your Own Stripe)">
+    You connect your existing Stripe standard account via OAuth. ZeroSettle creates payment intents, subscriptions, and customers **on your connected account** using your mapped products and prices from the [Stripe Catalog](/iap/stripe-catalog). You retain full access to your Stripe dashboard.
+
+    ```
+    User → ZeroSettle SDK → ZeroSettle Platform → Your Stripe Standard Account
+    ```
+  </Accordion>
+</AccordionGroup>
+
+In both modes, Stripe routes Connect webhook events to ZeroSettle's platform endpoint automatically. ZeroSettle processes these events to create and update Transactions and Entitlements. See [Webhooks & Server-Side](/iap/webhooks) for the full list of handled events.
+
+## Identifying ZeroSettle Activity in Stripe
+
+If you're on BYOS mode and have your own Stripe integration alongside ZeroSettle, you'll see activity from both sources in your Stripe dashboard. To distinguish ZeroSettle-originated resources from your own, check the `application` field.
+
+Every Stripe object (charge, payment intent, subscription, etc.) created through a Connect platform includes an `application` field containing the platform's account ID. For ZeroSettle:
+
+| Environment | Application ID |
+|---|---|
+| **Sandbox** | `ca_TpYOhCrZKO049uV06eUoa2yQpzsfLHrS` |
+| **Live** | `ca_TpYO58I3F1igfVm1SmnGMmBReAvEdsPM` |
+
+### Filtering Webhooks by Origin
+
+If you have your own Stripe webhook endpoint, you can filter events to determine whether they were created by ZeroSettle or by your own integration:
+
+<CodeGroup>
+
+```javascript Node.js
+const ZEROSETTLE_APP_IDS = [
+  'ca_TpYOhCrZKO049uV06eUoa2yQpzsfLHrS', // Sandbox
+  'ca_TpYO58I3F1igfVm1SmnGMmBReAvEdsPM', // Live
+];
+
+app.post('/stripe/webhook', (req, res) => {
+  const event = stripe.webhooks.constructEvent(
+    req.body, req.headers['stripe-signature'], webhookSecret
+  );
+
+  const application = event.data.object.application;
+
+  if (ZEROSETTLE_APP_IDS.includes(application)) {
+    // This event was created by ZeroSettle — skip your own handling
+    return res.json({ received: true });
+  }
+
+  // Handle events from your own integration
+  handleEvent(event);
+  res.json({ received: true });
+});
+```
+
+```python Python
+ZEROSETTLE_APP_IDS = {
+    "ca_TpYOhCrZKO049uV06eUoa2yQpzsfLHrS",  # Sandbox
+    "ca_TpYO58I3F1igfVm1SmnGMmBReAvEdsPM",  # Live
+}
+
+@app.route("/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    event = stripe.Webhook.construct_event(
+        request.data, request.headers["Stripe-Signature"], webhook_secret
+    )
+
+    application = event["data"]["object"].get("application")
+
+    if application in ZEROSETTLE_APP_IDS:
+        # This event was created by ZeroSettle — skip your own handling
+        return jsonify(received=True)
+
+    # Handle events from your own integration
+    handle_event(event)
+    return jsonify(received=True)
+```
+
+```go Go
+var zeroSettleAppIDs = map[string]bool{
+	"ca_TpYOhCrZKO049uV06eUoa2yQpzsfLHrS": true, // Sandbox
+	"ca_TpYO58I3F1igfVm1SmnGMmBReAvEdsPM": true, // Live
+}
+
+func handleWebhook(w http.ResponseWriter, r *http.Request) {
+	event, err := webhook.ConstructEvent(
+		body, r.Header.Get("Stripe-Signature"), webhookSecret,
+	)
+
+	obj := event.Data.Object
+	application, _ := obj["application"].(string)
+
+	if zeroSettleAppIDs[application] {
+		// This event was created by ZeroSettle — skip your own handling
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Handle events from your own integration
+	handleEvent(event)
+	w.WriteHeader(http.StatusOK)
+}
+```
+
+</CodeGroup>
+
+<Tip>
+  The `application` field is present on the Stripe object itself, not just in webhook events. You can also use it when querying the Stripe API directly — for example, checking `payment_intent.application` to see if ZeroSettle created a specific payment.
+</Tip>
+
+### Checking in the Stripe Dashboard
+
+You can also identify ZeroSettle-created objects visually in the Stripe dashboard. When viewing a payment, subscription, or customer, look for the **"Connected to"** or **"Platform"** label indicating it was created via ZeroSettle's Connect integration.
+
+## Webhook Routing for BYOS
+
+When you connect your Stripe account to ZeroSettle via OAuth, Stripe automatically routes Connect webhook events to ZeroSettle's platform endpoint. This is how ZeroSettle receives payment lifecycle events and updates your Transactions and Entitlements.
+
+<Warning>
+  Do not configure your own webhook endpoint for the same Stripe events that ZeroSettle handles (e.g., `payment_intent.succeeded`, `customer.subscription.updated`). Duplicate processing will cause entitlement conflicts. See [Webhooks & Server-Side](/iap/webhooks#stripe-webhook-events) for the full list of events ZeroSettle processes.
+</Warning>
+
+If you have an existing webhook endpoint for your own Stripe activity, use the `application` field filtering shown above to skip ZeroSettle-originated events. This lets both integrations coexist safely on the same Stripe account.
+
+## What's Visible in Your Stripe Dashboard
+
+In BYOS mode, all ZeroSettle-created resources appear in your Stripe dashboard:
+
+| Resource | What You'll See |
+|---|---|
+| **Customers** | Created per unique purchaser. Email and metadata link back to the ZeroSettle user identity. |
+| **Payment Intents** | One per checkout. Includes product metadata and ZeroSettle transaction ID. |
+| **Subscriptions** | Created for recurring products. Managed by ZeroSettle for renewals, cancellations, and plan changes. |
+| **Invoices** | Generated automatically by Stripe for subscription billing cycles. |
+| **Charges** | The actual payment records tied to payment intents. |
+
+You can use your Stripe dashboard for reporting, analytics, and revenue tracking. All standard Stripe features (exports, tax reporting, payouts) work normally.
+
+<Warning>
+  Do not modify ZeroSettle-managed subscriptions, customers, or payment intents directly in the Stripe dashboard or via the Stripe API. Changes made outside of ZeroSettle (e.g., manually canceling a subscription in Stripe) will cause state to diverge from ZeroSettle's entitlement records. Use the [ZeroSettle dashboard](https://dashboard.zerosettle.io) or the [ZeroSettle API](/api-reference/introduction) to manage these resources.
+</Warning>
+
+## Data Sync
+
+ZeroSettle keeps your payment data in sync across multiple systems:
+
+| Sync Path | How It Works |
+|---|---|
+| **Stripe → ZeroSettle** | Real-time via Stripe Connect webhooks. Payment events are processed into Transactions and Entitlements within seconds. |
+| **ZeroSettle → SDK** | The SDK polls for transaction completion after checkout and updates the local entitlement cache. Delegate callbacks fire when entitlements change. |
+| **Product mapping** | BYOS mode uses the [Stripe Catalog](/iap/stripe-catalog) to map ZeroSettle products to your Stripe products and prices. |
+| **Customer linking** | Pass `stripeCustomerId` when creating a [payment intent](/api-reference/endpoint/create-payment-intent) or [checkout session](/api-reference/endpoint/create-checkout-session) to attach purchases to an existing Stripe customer. |
+| **App Store → ZeroSettle** | [StoreKit transaction sync](/iap/storekit-integration) and [App Store Server Notifications](/iap/webhooks#app-store-server-notifications) keep App Store purchases in sync alongside web checkout purchases. |
+
+<Note>
+  ZeroSettle is the source of truth for entitlement state. If you need to verify a user's access on your backend, query the [Entitlements API](/iap/webhooks#server-side-verification) rather than checking Stripe directly.
+</Note>

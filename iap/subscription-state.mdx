@@ -328,7 +328,7 @@ Query by user ID:
 
 ```bash
 curl --request GET \
-  --url https://api.zerosettle.io/v1/iap/entitlements?user_id=app_user_id \
+  --url https://api.zerosettle.io/v1/iap/entitlements/?user_id=app_user_id \
   --header 'Content-Type: application/json' \
   --header 'X-ZeroSettle-Key: zs_pk_live_...'
 ```
@@ -337,7 +337,7 @@ Query by email (for anonymous users without a user ID):
 
 ```bash
 curl --request GET \
-  --url https://api.zerosettle.io/v1/iap/entitlements?email=user@example.com \
+  --url https://api.zerosettle.io/v1/iap/entitlements/?email=user@example.com \
   --header 'Content-Type: application/json' \
   --header 'X-ZeroSettle-Key: zs_pk_live_...'
 ```

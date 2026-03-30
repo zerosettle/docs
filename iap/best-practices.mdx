@@ -1499,7 +1499,7 @@ For critical features, verify entitlements server-side:
 # Server: Verify with ZeroSettle API before granting access
 
 # Your backend calls ZeroSettle
-curl -X GET "https://api.zerosettle.io/v1/iap/entitlements?user_id=<user_id>" \
+curl -X GET "https://api.zerosettle.io/v1/iap/entitlements/?user_id=<user_id>" \
   -H "X-ZeroSettle-Key: <publishable_key>"
 ```
 </CodeGroup>

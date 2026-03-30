@@ -40,6 +40,7 @@
               "iap/overview",
               {
                 "group": "Getting Started",
+                "icon": "circle-play",
                 "pages": [
                   "iap/account-setup",
                   "iap/installation",
@@ -50,6 +51,7 @@
               },
               {
                 "group": "Dashboard",
+                "icon": "chart-line",
                 "pages": [
                   "iap/dashboard",
                   "iap/checkout-branding",
@@ -60,6 +62,7 @@
               },
               {
                 "group": "Checkout",
+                "icon": "cart-shopping",
                 "pages": [
                   "iap/payment-sheet",
                   "iap/preloading",
@@ -70,6 +73,7 @@
               },
               {
                 "group": "Users & Subscriptions",
+                "icon": "users",
                 "pages": [
                   "iap/user-identity",
                   "iap/subscription-state",
@@ -82,12 +86,15 @@
               },
               {
                 "group": "Server-Side",
+                "icon": "server",
                 "pages": [
-                  "iap/webhooks"
+                  "iap/webhooks",
+                  "iap/stripe-integration"
                 ]
               },
               {
                 "group": "Integrations",
+                "icon": "puzzle-piece",
                 "pages": [
                   "iap/revenuecat-integration",
                   "iap/storekit-integration",
@@ -97,6 +104,7 @@
               "iap/compliance",
               {
                 "group": "Testing & Launch",
+                "icon": "flask-vial",
                 "pages": [
                   "iap/testing",
                   "iap/troubleshooting",
@@ -142,18 +150,9 @@
             ]
           },
           {
-            "group": "Checkout",
-            "pages": [
-              "api-reference/endpoint/create-payment-intent",
-              "api-reference/endpoint/create-payment-intent-batch",
-              "api-reference/endpoint/create-checkout-session"
-            ]
-          },
-          {
             "group": "Transactions",
             "pages": [
               "api-reference/endpoint/get-transaction",
-              "api-reference/endpoint/update-storekit-status",
               "api-reference/endpoint/get-transaction-history"
             ]
           },
@@ -161,56 +160,6 @@
             "group": "Entitlements",
             "pages": [
               "api-reference/endpoint/get-entitlements"
-            ]
-          },
-          {
-            "group": "StoreKit",
-            "pages": [
-              "api-reference/endpoint/sync-storekit-transaction",
-              "api-reference/endpoint/get-storekit-subscription-status"
-            ]
-          },
-          {
-            "group": "Subscriptions",
-            "pages": [
-              "api-reference/endpoint/cancel-subscription",
-              "api-reference/endpoint/pause-subscription",
-              "api-reference/endpoint/resume-subscription",
-              "api-reference/endpoint/create-customer-portal-session"
-            ]
-          },
-          {
-            "group": "Cancel Flow",
-            "pages": [
-              "api-reference/endpoint/get-cancel-flow",
-              "api-reference/endpoint/submit-cancel-flow-response",
-              "api-reference/endpoint/accept-cancel-flow-offer"
-            ]
-          },
-          {
-            "group": "Upgrade Offers",
-            "pages": [
-              "api-reference/endpoint/get-upgrade-offer",
-              "api-reference/endpoint/execute-upgrade-offer",
-              "api-reference/endpoint/respond-upgrade-offer"
-            ]
-          },
-          {
-            "group": "Migration",
-            "pages": [
-              "api-reference/endpoint/migration-converted"
-            ]
-          },
-          {
-            "group": "Events",
-            "pages": [
-              "api-reference/endpoint/track-event"
-            ]
-          },
-          {
-            "group": "Restore",
-            "pages": [
-              "api-reference/endpoint/restore-purchases"
             ]
           }
         ]
