@@ -1,0 +1,208 @@
+---
+title: 'iOS (ZeroSettleKit)'
+description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
+icon: 'apple'
+---
+
+**Current version:** `1.0.31`
+**Package:** Swift Package Manager / CocoaPods
+**Minimum requirements:** iOS 17.0+, Swift 5.9+, Xcode 15.0+
+
+<Tip>
+  Update to the latest version in Xcode: **File → Packages → Update to Latest Package Versions**, or update your `Package.swift` dependency.
+</Tip>
+
+---
+
+## March 2026
+
+<Update label="1.0.31" description="2026-03-26">
+### Layout adjustments
+
+Fixed frame height and layout behavior for `ZSMigrateTipView` and `ZSPaymentSheet` to improve presentation consistency across device sizes.
+</Update>
+
+<Update label="1.0.30" description="2026-03-25">
+### Custom user identity
+
+- **Customization**: Pass custom user names and emails to checkout that aren't tied to billing information
+- **Cleanup**: Removed performance instrumentation and debug logging
+- **UI**: Removed opaque white background, adjusted preloading height recalculations
+</Update>
+
+<Update label="1.0.29" description="2026-03-18">
+### Global migrate tip reset
+
+Added a global reset API for the migrate tip view dismissal state, allowing apps to re-show the migration prompt after user action.
+</Update>
+
+<Update label="1.0.28" description="2026-03-17">
+### Migrate tip preloading
+
+`ZSMigrateTipView` is now preloaded for faster presentation, reducing perceived latency when showing migration prompts.
+</Update>
+
+<Update label="1.0.27" description="2026-03-17">
+### Stripe customer ID overrides & batched preloading
+
+- **Stripe customer ID overrides**: Pass an existing Stripe customer ID to checkout sessions
+- **Batched preloading**: Preload multiple payment sheets concurrently for faster checkout
+- **Dependency**: Updated Stripe SDK version range
+- **Quality**: Full SDK conformance audit for Swift concurrency best practices
+</Update>
+
+<Update label="1.0.26" description="2026-03-22">
+### Batch checkout & trial fields
+
+New batch endpoint and trial metadata fields for the checkout API:
+
+- **`POST /v1/iap/payment-intents/batch/`** — Create payment intents for up to 25 products in a single request. Reduces checkout latency by sharing Stripe customer/account resolution across products. Products that fail validation return per-product errors without failing the batch.
+- **`trial_type`** field on payment intent responses — indicates whether a trial is a standard `free_trial` or a Switch & Save `migration` trial.
+- **`trial_end`** and **`pending_amount`** fields on payment intent responses — Unix timestamp of trial expiry and the deferred charge amount.
+
+These are additive, non-breaking changes. Existing integrations are unaffected.
+</Update>
+
+<Update label="1.0.25" description="2026-03-11">
+### PaymentIntent opt-in mode
+
+PaymentIntent and SetupIntent creation is now opt-in during bootstrap. This prevents over-populating your Stripe dashboard with unused intents when using preloaded checkout.
+
+Set `preloadCheckout: true` in your configuration to enable (unchanged behavior for existing integrations).
+</Update>
+
+<Update label="1.0.22" description="2026-03-10">
+### Free trial awareness
+
+The SDK now checks trial eligibility per product and exposes it on `ZSProduct`:
+
+```swift
+if product.isTrialEligible {
+    // Show "Start Free Trial" instead of price
+    print("Trial: \(product.freeTrialDuration ?? "7 days")")
+}
+```
+
+Trial eligibility is determined server-side based on whether the user has previously used a trial for any product in the same subscription group.
+</Update>
+
+<Update label="1.0.21" description="2026-03-08">
+### Faster checkout sheet presentation
+
+Dramatically improved native checkout sheet presentation speed through more aggressive WKWebView preloading. The payment sheet now appears near-instantly when `preloadCheckout: true` is enabled.
+</Update>
+
+<Update label="1.0.18" description="2026-03-08">
+### Switch & Save eligibility fix
+
+Fixed an issue where users with consumable entitlements were incorrectly excluded from Switch & Save migration offers. Eligibility now correctly evaluates only subscription entitlements.
+</Update>
+
+<Update label="1.0.17" description="2026-03-05">
+### Scrollable web views
+
+Checkout web views now support scrolling for longer payment forms, improving the experience on smaller devices.
+</Update>
+
+<Update label="1.0.14" description="2026-03-04">
+### String interop fix
+
+Fixed string interoperability issues and removed the old Stripe SPI dependency. This is a clean-up release with no API changes.
+</Update>
+
+<Update label="1.0.13" description="2026-03-02">
+### Smarter migration matching
+
+Switch & Save now matches the migration offer to the user's actual StoreKit subscription product, rather than showing a generic offer. This improves conversion by showing the correct discount for the user's current plan.
+</Update>
+
+<Update label="1.0.12" description="2026-03-02">
+### iOS 17 minimum deployment target
+
+Lowered the minimum deployment target from iOS 17.4 to iOS 17.0, expanding device compatibility.
+</Update>
+
+---
+
+## February 2026
+
+<Update label="1.0.11" description="2026-02-27">
+### onPresent callback
+
+Added an `onPresent` callback to the `checkoutSheet` modifier, letting you know when the payment sheet is actually visible:
+
+```swift
+.checkoutSheet(item: $product, userId: user.id) {
+    // Custom header
+} onPresent: {
+    // Sheet is now visible — track analytics
+    Analytics.track("checkout_presented")
+} onComplete: { result in
+    // Handle result
+}
+```
+</Update>
+
+<Update label="1.0.10" description="2026-02-27">
+### Build system flexibility
+
+The framework now lets the build system determine whether to link as static or dynamic, improving compatibility with different project configurations.
+</Update>
+
+<Update label="1.0.7" description="2026-02-26">
+### Checkout sheet clipping fix
+
+Fixed an issue where the checkout sheet was visually clipped when presented with a custom header view.
+</Update>
+
+<Update label="1.0.6" description="2026-02-25">
+### Nested sheet support
+
+The checkout sheet now works correctly when presented from within another `.sheet()` modifier. Previously, nested sheets could cause presentation failures.
+</Update>
+
+<Update label="1.0.5" description="2026-02-25">
+### Subscription groups
+
+Added subscription group support with mutual exclusion. Products in the same subscription group are now automatically managed — purchasing one cancels the other, matching Apple's StoreKit behavior for web checkout.
+</Update>
+
+---
+
+## 1.0 Release
+
+<Update label="1.0.2 — 1.0.4" description="2026-02-24 — 2026-02-25">
+### Initial stable release
+
+The 1.0 release marks the first stable version of ZeroSettleKit with:
+
+- Embedded payment sheet (`checkoutSheet` modifier)
+- Safari VC and external Safari checkout modes
+- Apple Pay and card support
+- Product catalog fetching
+- Entitlement management and restoration
+- StoreKit 2 transaction syncing
+- Switch & Save migration flow
+- Universal link handling
+- Delegate callbacks for purchase lifecycle
+- Sandbox/Live mode via API key prefix
+</Update>
+
+---
+
+## Pre-1.0 (Beta)
+
+Versions 0.2.0 through 0.13.0 were beta releases during active development. Key milestones:
+
+| Version | Milestone |
+|---------|-----------|
+| 0.13.0 | Final beta — feature-complete for 1.0 |
+| 0.10.0 | Switch & Save migration flow |
+| 0.8.0 | Native checkout sheet (WKWebView) |
+| 0.6.0 | StoreKit 2 integration |
+| 0.4.0 | Entitlement system |
+| 0.2.0 | Initial beta with Stripe checkout |
+
+<Warning>
+  Pre-1.0 versions are no longer supported. If you're on a 0.x version, update to the latest 1.x release.
+</Warning>

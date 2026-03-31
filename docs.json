@@ -163,6 +163,20 @@
             ]
           }
         ]
+      },
+      {
+        "tab": "Releases",
+        "groups": [
+          {
+            "group": "SDK Releases",
+            "pages": [
+              "releases/index",
+              "releases/ios",
+              "releases/android",
+              "releases/flutter"
+            ]
+          }
+        ]
       }
     ],
     "global": {

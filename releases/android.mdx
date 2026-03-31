@@ -1,0 +1,69 @@
+---
+title: 'Android (Kotlin)'
+description: 'Release notes for zerosettle-android — the Kotlin SDK'
+icon: 'android'
+---
+
+**Current version:** `0.15.0`
+**Package:** Maven Central (`io.zerosettle:zerosettle-android`)
+**Minimum requirements:** Android API 26+, Kotlin 1.9+
+
+<Tip>
+  Add to your `build.gradle.kts`:
+  ```kotlin
+  implementation("io.zerosettle:zerosettle-android:0.15.0")
+  ```
+</Tip>
+
+---
+
+## February 2026
+
+<Update label="0.15.0" description="2026-02-25">
+### Subscription group support
+
+- **Subscription groups**: Added `subscriptionGroupId` to the Product model for managing mutual exclusion between subscription tiers
+</Update>
+
+<Update label="0.14.0" description="2026-02-24">
+### Transaction history & upgrade offers
+
+- **Transaction history**: Users can now view their past transactions
+- **Upgrade offers**: Support for presenting in-app upgrade offers to existing subscribers
+- **API improvements**: Additional endpoint integrations for richer data
+</Update>
+
+<Update label="0.12.0 — 0.13.0" description="2026-02-22">
+### API stabilization
+
+Pre-1.0 API alignment with ZeroSettleKit 0.13.0:
+
+- **Cancel flow**: Added headless cancel flow primitives for custom cancellation UIs
+- **Migration prompts**: Configurable CTA text on `MigrationPrompt`
+- **Breaking**: Namespace changes to align with iOS SDK conventions
+</Update>
+
+<Update label="0.11.0" description="2026-02-17">
+### Cancel flow & namespace refactor
+
+- **Cancel flow**: Full cancel flow implementation for managing subscription cancellations
+- **Namespace refactor**: Package structure reorganized for consistency across SDKs
+</Update>
+
+<Update label="0.10.0" description="2026-02-15">
+### StoreKit-only items
+
+Added support for marking products as StoreKit-only, allowing mixed catalogs where some items use native billing and others use web checkout.
+</Update>
+
+<Update label="0.9.0" description="2026-02-13">
+### Initial release
+
+First public release of the Android SDK with full framework support:
+
+- Product catalog fetching
+- Web checkout via payment sheet
+- Entitlement management
+- Switch & Save migration flow
+- Sandbox/Live mode via API key prefix
+</Update>

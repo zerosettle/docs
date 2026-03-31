@@ -1,0 +1,93 @@
+---
+title: 'Flutter'
+description: 'Release notes for the ZeroSettle Flutter plugin'
+icon: 'mobile'
+---
+
+**Current version:** `0.12.0`
+**Package:** pub.dev (`zerosettle`)
+**Minimum requirements:** Flutter 3.3.0+, Dart 3.10+
+
+<Tip>
+  Add to your `pubspec.yaml`:
+  ```yaml
+  dependencies:
+    zerosettle: ^0.12.0
+  ```
+</Tip>
+
+---
+
+## February 2026
+
+<Update label="0.11.0 — 0.12.0" description="2026-02-26 — 2026-02-27">
+### iOS dependency updates
+
+Version bumps to align with the latest ZeroSettleKit releases. Includes a fix for sheet detent behavior on iOS.
+</Update>
+
+<Update label="0.10.0" description="2026-02-25">
+### Subscription group support
+
+- **Subscription groups**: Added `subscriptionGroupId` to the Product model
+- **Dependencies**: Updated native iOS and Android SDK dependencies
+</Update>
+
+<Update label="0.9.0" description="2026-02-24">
+### Cancel flow, upgrade offers & funnel analytics
+
+- **Cancel flow**: Full subscription cancellation flow with customizable UI
+- **Upgrade offers**: Present upgrade offers to existing subscribers
+- **Funnel analytics**: Track conversion funnels through the checkout process
+- **API improvements**: Additional endpoint integrations
+</Update>
+
+<Update label="0.8.0" description="2026-02-22">
+### API stabilization
+
+Pre-1.0 API alignment with ZeroSettleKit 0.13.0:
+
+- **Save-the-sale sheet**: New sheet for retention during cancellation
+- **Breaking**: `freeTrialDays` now required in configuration, deprecated APIs removed
+- **Cancel flow**: Headless cancel flow primitives for custom UIs
+- **Migration prompts**: Configurable CTA text
+</Update>
+
+<Update label="0.7.0" description="2026-02-17">
+### Cancel flow & namespace refactor
+
+- **Cancel flow**: Full cancel flow implementation
+- **Namespace refactor**: Updated native plugins to match SDK-wide naming conventions
+</Update>
+
+<Update label="0.6.0" description="2026-02-15">
+### Native-only items
+
+Added support for marking products as native-only (StoreKit/Play Store), allowing mixed catalogs.
+</Update>
+
+<Update label="0.5.0" description="2026-02-13">
+### Android support
+
+The Flutter plugin now supports Android in addition to iOS, enabling true cross-platform web checkout from a single codebase.
+</Update>
+
+<Update label="0.3.0 — 0.3.2" description="2026-02-11 — 2026-02-12">
+### Migration tip widget & trial support
+
+- **`ZSMigrateTipView` widget**: Native Flutter widget for showing Switch & Save migration prompts
+- **Free trial**: Added `freeTrialDays` parameter to payment methods
+- **Compatibility**: Aligned with ZeroSettleKit 0.7.0
+</Update>
+
+<Update label="0.2.0" description="2026-02-10">
+### Initial release
+
+First public release of the Flutter plugin:
+
+- Full wrapper of ZeroSettleKit for iOS
+- Product catalog fetching
+- Web checkout via payment sheet
+- Entitlement management
+- Sandbox/Live mode via API key prefix
+</Update>
