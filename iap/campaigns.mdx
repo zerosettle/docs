@@ -24,13 +24,29 @@ Enable migration campaigns on the dashboard and configure:
 | **Title** | Campaign heading — supports `{{discount}}` template variable |
 | **Message** | Campaign body text — supports `{{discount}}` template variable |
 | **CTA text** | Button text — supports `{{discount}}` template variable |
+| **Accepted title** | Title shown after checkout succeeds (empty = SDK default "Thanks for switching!") |
+| **Accepted message** | Post-checkout message with Apple cancel instructions (empty = SDK default) |
+| **Accepted CTA** | Button text for Apple cancel step (empty = SDK default "Cancel Apple Billing") |
+| **Completed title** | Title after full migration (empty = SDK default "Congratulations!") |
+| **Completed message** | Success message (empty = SDK default; supports `{{discount}}`) |
+| **Checkout presentation** | How checkout opens: `inline` (expand within card, default) or `sheet` (overlay checkout sheet) |
 
 ### SDK Integration
 
-The SDK returns campaign data in `ProductCatalog.config.migration`. Use the built-in `ZSMigrateTipView` for a drop-in UI, or read the data to build your own:
+The SDK returns campaign data in `ProductCatalog.config.migration` (legacy) and `ProductCatalog.config.offer` (unified). Use the built-in `MigrationTipView` or `OfferTipView` for a drop-in UI, or read the data to build your own:
 
 <CodeGroup>
-```swift Swift
+```swift Swift (Unified Offer)
+let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+
+// Preferred: unified offer field (handles migration + upgrades)
+if let offer = catalog.config?.offer {
+    print("Flow: \(offer.flowType), savings: \(offer.savingsPercent)%")
+    print("Title: \(offer.display.offerTitle)")
+}
+```
+
+```swift Swift (Legacy Migration)
 let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
 
 if let migration = catalog.config?.migration {
@@ -120,6 +136,12 @@ Enable upgrade offers on the dashboard and configure:
 | **Dismiss text** | Decline button text |
 | **StoreKit body** | Separate body text for users migrating from Apple billing |
 | **StoreKit cancel instructions** | Instructions shown to Apple subscribers for cancelling their App Store subscription |
+| **Accepted title** | Post-checkout title (empty = SDK default) |
+| **Accepted message** | Post-checkout message (empty = SDK default) |
+| **Accepted CTA** | Post-checkout button text (empty = SDK default) |
+| **Completed title** | Success title (empty = SDK default) |
+| **Completed message** | Success message (empty = SDK default) |
+| **Checkout presentation** | `inline` (default) or `sheet` — how the SDK presents checkout |
 
 ### SDK Integration
 

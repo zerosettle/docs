@@ -1,0 +1,213 @@
+---
+title: 'Offer Tip View'
+description: 'Unified drop-in view for migration and upgrade offers'
+icon: 'gift'
+---
+
+`OfferTipView` is a unified drop-in view that handles both migration and upgrade offers. The server determines which offer to show based on the user's subscription state — you just add one line of code. It has an identical init signature to `MigrationTipView`, so switching is a find-and-replace.
+
+## Usage
+
+The simplest integration is a single line:
+
+```swift
+OfferTipView(userId: "user_123")
+```
+
+For full control over styling and lifecycle tracking:
+
+<CodeGroup>
+
+```swift Basic
+struct SettingsView: View {
+    var body: some View {
+        List {
+            Section("Account") {
+                // your existing rows...
+            }
+
+            OfferTipView(userId: currentUser.id)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+        }
+    }
+}
+```
+
+```swift Full Init
+OfferTipView(
+    userId: currentUser.id,
+    stripeCustomerId: "cus_abc123",                  // optional
+    backgroundColor: .black,                         // optional
+    titleFont: .system(size: 20, weight: .bold),     // optional
+    bodyFont: .system(size: 16),                     // optional
+    ctaFont: .system(size: 17, weight: .bold),       // optional
+    borderColor: .white.opacity(0.2),                // optional
+    onEvent: { event in                              // optional
+        switch event {
+        case .ctaTapped:
+            print("user tapped CTA")
+        case .checkoutCompleted:
+            print("web checkout succeeded")
+        case .appleSubscriptionManagementOpened:
+            print("opened Apple sub management")
+        case .offerCompleted:
+            print("full offer flow done")
+        case .dismissed:
+            print("view dismissed")
+        }
+    }
+)
+```
+
+</CodeGroup>
+
+Only `userId` is required. Everything else has sensible defaults. The button copy, discount amount, and messaging are all controlled from the [dashboard](/iap/campaigns) -- no code change needed.
+
+## How It Differs from MigrationTipView
+
+`OfferTipView` is a superset of `MigrationTipView`. It handles every flow that `ZSMigrateTipView` does, plus upgrade offers.
+
+| | MigrationTipView | OfferTipView |
+|---|---|---|
+| StoreKit to web migration | Yes | Yes |
+| StoreKit to web upgrade | No | Yes |
+| Web to web upgrade | No | Yes |
+| Server-configurable copy | Partial (offer state only) | Full (offer + accepted + completed) |
+| Requires StoreKit subscription | Yes | No (server determines eligibility) |
+
+<Tip>
+  If you are already using `ZSMigrateTipView`, you can replace it with `OfferTipView` with no other changes. The init parameters are identical. The only difference in the event callback is that `.migrationCompleted` is renamed to `.offerCompleted`.
+</Tip>
+
+## Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `userId` | `String` | Required | The user identifier passed to the checkout backend. |
+| `stripeCustomerId` | `String?` | `nil` | Optional existing Stripe Customer ID (`cus_xxx`). When provided, the checkout attaches to this customer instead of creating a new one. |
+| `backgroundColor` | `Color` | `.black` | Background color for the card. |
+| `titleFont` | `Font?` | System bold | Custom font for the title text. |
+| `bodyFont` | `Font?` | System default | Custom font for the body/message text. |
+| `ctaFont` | `Font?` | System bold | Custom font for the CTA button text. |
+| `borderColor` | `Color?` | `nil` (no border) | Border color applied as a rounded rectangle stroke on the card. |
+| `onEvent` | `((Event) -> Void)?` | `nil` | Closure invoked when a lifecycle event occurs. See **Events** below. |
+
+## Events
+
+The `onEvent` callback receives an `OfferTipView.Event` value as the user progresses through the offer flow.
+
+| Event | When it fires |
+|-------|--------------|
+| `.ctaTapped` | The user tapped the main CTA button to begin checkout. |
+| `.checkoutCompleted` | The web checkout completed successfully. The user now has a web entitlement, but their Apple subscription may still be active. |
+| `.appleSubscriptionManagementOpened` | The user opened Apple's subscription-management sheet to cancel their Apple billing. Only fires for flows that involve an Apple subscription. |
+| `.offerCompleted` | The full offer flow is finished -- web checkout succeeded **and** Apple subscription management was shown (if required). |
+| `.dismissed` | The view was dismissed (close button, auto-dismiss after completion, or the user became ineligible). |
+
+Events fire in lifecycle order: `ctaTapped` -> `checkoutCompleted` -> `appleSubscriptionManagementOpened` -> `offerCompleted` -> `dismissed`. Not every event is guaranteed -- for example, a user who dismisses before completing checkout will only trigger `ctaTapped` then `dismissed`.
+
+<Note>
+  `.offerCompleted` replaces `MigrationTipView`'s `.migrationCompleted`. If you are migrating from `ZSMigrateTipView`, update your event handler accordingly.
+</Note>
+
+## Checkout Presentation
+
+`OfferTipView` supports two checkout presentation modes, configured from the dashboard:
+
+| Mode | Behavior |
+|------|----------|
+| `inline` (default) | The checkout WebView expands within the card. The user completes payment without leaving the context of the tip view. |
+| `sheet` | An overlay checkout sheet slides up from the bottom of the screen. |
+
+No code change is needed to switch between modes. Configure the presentation in the [Campaigns & Offers](/iap/campaigns) page of the dashboard. You can A/B test `inline` vs `sheet` to see which converts better for your audience.
+
+## Minimize / Collapse
+
+When the inline checkout form is expanded, the close button transitions from an "x" icon to a chevron-up icon. Tapping it collapses the checkout form back to the CTA state without dismissing the entire offer.
+
+- Collapsing does **not** create a new `PaymentIntent`. Re-tapping the CTA re-expands the same checkout session instantly.
+- Tapping the "x" button when the checkout is **not** expanded dismisses the offer entirely (persisted via `UserDefaults`).
+
+This lets users browse checkout details, collapse to read more about the offer, and return to payment without any loading delay.
+
+## Flow Types
+
+The server resolves which flow type to show based on the user's current entitlements. You don't need to specify the flow type -- `OfferTipView` handles all of them automatically.
+
+| Flow Type | Description | Checkout | Apple Cancel |
+|-----------|-------------|----------|--------------|
+| `.migration` | Same product, StoreKit to web. The user switches billing providers at a discount. | WebView or sheet | Yes |
+| `.upgrade` (`storekitToWeb`) | Different product (e.g., monthly to annual), StoreKit to web. The user upgrades and switches billing in one step. | WebView or sheet | Yes |
+| `.upgrade` (`webToWeb`) | Different product, already on web checkout. Direct Stripe subscription modification with proration. | No WebView (spinner only) | No |
+
+<Note>
+  For `webToWeb` upgrades, there is no checkout UI -- the SDK calls the backend directly to modify the Stripe subscription. The user sees a brief loading spinner, then the congratulations card.
+</Note>
+
+## Placement
+
+The view works anywhere a standard SwiftUI view does. Settings screens and account pages tend to convert best because users are already in a subscription-management mindset.
+
+<CodeGroup>
+
+```swift Settings Screen
+List {
+    Section("Account") {
+        // your existing rows...
+    }
+
+    OfferTipView(userId: user.id, backgroundColor: .blue)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.clear)
+}
+```
+
+```swift Profile / Home Screen
+VStack(spacing: 16) {
+    // your existing content...
+
+    OfferTipView(userId: user.id, backgroundColor: .indigo)
+        .padding(.horizontal, 16)
+}
+```
+
+```swift ScrollView
+ScrollView {
+    // ...
+    OfferTipView(userId: user.id)
+}
+```
+
+</CodeGroup>
+
+## Debugging
+
+The view may be hidden during development because it was previously dismissed. Reset the persisted state:
+
+```swift
+// Reset all dismissed state (global + per-user)
+ZSOfferManager.resetDismissedState()
+```
+
+To check whether a specific user has permanently dismissed the offer:
+
+```swift
+let dismissed = ZSOfferManager.isPermanentlyDismissed(forUserId: "user_123")
+```
+
+The view logs its visibility decisions to the console with the prefix `[ZSOfferManager]`, including which condition caused it to show or hide.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Offer UI" icon="wand-magic-sparkles" href="/iap/offer-manager">
+    Build your own offer experience with ZSOfferManager
+  </Card>
+  <Card title="Campaigns & Offers" icon="bullhorn" href="/iap/campaigns">
+    Configure offers from the dashboard
+  </Card>
+  <Card title="Switch & Save View" icon="gift" href="/iap/switch-and-save">
+    Migration-only drop-in view
+  </Card>
+</CardGroup>

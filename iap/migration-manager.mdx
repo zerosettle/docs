@@ -4,7 +4,12 @@ description: 'Build your own switch and save experience with ZSMigrationManager'
 icon: 'wand-magic-sparkles'
 ---
 
-`ZSMigrationManager` is the state machine behind `ZSMigrateTipView`. If the built-in view doesn't fit your design, use the manager directly to build a fully custom switch and save experience while reusing all the eligibility logic, checkout orchestration, and state tracking.
+<Note>
+  For new integrations, consider [ZSOfferManager](/iap/offer-manager) — it handles migration,
+  storekit-to-web upgrades, and web-to-web upgrades from a single manager.
+</Note>
+
+`ZSMigrationManager` is the state machine behind `MigrationTipView`. If the built-in view doesn't fit your design, use the manager directly to build a fully custom switch and save experience while reusing all the eligibility logic, checkout orchestration, and state tracking.
 
 ## Quick Start
 
@@ -266,23 +271,29 @@ struct CustomSwitchAndSaveCard: View {
 }
 ```
 
-## Relationship to ZSMigrateTipView
+## Relationship to Views and Managers
 
-`ZSMigrateTipView` uses `ZSMigrationManager` internally. Choose based on your needs:
+`MigrationTipView` uses `ZSMigrationManager` internally. For the unified offer system, `OfferTipView` uses `ZSOfferManager`. Choose based on your needs:
 
-| | `ZSMigrateTipView` | `ZSMigrationManager` |
-|---|---|---|
-| **Effort** | Drop-in, zero UI code | You build the UI |
-| **Customization** | Background color, fonts, border | Full control over layout, animations, copy |
-| **Checkout** | Built-in inline webview | You choose: webview, Safari, SFSafariViewController |
-| **State tracking** | Handled internally | You observe and react to state changes |
-| **Platform** | SwiftUI, React Native, Flutter | SwiftUI only |
+| | `MigrationTipView` | `OfferTipView` | `ZSMigrationManager` | `ZSOfferManager` |
+|---|---|---|---|---|
+| **Approach** | Drop-in view | Drop-in view | Custom UI | Custom UI |
+| **Migration** | Yes | Yes | Yes | Yes |
+| **StoreKit→web upgrade** | No | Yes | No | Yes |
+| **Web→web upgrade** | No | Yes | No | Yes |
+| **Platform** | SwiftUI, RN, Flutter | SwiftUI | SwiftUI | SwiftUI |
 
 ## Next Steps
 
 <CardGroup cols={2}>
+  <Card title="Custom Offer UI" icon="wand-magic-sparkles" href="/iap/offer-manager">
+    Build custom UI for migration and upgrade offers with ZSOfferManager
+  </Card>
   <Card title="Switch & Save View" icon="gift" href="/iap/switch-and-save">
-    Use the built-in drop-in view instead
+    Use the built-in migration drop-in view
+  </Card>
+  <Card title="Offer Tip View" icon="gift" href="/iap/offer-tip-view">
+    Unified drop-in view for migration and upgrade offers
   </Card>
   <Card title="Dashboard" icon="gauge" href="/iap/dashboard#migration-campaigns">
     Configure your switch and save campaign and discount

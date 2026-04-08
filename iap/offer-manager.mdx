@@ -1,0 +1,303 @@
+---
+title: 'Custom Offer UI'
+description: 'Build your own offer experience with ZSOfferManager'
+icon: 'wand-magic-sparkles'
+---
+
+`ZSOfferManager` is the state machine behind `OfferTipView`. If the built-in view doesn't fit your design, use the manager directly to build a fully custom offer UI while reusing all the eligibility logic, checkout orchestration, and state tracking. Unlike `ZSMigrationManager` (which only handles StoreKit-to-web migrations), `ZSOfferManager` supports all offer types: migrations, StoreKit-to-web upgrades, and web-to-web upgrades.
+
+## Quick Start
+
+```swift
+struct CustomOfferBanner: View {
+    @StateObject private var manager = ZSOfferManager(userId: "user_42")
+
+    var body: some View {
+        switch manager.state {
+        case .eligible:
+            if let display = manager.display {
+                VStack {
+                    Text(display.offerTitleOrDefault("Save on your subscription"))
+                    Text(display.offerMessageOrDefault("Switch to direct billing and save."))
+                    Button(display.offerCtaOrDefault("Switch Now")) {
+                        manager.present()
+                    }
+                }
+            }
+
+        case .presented:
+            ProgressView("Starting checkout...")
+                .task { await startCheckout() }
+
+        case .accepted:
+            VStack {
+                Text(manager.display?.acceptedTitleOrDefault("Almost done!") ?? "Almost done!")
+                Button(manager.display?.acceptedCtaOrDefault("Cancel Apple Billing") ?? "Cancel Apple Billing") {
+                    Task { await manager.showAppleSubscriptionManagement() }
+                }
+            }
+
+        case .completed:
+            Text(manager.display?.completedTitleOrDefault("You're all set!") ?? "You're all set!")
+
+        default:
+            EmptyView()
+        }
+    }
+
+    private func startCheckout() async {
+        if let url = await manager.startCheckout() {
+            // Open url in a WebView or SFSafariViewController
+        }
+        // If nil, check manager.flowType — web-to-web upgrades
+        // complete without a URL (handled internally)
+    }
+}
+```
+
+If you have an existing Stripe customer ID for the user, pass it at init to attach the checkout to their Stripe account:
+
+```swift
+@StateObject private var manager = ZSOfferManager(
+    userId: "user_42",
+    stripeCustomerId: "cus_abc123"
+)
+```
+
+The manager is an `ObservableObject` — SwiftUI re-renders automatically when the state changes.
+
+## State Machine
+
+The offer flow is a linear state machine. Each state represents a step in the user journey.
+
+```
+loading → ineligible
+loading → eligible → presented → accepted → completed
+                                               ↘ dismissed
+              ↘ dismissed
+```
+
+| State | Meaning | `offerData` |
+|-------|---------|-------------|
+| `loading` | Waiting for `ZeroSettle.bootstrap()` to finish. | `nil` |
+| `ineligible` | User doesn't qualify (no eligible entitlement, already dismissed, rollout excluded, no campaign configured). | `nil` |
+| `eligible` | User qualifies. Offer data is available — show your UI. | Available |
+| `presented` | Offer is on screen or checkout is in progress. | Available |
+| `accepted` | Web checkout succeeded. Prompt the user to cancel Apple billing (migrations and StoreKit-to-web upgrades only). | Available |
+| `completed` | All steps finished. The offer flow is done. | Available |
+| `dismissed` | User closed the offer. Persisted in `UserDefaults` across launches. | `nil` |
+
+The manager locks mid-flow states (`presented`, `accepted`, `completed`) so that background re-evaluations (e.g., entitlement refreshes) don't disrupt an active checkout.
+
+## Published Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `state` | `Offer.State` | Current lifecycle state of the offer flow. |
+| `offerData` | `Offer.OfferData?` | Offer details (flow type, savings, display copy, product IDs). Available from `.eligible` onward. |
+| `checkoutError` | `Error?` | The last error from `startCheckout()`, if any. Reset on each new checkout attempt. |
+| `isLoading` | `Bool` | `true` during async operations like `startCheckout()`. |
+| `storekitCancelRequired` | `Bool` | `true` when the Apple cancel step is still pending after checkout success. |
+
+## Computed Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `flowType` | `Offer.FlowType?` | `.migration` or `.upgrade`. `nil` until eligible. |
+| `needsAppleCancel` | `Bool` | `true` for migrations and StoreKit-to-web upgrades. `false` for web-to-web upgrades. |
+| `display` | `Offer.Display?` | Server-provided copy for all card states. `nil` until eligible. |
+
+## Offer.Display
+
+`Offer.Display` contains 8 server-configurable copy fields, one for each card state. All fields are `String` — an empty string means "use SDK default". Use the fallback accessors to provide your own defaults cleanly.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `offerTitle` | `String` | Heading for the eligible/offer state. |
+| `offerMessage` | `String` | Body text explaining the offer. |
+| `offerCta` | `String` | CTA button label (e.g., "Save 20% Forever"). |
+| `acceptedTitle` | `String` | Heading after checkout success, before Apple cancel. |
+| `acceptedMessage` | `String` | Body text guiding the user to cancel Apple billing. |
+| `acceptedCta` | `String` | CTA for the Apple cancel step. |
+| `completedTitle` | `String` | Heading after the entire flow is done. |
+| `completedMessage` | `String` | Body text confirming the switch/upgrade. |
+
+Each field has a corresponding fallback accessor:
+
+```swift
+let title = display.offerTitleOrDefault("Thanks for being with us!")
+let message = display.offerMessageOrDefault("Switch to save on every renewal.")
+let cta = display.offerCtaOrDefault("Switch Now")
+```
+
+If the server returns a non-empty string, it wins. If the server returns an empty string (or the field is not configured in the dashboard), your fallback is used. This lets you ship sensible defaults while allowing dashboard-driven copy changes without an app update.
+
+## Methods
+
+### `present()`
+
+Transitions from `.eligible` to `.presented`. Call this when the user interacts with your offer UI (e.g., taps "Learn More") before starting checkout.
+
+```swift
+manager.present()
+```
+
+### `startCheckout(stripeCustomerId:) async -> URL?`
+
+Creates a payment intent and returns the checkout URL. For web-to-web upgrades, returns `nil` because the upgrade is executed server-side without a WebView.
+
+```swift
+if let url = await manager.startCheckout() {
+    // Open url in a WebView or SFSafariViewController
+}
+```
+
+You can optionally pass a `stripeCustomerId` to override the one provided at init:
+
+```swift
+let url = await manager.startCheckout(stripeCustomerId: "cus_xyz789")
+```
+
+Returns `nil` on failure — check `manager.checkoutError` for details. Also returns `nil` for web-to-web upgrades (not an error).
+
+### `markCheckoutSucceeded(transactionId:) async`
+
+Call after a successful web checkout to advance the state. Verifies the transaction, refreshes entitlements, and fires conversion tracking.
+
+- If `needsAppleCancel` is `true`: transitions to `.accepted` and sets `storekitCancelRequired = true`.
+- If `needsAppleCancel` is `false` (web-to-web): transitions directly to `.completed`.
+
+```swift
+await manager.markCheckoutSucceeded(transactionId: "txn_abc123")
+```
+
+### `showAppleSubscriptionManagement() async`
+
+Opens the system subscription management sheet via StoreKit. After the sheet dismisses, verifies cancellation status via the server-side Apple API (real-time). If the subscription is confirmed cancelled or expired, transitions to `.completed` and clears `storekitCancelRequired`.
+
+```swift
+await manager.showAppleSubscriptionManagement()
+```
+
+### `dismiss()`
+
+Dismisses the offer and persists the dismissal in `UserDefaults`. The offer will not reappear for this user across app launches.
+
+```swift
+manager.dismiss()
+```
+
+### `preloadCheckout(stripeCustomerId:) async -> URL?`
+
+Pre-creates a payment intent so the checkout URL is ready when the user taps the CTA. Call this when the offer becomes visible to reduce latency on expansion. Returns `nil` for web-to-web upgrades (no WebView needed).
+
+```swift
+// Call when the offer card appears on screen
+let preloadedURL = await manager.preloadCheckout()
+```
+
+## Static Methods
+
+### `resetDismissedState()`
+
+Clears all persisted dismissals for all users, allowing offers to reappear. Useful for debugging.
+
+```swift
+ZSOfferManager.resetDismissedState()
+```
+
+### `isPermanentlyDismissed(forUserId:)`
+
+Check whether a specific user has permanently dismissed the offer.
+
+```swift
+if ZSOfferManager.isPermanentlyDismissed(forUserId: "user_42") {
+    // Offer was dismissed, won't show again
+}
+```
+
+### `setDismissed(_:forUserId:)`
+
+Manually set or clear the dismissed state for a specific user. Useful for testing or allowing users to re-enable offers from a settings screen.
+
+```swift
+// Clear dismissal so the offer reappears
+ZSOfferManager.setDismissed(false, forUserId: "user_42")
+```
+
+## Web-to-Web Upgrades
+
+For `.webToWeb` upgrades, the flow is different from migrations and StoreKit-to-web upgrades. There is no WebView or Apple cancel step — the manager calls the upgrade API directly and transitions to `.completed`.
+
+```swift
+struct OfferView: View {
+    @StateObject private var manager = ZSOfferManager(userId: "user_42")
+
+    var body: some View {
+        switch manager.state {
+        case .eligible:
+            if let display = manager.display {
+                Button(display.offerCtaOrDefault("Upgrade Now")) {
+                    Task { await handleCheckout() }
+                }
+            }
+
+        case .completed:
+            Text("Upgrade complete!")
+
+        default:
+            EmptyView()
+        }
+    }
+
+    private func handleCheckout() async {
+        manager.present()
+        let url = await manager.startCheckout()
+
+        if manager.flowType == .upgrade,
+           manager.offerData?.upgradeType == .webToWeb {
+            // No URL returned — upgrade was executed server-side.
+            // State is already .completed. Nothing else to do.
+            return
+        }
+
+        if let url {
+            // Open WebView for migration or StoreKit-to-web upgrade
+        }
+    }
+}
+```
+
+<Note>
+  Web-to-web upgrades cancel the old subscription with proration. The unused time on the old plan becomes a credit on the customer's Stripe balance and is automatically applied on the next renewal. See [Upgrade Offers](/iap/upgrade-offer#web-to-web-proration) for details.
+</Note>
+
+## When to Use What
+
+| | `ZSOfferManager` | `ZSMigrationManager` | `.upgradeOffer()` |
+|---|---|---|---|
+| **Migration** (StoreKit to web) | Yes | Yes | No |
+| **StoreKit-to-web upgrade** | Yes | No | Yes |
+| **Web-to-web upgrade** | Yes | No | Yes |
+| **Custom UI** | Yes | Yes | No (modal only) |
+| **Server-configurable copy** | Full (8 fields) | Partial (3 fields) | Full |
+
+Choose `ZSOfferManager` when you need a single manager that handles all offer types with full custom UI control. Use `ZSMigrationManager` if you only need migration support with a custom UI. Use `.upgradeOffer()` for a drop-in modal with no custom UI code.
+
+<Tip>
+  `ZSOfferManager` is the recommended API for new integrations. It supersedes `ZSMigrationManager` by supporting all three offer types in a single state machine.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Offer Tip View" icon="gift" href="/iap/offer-tip-view">
+    Use the built-in drop-in view instead of building custom UI
+  </Card>
+  <Card title="Campaigns & Offers" icon="bullhorn" href="/iap/campaigns">
+    Configure offer targeting, messaging, and pricing from the dashboard
+  </Card>
+  <Card title="Upgrade Offers" icon="arrow-up-right" href="/iap/upgrade-offer">
+    Present upgrade offers with the drop-in modal
+  </Card>
+</CardGroup>

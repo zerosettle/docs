@@ -6,7 +6,7 @@ icon: 'clock-rotate-left'
 
 Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift SDK — the primary and most feature-complete platform. Android (Kotlin) and Flutter SDKs follow closely and share the same API endpoints.
 
-**Current version:** `1.0.25`
+**Current version:** `1.0.31`
 **Minimum requirements:** iOS 17.0+, Swift 5.9+, Xcode 15.0+
 
 <Tip>
@@ -15,7 +15,61 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ---
 
+## April 2026
+
+<Update label="1.0.31" description="2026-04-07">
+### Unified offer system
+
+New `OfferTipView` and `ZSOfferManager` unify migration and upgrade offers into a single component. The server determines which offer to show based on the user's subscription state — no app update needed to switch between offer types.
+
+- **`OfferTipView`** — Drop-in replacement for `MigrationTipView` that handles migration, storekit-to-web upgrades, and web-to-web upgrades
+- **`ZSOfferManager`** — Headless state machine for custom offer UI (replaces `ZSMigrationManager` for new integrations)
+- **`Offer.Display`** — 8 server-configurable copy fields for every card state (offer, accepted, completed)
+- **Checkout presentation modes** — `inline` (WebView within card) or `sheet` (overlay), configurable from dashboard
+- **Minimize / collapse** — Close button becomes a collapse chevron when checkout is expanded, letting users back out without dismissing the entire offer
+- **`config.offer`** — New unified field in products response alongside existing `config.migration` for backward compatibility
+
+`MigrationTipView` continues to work unchanged. It auto-adopts server-provided copy from the unified offer system when available.
+</Update>
+
+---
+
 ## March 2026
+
+<Update label="1.0.31" description="2026-03-26">
+### Layout adjustments
+
+Fixed frame height and layout behavior for `MigrationTipView` (formerly `ZSMigrateTipView`) and `CheckoutSheet` (formerly `ZSPaymentSheet`) to improve presentation consistency across device sizes.
+</Update>
+
+<Update label="1.0.30" description="2026-03-25">
+### Custom user identity
+
+- **Customization**: Pass custom user names and emails to checkout that aren't tied to billing information
+- **Cleanup**: Removed performance instrumentation and debug logging
+- **UI**: Removed opaque white background, adjusted preloading height recalculations
+</Update>
+
+<Update label="1.0.29" description="2026-03-18">
+### Global migrate tip reset
+
+Added a global reset API for the migrate tip view dismissal state, allowing apps to re-show the migration prompt after user action.
+</Update>
+
+<Update label="1.0.28" description="2026-03-17">
+### Migrate tip preloading
+
+`MigrationTipView` is now preloaded for faster presentation, reducing perceived latency when showing migration prompts.
+</Update>
+
+<Update label="1.0.27" description="2026-03-17">
+### Stripe customer ID overrides & batched preloading
+
+- **Stripe customer ID overrides**: Pass an existing Stripe customer ID to checkout sessions via the `stripeCustomerId` parameter
+- **Batched preloading**: Preload multiple payment sheets concurrently for faster checkout
+- **Dependency**: Updated Stripe SDK version range
+- **Quality**: Full SDK conformance audit for Swift concurrency best practices
+</Update>
 
 <Update label="1.0.26" description="2026-03-22">
 ### Batch checkout & trial fields

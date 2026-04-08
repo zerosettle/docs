@@ -6,6 +6,12 @@ icon: 'arrow-up-right'
 
 Upgrade offers prompt eligible subscribers to switch from shorter billing cycles (e.g., monthly) to longer ones (e.g., annual) at a savings. The SDK handles proration for existing web checkout subscribers and shows Apple cancel instructions for StoreKit-to-web migrations.
 
+<Tip>
+  [OfferTipView](/iap/offer-tip-view) can now present upgrade offers as inline tip cards — no modal needed.
+  The server determines whether to show a migration or upgrade offer automatically.
+  Use `.upgradeOffer()` below for a full-screen modal, or `OfferTipView` for an inline card.
+</Tip>
+
 ## SwiftUI Modifier
 
 The simplest way to present an upgrade offer is the `.upgradeOffer()` modifier:

@@ -4,9 +4,14 @@ description: 'A drop-in view that switches Apple subscribers to direct billing'
 icon: 'gift'
 ---
 
-`ZSMigrateTipView` is a self-contained view that prompts eligible users to switch from Apple billing to direct billing at a discount. It manages its own visibility, checkout flow, and dismissal state. You just add it to your layout.
+<Note>
+  If your code uses `ZSMigrateTipView`, it still works — it's a type alias for `MigrationTipView`.
+  For new integrations supporting both migration and upgrade offers, see [Offer Tip View](/iap/offer-tip-view).
+</Note>
 
-<Frame caption="ZSMigrateTipView embedded in a settings screen">
+`MigrationTipView` is a self-contained view that prompts eligible users to switch from Apple billing to direct billing at a discount. It manages its own visibility, checkout flow, and dismissal state. You just add it to your layout.
+
+<Frame caption="MigrationTipView embedded in a settings screen">
   <img src="/images/switchandsavedocs.png" alt="Switch & Save tip view showing a 15% discount offer" style={{ maxWidth: '400px' }} />
 </Frame>
 
@@ -32,7 +37,7 @@ sequenceDiagram
 
     Note over User,Apple: User has active StoreKit subscription
 
-    App->>SDK: Show ZSMigrateTipView
+    App->>SDK: Show MigrationTipView
     SDK->>API: Check migration eligibility
     API-->>SDK: Eligible (discount details)
     SDK->>User: Display "Save 20%" offer
@@ -60,7 +65,7 @@ sequenceDiagram
 <CodeGroup>
 
 ```swift SwiftUI
-ZSMigrateTipView(
+MigrationTipView(
     userId: currentUser.id,
     stripeCustomerId: "cus_abc123",                  // optional
     backgroundColor: .black,                        // optional
@@ -111,7 +116,7 @@ ZSMigrateTipView(
 All three use the same native implementation under the hood. Only `userId` is required — everything else has sensible defaults.
 
 <Note>
-  `ZSMigrateTipView` targets users switching from **Apple StoreKit** subscriptions to direct billing. On Android, the equivalent switch and save flow from Google Play Billing is not yet supported by this component.
+  `MigrationTipView` targets users switching from **Apple StoreKit** subscriptions to direct billing. On Android, the equivalent switch and save flow from Google Play Billing is not yet supported by this component.
 </Note>
 
 ## Automatic Visibility
@@ -143,7 +148,7 @@ List {
         // your existing rows...
     }
 
-    ZSMigrateTipView(userId: user.id, backgroundColor: .blue)
+    MigrationTipView(userId: user.id, backgroundColor: .blue)
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)
 }
@@ -153,7 +158,7 @@ List {
 VStack(spacing: 16) {
     // your existing content...
 
-    ZSMigrateTipView(userId: user.id, backgroundColor: .indigo)
+    MigrationTipView(userId: user.id, backgroundColor: .indigo)
         .padding(.horizontal, 16)
 }
 ```
@@ -161,7 +166,7 @@ VStack(spacing: 16) {
 ```swift ScrollView
 ScrollView {
     // ...
-    ZSMigrateTipView(userId: user.id)
+    MigrationTipView(userId: user.id)
 }
 ```
 
@@ -337,6 +342,9 @@ The view logs its visibility decisions to the console with the prefix `[ZSMigrat
 ## Next Steps
 
 <CardGroup cols={2}>
+  <Card title="Offer Tip View" icon="gift" href="/iap/offer-tip-view">
+    Unified view for migration and upgrade offers
+  </Card>
   <Card title="Custom Switch and Save UI" icon="wand-magic-sparkles" href="/iap/migration-manager">
     Build your own switch and save experience with ZSMigrationManager
   </Card>

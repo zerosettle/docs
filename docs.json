@@ -67,7 +67,9 @@
                   "iap/payment-sheet",
                   "iap/preloading",
                   "iap/switch-and-save",
+                  "iap/offer-tip-view",
                   "iap/migration-manager",
+                  "iap/offer-manager",
                   "iap/universal-links"
                 ]
               },
@@ -108,7 +110,8 @@
                 "pages": [
                   "iap/testing",
                   "iap/troubleshooting",
-                  "iap/go-live"
+                  "iap/go-live",
+                  "iap/migration-guide"
                 ]
               },
               "iap/best-practices",
@@ -150,6 +153,14 @@
             ]
           },
           {
+            "group": "Checkout",
+            "pages": [
+              "api-reference/endpoint/create-payment-intent",
+              "api-reference/endpoint/create-payment-intent-batch",
+              "api-reference/endpoint/create-checkout-session"
+            ]
+          },
+          {
             "group": "Transactions",
             "pages": [
               "api-reference/endpoint/get-transaction",
@@ -160,6 +171,57 @@
             "group": "Entitlements",
             "pages": [
               "api-reference/endpoint/get-entitlements"
+            ]
+          },
+          {
+            "group": "StoreKit",
+            "pages": [
+              "api-reference/endpoint/sync-storekit-transaction",
+              "api-reference/endpoint/get-storekit-subscription-status",
+              "api-reference/endpoint/update-storekit-status"
+            ]
+          },
+          {
+            "group": "Subscriptions",
+            "pages": [
+              "api-reference/endpoint/cancel-subscription",
+              "api-reference/endpoint/pause-subscription",
+              "api-reference/endpoint/resume-subscription"
+            ]
+          },
+          {
+            "group": "Cancel Flow",
+            "pages": [
+              "api-reference/endpoint/get-cancel-flow",
+              "api-reference/endpoint/submit-cancel-flow-response",
+              "api-reference/endpoint/accept-cancel-flow-offer"
+            ]
+          },
+          {
+            "group": "Upgrade Offers",
+            "pages": [
+              "api-reference/endpoint/get-upgrade-offer",
+              "api-reference/endpoint/execute-upgrade-offer",
+              "api-reference/endpoint/respond-upgrade-offer"
+            ]
+          },
+          {
+            "group": "Migration",
+            "pages": [
+              "api-reference/endpoint/migration-converted"
+            ]
+          },
+          {
+            "group": "Customer Portal",
+            "pages": [
+              "api-reference/endpoint/create-customer-portal-session"
+            ]
+          },
+          {
+            "group": "Restore & Events",
+            "pages": [
+              "api-reference/endpoint/restore-purchases",
+              "api-reference/endpoint/track-event"
             ]
           }
         ]

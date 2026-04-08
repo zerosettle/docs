@@ -1,0 +1,86 @@
+---
+title: 'API Migration Guide'
+description: 'Deprecated API names and their current replacements'
+icon: 'arrow-right-arrow-left'
+---
+
+This page maps deprecated ZeroSettleKit APIs to their current replacements. All deprecated names still compile and work — they are type aliases or thin wrappers that forward to the current implementation.
+
+## Type Renames
+
+| Deprecated | Current | Notes |
+|---|---|---|
+| `ZSMigrateTipView` | `MigrationTipView` | Drop-in migration tip view |
+| `ZSTransaction` | `CheckoutTransaction` | Transaction model |
+| `ZSError` | `ZeroSettleError` | Error type |
+| `ZSPaymentSheet` | `CheckoutSheet` | Checkout sheet view |
+| `MigrationManager` | `ZSMigrationManager` | Migration state machine |
+| `ZSManageSubscriptionSheet` | `RetentionSheet` | Subscription management sheet |
+| `ZSManageSubscriptionResult` | `RetentionResult` | Subscription management result |
+
+## View Modifier Renames
+
+| Deprecated | Current |
+|---|---|
+| `.zsPaymentSheet(...)` | `.checkoutSheet(...)` |
+| `.zsManageSubscriptionSheet(...)` | `.retentionSheet(...)` |
+| `.zsCancelFlow(...)` | `.cancelFlow(...)` |
+| `.zsUpgradeOffer(...)` | `.upgradeOffer(...)` |
+| `.manageSubscription(...)` | `.retentionSheet(...)` or `.cancelFlow(...)` |
+| `.zsManageSubscription(...)` | `.retentionSheet(...)` or `.cancelFlow(...)` |
+
+## Method Renames
+
+| Deprecated | Current |
+|---|---|
+| `getOrCreateMigrationManager(userId:)` | `migrationManager(for:stripeCustomerId:)` |
+| `openCustomerPortal(userId:)` | `presentCancelFlow(productId:userId:)` |
+| `showManageSubscription(userId:)` | `presentCancelFlow(productId:userId:)` |
+| `pauseSubscription(productId:userId:pauseOptionId:)` | `pauseSubscription(productId:userId:pauseDurationDays:)` |
+
+## Parameter Removals
+
+| Deprecated Parameter | Affected APIs | Notes |
+|---|---|---|
+| `freeTrialDays` | `CheckoutSheet.init`, `.checkoutSheet(...)`, `preload()`, `warmUp()`, `warmUpAll()` | Free trial days are now auto-computed from the product's configured trial. Remove the parameter — it is ignored. |
+| `onDismiss` on `MigrationTipView` | `MigrationTipView.init(onDismiss:)` | Use `init(onEvent:)` instead. `onDismiss` maps to the `.dismissed` event only. |
+
+## Property Deprecations
+
+| Deprecated | Current | Notes |
+|---|---|---|
+| `ZeroSettle.shared.migrationManager` | `ZeroSettle.shared.offerManager(for:stripeCustomerId:)` | `offerManager` handles migration + upgrades |
+
+## When to Use What
+
+Not sure which view or manager to use? Here's the decision tree:
+
+### Drop-in Views (Zero Custom UI)
+
+| View | Use When |
+|---|---|
+| **`MigrationTipView`** | You only need StoreKit-to-web migration offers |
+| **`OfferTipView`** | You want migration + upgrade offers from a single component (recommended for new integrations) |
+
+Both views have identical init signatures and placement patterns. `OfferTipView` is the superset — it handles everything `MigrationTipView` does, plus upgrade offers.
+
+### Custom UI (Headless Managers)
+
+| Manager | Use When |
+|---|---|
+| **`ZSMigrationManager`** | You're building custom migration-only UI |
+| **`ZSOfferManager`** | You're building custom UI that handles migration + upgrades (recommended for new integrations) |
+
+### Modal Sheets
+
+| Modifier | Use When |
+|---|---|
+| **`.upgradeOffer()`** | You want a full-screen modal upgrade offer |
+| **`.cancelFlow()`** | You want a cancel flow with survey + retention offers |
+| **`.retentionSheet()`** | You want the legacy subscription management sheet |
+
+<Note>
+  `MigrationTipView` and `ZSMigrationManager` are **not deprecated**. They continue to work and are actively maintained.
+  `OfferTipView` and `ZSOfferManager` are the recommended path forward for new integrations because they handle
+  more flow types from a single component.
+</Note>

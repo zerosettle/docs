@@ -116,6 +116,18 @@
                         }
                       ],
                       "nullable": true
+                    },
+                    "offer": {
+                      "description": "Unified offer for the current user. Null if the user is not eligible for any offer. New SDKs prefer this over migration_campaign.",
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/Offer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -2347,6 +2359,122 @@
           "transaction_id": {
             "type": "string",
             "description": "ZeroSettle transaction ID for the upgrade."
+          }
+        }
+      },
+      "Offer": {
+        "type": "object",
+        "description": "Unified offer payload for migration and upgrade flows.",
+        "required": ["flow_type", "product_id", "eligible_product_ids", "savings_percent", "display", "free_trial_days", "min_subscription_days", "max_subscription_days", "rollout_percent"],
+        "properties": {
+          "flow_type": {
+            "type": "string",
+            "enum": ["migration", "upgrade"],
+            "description": "The type of offer flow."
+          },
+          "product_id": {
+            "type": "string",
+            "description": "Target product reference ID."
+          },
+          "eligible_product_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Product IDs the user might currently have."
+          },
+          "savings_percent": {
+            "type": "integer",
+            "description": "Annualized savings percentage (0 if not computable)."
+          },
+          "display": {
+            "$ref": "#/components/schemas/OfferDisplay"
+          },
+          "free_trial_days": {
+            "type": "integer",
+            "description": "Free trial days (computed at checkout time from product config)."
+          },
+          "min_subscription_days": {
+            "type": "integer",
+            "description": "Minimum days subscribed before eligibility."
+          },
+          "max_subscription_days": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Maximum days subscribed for eligibility."
+          },
+          "rollout_percent": {
+            "type": "integer",
+            "description": "Percentage of eligible users who see this offer (0-100)."
+          },
+          "upgrade_type": {
+            "type": "string",
+            "enum": ["storekit_to_web", "web_to_web"],
+            "nullable": true,
+            "description": "Upgrade subtype. Only present when flow_type is upgrade."
+          },
+          "from_product_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "User's current product (upgrades only)."
+          },
+          "to_product_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Upgrade target product (upgrades only)."
+          },
+          "variant_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Experiment variant ID (when A/B testing)."
+          },
+          "per_product_prompts": {
+            "type": "object",
+            "nullable": true,
+            "description": "Per-product display overrides keyed by product ID."
+          },
+          "checkout_presentation": {
+            "type": "string",
+            "enum": ["inline", "sheet"],
+            "nullable": true,
+            "description": "How the SDK presents checkout: inline within tip card or overlay sheet."
+          }
+        }
+      },
+      "OfferDisplay": {
+        "type": "object",
+        "description": "Server-configurable copy for every tip card state. Empty strings mean the SDK should use its hardcoded defaults.",
+        "required": ["offer_title", "offer_message", "offer_cta", "accepted_title", "accepted_message", "accepted_cta", "completed_title", "completed_message"],
+        "properties": {
+          "offer_title": {
+            "type": "string",
+            "description": "Title for the offer card (e.g., 'Thanks for being with us!')."
+          },
+          "offer_message": {
+            "type": "string",
+            "description": "Main offer body text."
+          },
+          "offer_cta": {
+            "type": "string",
+            "description": "CTA button text (e.g., 'Save 20% Forever')."
+          },
+          "accepted_title": {
+            "type": "string",
+            "description": "Post-checkout title (e.g., 'Thanks for switching!')."
+          },
+          "accepted_message": {
+            "type": "string",
+            "description": "Post-checkout message with Apple cancel instructions."
+          },
+          "accepted_cta": {
+            "type": "string",
+            "description": "Post-checkout CTA (e.g., 'Cancel Apple Billing')."
+          },
+          "completed_title": {
+            "type": "string",
+            "description": "Success title (e.g., 'Congratulations!')."
+          },
+          "completed_message": {
+            "type": "string",
+            "description": "Success message (e.g., 'You are now saving 20% forever.')."
           }
         }
       },
