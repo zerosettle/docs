@@ -4,13 +4,39 @@ description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
 icon: 'apple'
 ---
 
-**Current version:** `1.0.31`
+**Current version:** `1.1.5`
 **Package:** Swift Package Manager / CocoaPods
 **Minimum requirements:** iOS 17.0+, Swift 5.9+, Xcode 15.0+
 
 <Tip>
   Update to the latest version in Xcode: **File → Packages → Update to Latest Package Versions**, or update your `Package.swift` dependency.
 </Tip>
+
+---
+
+## April 2026
+
+<Update label="1.1.5" description="2026-04-15">
+### Entitlement ownership, checkout hardening, and claim API
+
+Major release overhauling StoreKit entitlement attribution, checkout reliability, and the offer system.
+
+**Highlights:**
+- **Entitlement ownership** — StoreKit purchases are permanently tied to the purchasing account. No auto-transfer between accounts sharing an Apple ID. See [Entitlement Ownership](/iap/entitlement-ownership).
+- **`claimEntitlement(productId:userId:)`** — Explicit API for deliberate entitlement transfers (testing, account migration, support).
+- **Checkout hardening** — Sheet waits for payment buttons to render before presenting. JS handler safety prevents false "Payment failed" errors. 409 retry for batch/individual PI races.
+- **Offer system** — OfferTipView spinner fix, ZSOfferManager logging + state machine docs, `MigrationTipView` deprecated.
+- **`appAccountToken`** — StoreKit purchases include user identity for ASSN webhook resolution.
+- **Better errors** — Checkout failures include the product ID and actionable dashboard guidance.
+
+See the [full changelog](/changelog) for details.
+</Update>
+
+<Update label="1.1.0" description="2026-04-07">
+### Unified offer system
+
+New `OfferTipView` and `ZSOfferManager` unify migration and upgrade offers into a single component with server-configurable copy and presentation modes.
+</Update>
 
 ---
 
