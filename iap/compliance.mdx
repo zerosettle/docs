@@ -1,36 +1,14 @@
 ---
-title: 'App Store & Google Play Compliance'
-description: 'Legal basis for alternative web checkout on iOS and Android'
+title: 'SDK Compliance'
+description: 'How the ZeroSettle SDK implements checkout presentation, geofencing, and platform compliance'
 icon: 'scale-balanced'
 ---
 
-ZeroSettle's web checkout is designed to align with current App Store guidelines and recent court rulings related to alternative payment methods. This page summarizes the relevant rulings, what Apple's published guidelines say, and how different checkout methods are typically treated.
+<Info>
+  **Looking for the policy breakdown?** The [Transparency & Control page on zerosettle.io](https://zerosettle.io/transparency) is our canonical resource on Apple and Google rulings, with live source links, a compliance checklist with citations, and a precedents timeline. That page is kept current via a weekly source-drift check.
 
-<Note>
-  The rulings and guidelines described below apply to the **United States App Store** only. Other regions operate under separate frameworks - for example, the EU Digital Markets Act (DMA) has its own set of rules governing alternative payment methods. Contact [support@zerosettle.io](mailto:support@zerosettle.io) if you have questions about a specific region.
-</Note>
-
-## Apple v. Epic: Background
-
-The key court rulings and guideline changes relevant to alternative payment links in iOS apps come from the *Epic Games v. Apple* case and its aftermath.
-
-### The Original Injunction (September 2021)
-
-Judge Yvonne Gonzalez Rogers issued a permanent injunction prohibiting Apple from preventing developers from including buttons, external links, or other calls to action that direct users to purchasing mechanisms outside of Apple's in-app purchase system.
-
-### The Contempt Ruling (April 30, 2025)
-
-After Apple imposed what the court considered obstructive compliance measures (including a 27% commission on external purchases and interstitial warnings designed to discourage users), Judge Gonzalez Rogers found Apple **in contempt of court**. The ruling stated that Apple had willfully violated the injunction and ordered Apple to stop impeding developers from linking to external payment methods.
-
-### Updated App Review Guidelines
-
-Following the contempt ruling, Apple revised its App Review Guidelines to reflect the court's order:
-
-> **Guideline 3.1.1(a):** *"On the United States storefront, there is no prohibition on an app including buttons, external links, or other calls to action, and no entitlement is required to do so."*
-
-> **Guideline 3.1.3:** *"The prohibition on encouraging users to use a purchasing method other than in-app purchase does not apply on the United States storefront."*
-
-Based on these published guidelines, US developers can include external payment links in their iOS apps without applying for a special entitlement.
+  This docs page focuses on **how the SDK implements the compliance surface** — checkout presentation, US geofencing, Apple Pay domain registration, and App Review scenarios.
+</Info>
 
 ## Checkout Presentation Methods
 
@@ -48,43 +26,30 @@ The user taps a button in your app and is taken to Safari (or their default brow
 
 ### In-App Browser (SFSafariViewController)
 
-Opens the checkout page inside your app using Safari's rendering engine. The user stays within your app throughout the purchase flow. This provides a better user experience than external Safari but is not the explicitly sanctioned method - App Review may be slower or raise objections.
+Opens the checkout page inside your app using Safari's rendering engine. The user stays within your app throughout the purchase flow. This provides a better user experience than external Safari but is not the explicitly sanctioned method — App Review may be slower or raise objections.
 
 ### Inline WebView (WKWebView)
 
 The checkout is embedded directly into your app's UI as a native-feeling bottom sheet or full-screen view. This provides the best conversion rates and user experience. Like SFSafariViewController, this approach may encounter more App Review scrutiny than external Safari.
 
 <Tip>
-  ZeroSettle supports all three checkout methods via remote config on the dashboard. You can switch between them without shipping an app update - start with external Safari for the smoothest review, then switch to an in-app method once approved.
+  ZeroSettle supports all three checkout methods via remote config on the dashboard. You can switch between them without shipping an app update — start with external Safari for the smoothest review, then switch to an in-app method once approved.
 </Tip>
 
-## Google Play
+## US Geofencing
 
-Google has taken a parallel path toward allowing alternative payment methods on Android.
+The SDK only offers external checkout to users on the US App Store storefront, per Apple Guideline 3.1.1(a) and 3.1.3 (US-only scope). Storefront is determined server-side via the user's App Store account region at the time of product fetch. Users outside the US see StoreKit-only UX even if the developer has BYOS connected.
 
-### User Choice Billing
+## Apple Pay Domain Registration
 
-Google's **User Choice Billing** program allows developers to offer alternative payment methods alongside Google Play Billing. When a user makes a purchase, they can choose between Google Play's payment system and the developer's alternative.
+Apple Pay on web checkout requires `stripe.PaymentMethodDomain.create()` per connected Stripe account. ZeroSettle registers this automatically during BYOS onboarding — no manual developer action required. The `country` parameter passed to `stripe.paymentRequest()` is resolved from the connected account's country and passed through the checkout URL as `merchant_country` so Apple Pay works for non-US merchants.
 
-### US Policy Changes (October 2025)
+## App Review Scenarios
 
-Following regulatory pressure and the *Epic Games v. Google* jury verdict, Google updated its US policies to allow developers to use alternative payment methods with a reduced service fee. Based on these changes, apps distributed on Google Play in the US can direct users to external payment flows.
-
-<Note>
-  On Android, ZeroSettle opens a Custom Tab (Chrome) for the checkout flow. This is the standard approach for external payment on Android and does not face the same review scrutiny as iOS.
-</Note>
-
-## ZeroSettle's Approach
-
-ZeroSettle is designed to follow Apple's and Google's published guidelines so you can focus on your app:
-
-- **All three iOS checkout methods** (external Safari, SFSafariViewController, WKWebView) are supported and switchable via remote config - no code changes required
-- **US geofencing** is handled automatically, ensuring external checkout is only offered where legally permitted
-- **Merchant of Record** status means ZeroSettle handles tax compliance, receipts, disputes, and refunds
-- **Android Custom Tabs** are used for checkout on Google Play, following standard platform conventions
-
-See [Overview](/iap/overview) for the full list of what ZeroSettle handles, or jump to [Installation](/iap/installation) to get started.
+- **External Safari mode (default):** Explicitly sanctioned. Typically passes review on first submission.
+- **SFSafariViewController / WKWebView modes:** Allowed under current guidelines but reviewer may ask about the flow. Keep the external-link disclosure sheet enabled — ZeroSettle provides it automatically.
+- **Sandbox vs. Live key mismatch:** A sandbox Apple account with a live publishable key will produce StoreKit entitlements flagged `is_sandbox=True` that don't match live product catalogs. This is a developer testing artifact, not a production bug. See [troubleshooting](/iap/troubleshooting).
 
 <Note>
-  **Legal / Compliance Note** - ZeroSettle is not a law firm and does not provide legal advice. Our products are designed to align with Apple's published App Store guidelines and external purchase/link-out requirements, as well as relevant court rulings. We recommend that developers review their specific implementation with their own legal counsel.
+  **Legal / Compliance Note** — ZeroSettle is not a law firm and does not provide legal advice. Our products are designed to align with Apple's published App Store guidelines and external purchase/link-out requirements, as well as relevant court rulings. Review your specific implementation with your own legal counsel. For the authoritative policy summary — including EU DMA, Korea, Japan, and other jurisdictions — see [zerosettle.io/transparency](https://zerosettle.io/transparency).
 </Note>
