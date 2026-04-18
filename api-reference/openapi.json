@@ -214,6 +214,14 @@
                   "storekit_original_transaction_id": {
                     "type": "string",
                     "description": "The StoreKit original transaction ID for the subscription being migrated."
+                  },
+                  "external_purchase_token": {
+                    "type": "string",
+                    "description": "Apple externalPurchaseToken received from StoreKit at the disclosure-sheet confirmation step. When provided, ZeroSettle uses this token for automatic external-purchase reporting in eligible jurisdictions (EU, UK, JP MSCA). Optional — omit for non-Apple platforms or regions where reporting is not required."
+                  },
+                  "ios_version": {
+                    "type": "string",
+                    "description": "iOS version of the checkout client (e.g., '26.4.1'). Used for JP MSCA regime gating, which requires iOS 26+. Optional."
                   }
                 }
               }
@@ -2479,11 +2487,24 @@
       "Offer": {
         "type": "object",
         "description": "Unified offer payload for migration and upgrade flows.",
-        "required": ["flow_type", "product_id", "eligible_product_ids", "savings_percent", "display", "free_trial_days", "min_subscription_days", "max_subscription_days", "rollout_percent"],
+        "required": [
+          "flow_type",
+          "product_id",
+          "eligible_product_ids",
+          "savings_percent",
+          "display",
+          "free_trial_days",
+          "min_subscription_days",
+          "max_subscription_days",
+          "rollout_percent"
+        ],
         "properties": {
           "flow_type": {
             "type": "string",
-            "enum": ["migration", "upgrade"],
+            "enum": [
+              "migration",
+              "upgrade"
+            ],
             "description": "The type of offer flow."
           },
           "product_id": {
@@ -2492,7 +2513,9 @@
           },
           "eligible_product_ids": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Product IDs the user might currently have."
           },
           "savings_percent": {
@@ -2521,7 +2544,10 @@
           },
           "upgrade_type": {
             "type": "string",
-            "enum": ["storekit_to_web", "web_to_web"],
+            "enum": [
+              "storekit_to_web",
+              "web_to_web"
+            ],
             "nullable": true,
             "description": "Upgrade subtype. Only present when flow_type is upgrade."
           },
@@ -2547,7 +2573,10 @@
           },
           "checkout_presentation": {
             "type": "string",
-            "enum": ["inline", "sheet"],
+            "enum": [
+              "inline",
+              "sheet"
+            ],
             "nullable": true,
             "description": "How the SDK presents checkout: inline within tip card or overlay sheet."
           }
@@ -2556,7 +2585,16 @@
       "OfferDisplay": {
         "type": "object",
         "description": "Server-configurable copy for every tip card state. Empty strings mean the SDK should use its hardcoded defaults.",
-        "required": ["offer_title", "offer_message", "offer_cta", "accepted_title", "accepted_message", "accepted_cta", "completed_title", "completed_message"],
+        "required": [
+          "offer_title",
+          "offer_message",
+          "offer_cta",
+          "accepted_title",
+          "accepted_message",
+          "accepted_cta",
+          "completed_title",
+          "completed_message"
+        ],
         "properties": {
           "offer_title": {
             "type": "string",
