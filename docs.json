@@ -200,6 +200,12 @@
             ]
           },
           {
+            "group": "User Offer",
+            "pages": [
+              "api-reference/endpoint/user-offer"
+            ]
+          },
+          {
             "group": "Migration",
             "pages": [
               "api-reference/endpoint/migration-converted"

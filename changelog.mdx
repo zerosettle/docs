@@ -17,6 +17,27 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## April 2026
 
+<Update label="API" description="2026-04-20">
+### New /iap/user-offer/ endpoint (SDK 1.2+)
+
+Unified offer + subscription-state endpoint replacing three overlapping paths.
+Existing endpoints remain fully supported; old SDKs continue to work unchanged.
+
+- **New**: [`GET /iap/user-offer/`](/api-reference/endpoint/user-offer) returns a
+  canonical `UserOfferResponse` with an `action_type` discriminator
+  (`no_action`, `migrate_storekit_to_web`, `upgrade_storekit_to_web`,
+  `upgrade_web_to_web`), consistent `savings_percent` naming, and an
+  `apple_subscription.is_active` flag that is the canonical replacement for
+  client-side interpretation of raw Apple status integers.
+- **New** fields on [`GET /iap/storekit-subscription-status/`](/api-reference/endpoint/get-storekit-subscription-status):
+  `is_active` (normalized from the Apple status code) and `auto_renew_enabled`
+  (normalized from `auto_renew_status`). The raw `status` and `auto_renew_status`
+  fields remain for backward compatibility but are now diagnostic only.
+- **Non-breaking**: [`GET /iap/products/`](/api-reference/endpoint/get-products)
+  and [`GET /iap/upgrade-offer/`](/api-reference/endpoint/get-upgrade-offer) now
+  derive their responses from the same resolver. Wire format is byte-identical.
+</Update>
+
 <Update label="API" description="2026-04-18">
 ### POST /iap/payment-intents — optional Apple reporting fields
 

@@ -55,6 +55,10 @@
       "description": "Subscription upgrade/downgrade offers"
     },
     {
+      "name": "User Offer",
+      "description": "Unified offer + subscription-state resolver (SDK 1.2+)"
+    },
+    {
       "name": "Migration",
       "description": "Switch & Save migration tracking"
     },
@@ -921,7 +925,7 @@
       "get": {
         "operationId": "getStorekitSubscriptionStatus",
         "summary": "Get StoreKit Subscription Status",
-        "description": "Returns the current status of a StoreKit subscription by its original transaction ID. Useful for checking renewal state and expiry.",
+        "description": "Returns the current status of a StoreKit subscription by its original transaction ID. Useful for checking renewal state and expiry. The response includes normalized `is_active` and `auto_renew_enabled` booleans (SDK 1.2+); prefer these over the raw `status`/`auto_renew_status` fields for canonical access decisions.",
         "tags": [
           "StoreKit"
         ],
@@ -946,6 +950,48 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/iap/user-offer": {
+      "get": {
+        "operationId": "getUserOffer",
+        "summary": "Get User Offer",
+        "description": "Canonical offer + subscription-state resolver (SDK 1.2+). Returns the user's current subscription variant plus exactly one offer decision (`no_action`, `migrate_storekit_to_web`, `upgrade_storekit_to_web`, or `upgrade_web_to_web`). Replaces the overlapping `/iap/products/` offer config, `/iap/upgrade-offer/`, and ad-hoc status parsing with a single typed contract. Legacy endpoints remain supported for older SDKs.",
+        "tags": [
+          "User Offer"
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "description": "The user's external ID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical user offer + subscription state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOfferResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -2201,26 +2247,33 @@
       },
       "StorekitSubscriptionStatus": {
         "type": "object",
-        "description": "Status of a StoreKit subscription.",
+        "description": "Status of a StoreKit subscription. Prefer the normalized `is_active` and `auto_renew_enabled` booleans for canonical access decisions; `status` and `auto_renew_status` are diagnostic fields that mirror the raw Apple payload.",
+        "required": [
+          "is_active",
+          "auto_renew_enabled"
+        ],
         "properties": {
           "status": {
-            "type": "string",
-            "enum": [
-              "active",
-              "expired",
-              "billing_retry",
-              "billing_grace_period"
-            ],
-            "description": "Current subscription status."
+            "type": "integer",
+            "description": "Diagnostic only — SDK-collapsed Apple status: 1 (active) or 2 (not active). Prefer `is_active` for access decisions."
           },
           "auto_renew_status": {
-            "type": "boolean",
-            "description": "Whether auto-renewal is enabled."
+            "type": "integer",
+            "description": "Diagnostic only — raw Apple `autoRenewStatus` integer (0 = off, 1 = on). Prefer `auto_renew_enabled` for canonical use."
           },
           "expires_at": {
             "type": "string",
             "format": "date-time",
+            "nullable": true,
             "description": "When the subscription expires or renews."
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "Canonical active-entitlement flag. `true` when the Apple status code represents active access (active, grace period, or billing retry with access). Derived server-side from `apple_status` — use this instead of interpreting `status` yourself."
+          },
+          "auto_renew_enabled": {
+            "type": "boolean",
+            "description": "Canonical auto-renew flag. Equivalent to `auto_renew_status == 1`, exposed as a boolean for consistency with the rest of the API."
           }
         }
       },
@@ -2627,6 +2680,455 @@
           "completed_message": {
             "type": "string",
             "description": "Success message (e.g., 'You are now saving 20% forever.')."
+          }
+        }
+      },
+      "UserOfferResponse": {
+        "type": "object",
+        "description": "Canonical response from `GET /iap/user-offer/`. Wraps the user's current subscription state (as a tagged union keyed by `subscription.type`) together with exactly one offer decision.",
+        "required": [
+          "user_id",
+          "app_id",
+          "is_sandbox",
+          "subscription",
+          "offer",
+          "server_time"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "description": "Echoes the `user_id` query parameter."
+          },
+          "app_id": {
+            "type": "integer",
+            "description": "Internal ZeroSettle app ID that owns the publishable key."
+          },
+          "is_sandbox": {
+            "type": "boolean",
+            "description": "Resolved environment — `true` when the request was authenticated with a sandbox publishable key."
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/UserOfferSubscription"
+          },
+          "offer": {
+            "$ref": "#/components/schemas/OfferEligibility"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server-side timestamp at which the response was resolved (ISO 8601). Useful for client-side cache invalidation."
+          }
+        }
+      },
+      "UserOfferSubscription": {
+        "description": "Tagged-union describing the user's current subscription state. Discriminated by the `type` field. Exactly one variant is returned per request.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SubscriptionStateNone"
+          },
+          {
+            "$ref": "#/components/schemas/SubscriptionStateActiveWeb"
+          },
+          {
+            "$ref": "#/components/schemas/SubscriptionStateActiveStorekit"
+          },
+          {
+            "$ref": "#/components/schemas/SubscriptionStateMigrationTrial"
+          },
+          {
+            "$ref": "#/components/schemas/SubscriptionStateCancelledActive"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "none": "#/components/schemas/SubscriptionStateNone",
+            "active_web": "#/components/schemas/SubscriptionStateActiveWeb",
+            "active_storekit": "#/components/schemas/SubscriptionStateActiveStorekit",
+            "migration_trial": "#/components/schemas/SubscriptionStateMigrationTrial",
+            "cancelled_active": "#/components/schemas/SubscriptionStateCancelledActive"
+          }
+        }
+      },
+      "SubscriptionStateNone": {
+        "type": "object",
+        "description": "User has no active subscription entitlement from any source.",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["none"]
+          }
+        }
+      },
+      "SubscriptionStateActiveWeb": {
+        "type": "object",
+        "description": "User has an active web-sourced subscription (may be in grace period, past due, or paused).",
+        "required": [
+          "type",
+          "product_id",
+          "status",
+          "is_trial",
+          "will_renew",
+          "stripe_subscription_id",
+          "entitlement_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["active_web"]
+          },
+          "product_id": {
+            "type": "string",
+            "description": "Reference ID of the active product."
+          },
+          "subscription_group_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "ZeroSettle subscription group ID, if any."
+          },
+          "status": {
+            "type": "string",
+            "description": "EntitlementStatus value (e.g., `active`, `grace_period`, `past_due`, `paused`, `cancelled`)."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the current period ends / next renewal is due."
+          },
+          "trial_ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Trial end timestamp when `is_trial` is `true`."
+          },
+          "is_trial": {
+            "type": "boolean"
+          },
+          "will_renew": {
+            "type": "boolean",
+            "description": "Whether the subscription is set to auto-renew at period end."
+          },
+          "stripe_subscription_id": {
+            "type": "string"
+          },
+          "entitlement_id": {
+            "type": "integer"
+          }
+        }
+      },
+      "SubscriptionStateActiveStorekit": {
+        "type": "object",
+        "description": "User has an active StoreKit-sourced subscription.",
+        "required": [
+          "type",
+          "product_id",
+          "status",
+          "expires_at",
+          "is_trial",
+          "will_renew",
+          "storekit_original_transaction_id",
+          "entitlement_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["active_storekit"]
+          },
+          "product_id": {
+            "type": "string"
+          },
+          "subscription_group_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "EntitlementStatus value."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_trial": {
+            "type": "boolean"
+          },
+          "trial_ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "will_renew": {
+            "type": "boolean"
+          },
+          "storekit_original_transaction_id": {
+            "type": "string"
+          },
+          "entitlement_id": {
+            "type": "integer"
+          }
+        }
+      },
+      "SubscriptionStateMigrationTrial": {
+        "type": "object",
+        "description": "Dual-active migration trial window: the user has a web subscription inside its free trial plus an overlapping StoreKit entitlement that has not yet expired.",
+        "required": [
+          "type",
+          "web_product_id",
+          "storekit_product_id",
+          "trial_ends_at",
+          "storekit_expires_at",
+          "stripe_subscription_id",
+          "storekit_original_transaction_id",
+          "entitlement_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["migration_trial"]
+          },
+          "web_product_id": {
+            "type": "string"
+          },
+          "storekit_product_id": {
+            "type": "string"
+          },
+          "subscription_group_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "trial_ends_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "storekit_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stripe_subscription_id": {
+            "type": "string"
+          },
+          "storekit_original_transaction_id": {
+            "type": "string"
+          },
+          "entitlement_id": {
+            "type": "integer"
+          }
+        }
+      },
+      "SubscriptionStateCancelledActive": {
+        "type": "object",
+        "description": "Subscription is cancelled but access remains until `expires_at`.",
+        "required": [
+          "type",
+          "source",
+          "product_id",
+          "expires_at",
+          "entitlement_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["cancelled_active"]
+          },
+          "source": {
+            "type": "string",
+            "description": "EntitlementSource (e.g., `web_checkout`, `store_kit`)."
+          },
+          "product_id": {
+            "type": "string"
+          },
+          "subscription_group_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stripe_subscription_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "storekit_original_transaction_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "entitlement_id": {
+            "type": "integer"
+          }
+        }
+      },
+      "OfferEligibility": {
+        "type": "object",
+        "description": "The offer decision. Exactly one `action_type` is returned per user per request. `is_eligible` is `false` iff `action_type` is `no_action`.",
+        "required": [
+          "action_type",
+          "is_eligible",
+          "checkout_product_id",
+          "savings_percent",
+          "free_trial_days",
+          "min_subscription_days",
+          "requires_apple_cancel"
+        ],
+        "properties": {
+          "action_type": {
+            "type": "string",
+            "enum": [
+              "no_action",
+              "migrate_storekit_to_web",
+              "upgrade_storekit_to_web",
+              "upgrade_web_to_web"
+            ],
+            "description": "Which offer branch fired. `no_action` = nothing to show."
+          },
+          "is_eligible": {
+            "type": "boolean",
+            "description": "Convenience boolean; equivalent to `action_type != 'no_action'`."
+          },
+          "checkout_product_id": {
+            "type": "string",
+            "description": "Product ID the SDK should drive checkout toward. Empty string when `action_type` is `no_action`."
+          },
+          "from_product_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The product the user is currently on (relevant for upgrade/migrate flows)."
+          },
+          "savings_percent": {
+            "type": "integer",
+            "description": "Annualized savings percent vs. the user's current plan, 0 when not applicable."
+          },
+          "free_trial_days": {
+            "type": "integer",
+            "description": "Days of free trial the SDK should honor on the new subscription."
+          },
+          "min_subscription_days": {
+            "type": "integer",
+            "description": "Minimum subscribed days before the offer becomes eligible (for rollout/lock-in rules)."
+          },
+          "display": {
+            "$ref": "#/components/schemas/OfferDisplayV2",
+            "nullable": true
+          },
+          "proration": {
+            "$ref": "#/components/schemas/OfferProration",
+            "nullable": true
+          },
+          "requires_apple_cancel": {
+            "type": "boolean",
+            "description": "Whether the user must cancel their StoreKit subscription after the new checkout completes (true for `migrate_*` / `upgrade_storekit_to_web`)."
+          },
+          "apple_subscription": {
+            "$ref": "#/components/schemas/AppleSubscriptionSummary",
+            "nullable": true
+          },
+          "checkout_presentation": {
+            "type": "string",
+            "enum": ["webview", "native_pay", "safari_vc", "safari"],
+            "nullable": true,
+            "description": "How the SDK should present checkout for this offer."
+          },
+          "experiment_variant_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "A/B experiment variant ID when this offer is part of an experiment."
+          }
+        }
+      },
+      "OfferDisplayV2": {
+        "type": "object",
+        "description": "Presentation copy for the user-offer card. Distinct from the legacy `OfferDisplay` schema used by `/iap/products/` offer config — field names are simplified and the copy is localized + interpolated server-side.",
+        "required": [
+          "title",
+          "body",
+          "cta_text",
+          "dismiss_text",
+          "accepted_title",
+          "accepted_body",
+          "completed_title",
+          "completed_body"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "cta_text": {
+            "type": "string"
+          },
+          "dismiss_text": {
+            "type": "string"
+          },
+          "accepted_title": {
+            "type": "string"
+          },
+          "accepted_body": {
+            "type": "string"
+          },
+          "completed_title": {
+            "type": "string"
+          },
+          "completed_body": {
+            "type": "string"
+          },
+          "apple_cancel_instructions": {
+            "type": "string",
+            "description": "Localized instructions shown in the accepted-state card when `requires_apple_cancel` is `true`. May be empty."
+          }
+        }
+      },
+      "OfferProration": {
+        "type": "object",
+        "description": "Stripe proration preview for web-to-web upgrades. Present only when `action_type` is `upgrade_web_to_web`.",
+        "required": [
+          "amount_cents",
+          "currency"
+        ],
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "description": "Credit applied from the old subscription, in minor currency units. Negative values represent money owed back to the user."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO-4217 currency code for the proration amount."
+          },
+          "next_billing_date": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the customer will next be billed on the upgraded plan."
+          }
+        }
+      },
+      "AppleSubscriptionSummary": {
+        "type": "object",
+        "description": "Normalized view of the user's Apple (StoreKit) subscription. Present only when the user currently has — or recently had — a StoreKit entitlement. Clients should rely on `is_active` rather than deriving activeness from `status_code`.",
+        "required": [
+          "is_active",
+          "status_code",
+          "auto_renew_enabled"
+        ],
+        "properties": {
+          "is_active": {
+            "type": "boolean",
+            "description": "Canonical active-entitlement flag, normalized server-side from the Apple status code."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status_code": {
+            "type": "integer",
+            "description": "Raw Apple status code (1=active, 2=expired, 3=billing_retry, 4=grace_period, 5=revoked). Diagnostic only — prefer `is_active`."
+          },
+          "auto_renew_enabled": {
+            "type": "boolean"
           }
         }
       },

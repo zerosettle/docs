@@ -1,0 +1,240 @@
+---
+title: 'Get User Offer'
+openapi: 'GET /iap/user-offer'
+---
+
+## When to use this
+
+`GET /iap/user-offer/` is the canonical offer + subscription-state endpoint introduced
+with **SDK 1.2+**. A single request returns:
+
+- The user's **current subscription state** as a tagged union (`subscription.type`
+  is the discriminator — `none`, `active_web`, `active_storekit`,
+  `migration_trial`, or `cancelled_active`).
+- Exactly **one offer decision** keyed by `offer.action_type`
+  (`no_action`, `migrate_storekit_to_web`, `upgrade_storekit_to_web`, or
+  `upgrade_web_to_web`). `is_eligible` is `false` iff `action_type` is `no_action`.
+
+It replaces the overlapping legacy surface of:
+
+| Legacy endpoint | What it still does |
+| --- | --- |
+| [`GET /iap/products/`](/api-reference/endpoint/get-products) `config.migration` / `config.offer` | Old SDKs continue to read these fields. They are now derived from the same resolver — the wire format is byte-identical. |
+| [`GET /iap/upgrade-offer/`](/api-reference/endpoint/get-upgrade-offer) | Still supported for SDKs <1.2. Derives from the same resolver. |
+| `/iap/storekit-subscription-status/` status parsing | Prefer `offer.apple_subscription.is_active` on the user-offer response, or the new `is_active` / `auto_renew_enabled` booleans on [that endpoint](/api-reference/endpoint/get-storekit-subscription-status). |
+
+SDK 1.2+ apps should call `/iap/user-offer/` and ignore the legacy fields.
+Older SDKs are unaffected — the legacy contracts remain fully supported.
+
+## Discriminated response
+
+`offer.action_type` is the discriminator. Clients are expected to exhaustively
+handle every variant. Pattern-match on `action_type` first; only read
+`checkout_product_id`, `savings_percent`, `proration`, etc. inside the branches
+where they are meaningful.
+
+### Example: `no_action`
+
+User has no active subscription, is not eligible for any offer, or the app has no
+campaign configured.
+
+```json
+{
+  "user_id": "user_abc123",
+  "app_id": 42,
+  "is_sandbox": false,
+  "subscription": { "type": "none" },
+  "offer": {
+    "action_type": "no_action",
+    "is_eligible": false,
+    "checkout_product_id": "",
+    "from_product_id": null,
+    "savings_percent": 0,
+    "free_trial_days": 0,
+    "min_subscription_days": 0,
+    "display": null,
+    "proration": null,
+    "requires_apple_cancel": false,
+    "apple_subscription": null,
+    "checkout_presentation": null,
+    "experiment_variant_id": null
+  },
+  "server_time": "2026-04-20T18:12:05.412831+00:00"
+}
+```
+
+### Example: `migrate_storekit_to_web`
+
+User has an active StoreKit subscription and a Switch & Save migration campaign is
+configured. The SDK should present the offer card and, on accept, drive checkout
+to `offer.checkout_product_id`.
+
+```json
+{
+  "user_id": "user_abc123",
+  "app_id": 42,
+  "is_sandbox": false,
+  "subscription": {
+    "type": "active_storekit",
+    "product_id": "com.example.pro.monthly",
+    "subscription_group_id": 7,
+    "status": "active",
+    "expires_at": "2026-05-11T00:00:00+00:00",
+    "is_trial": false,
+    "trial_ends_at": null,
+    "will_renew": true,
+    "storekit_original_transaction_id": "2000000123456789",
+    "entitlement_id": 9812
+  },
+  "offer": {
+    "action_type": "migrate_storekit_to_web",
+    "is_eligible": true,
+    "checkout_product_id": "com.example.pro.monthly.web",
+    "from_product_id": "com.example.pro.monthly",
+    "savings_percent": 20,
+    "free_trial_days": 21,
+    "min_subscription_days": 0,
+    "display": {
+      "title": "Save 20% by switching",
+      "body": "Switch your billing to the web and save 20% forever.",
+      "cta_text": "Save 20%",
+      "dismiss_text": "No thanks",
+      "accepted_title": "Almost done!",
+      "accepted_body": "Cancel your Apple billing to avoid being charged twice.",
+      "completed_title": "You're saving 20%",
+      "completed_body": "Thanks for switching.",
+      "apple_cancel_instructions": "Open Settings \u203a Apple ID \u203a Subscriptions to cancel."
+    },
+    "proration": null,
+    "requires_apple_cancel": true,
+    "apple_subscription": {
+      "is_active": true,
+      "expires_at": "2026-05-11T00:00:00+00:00",
+      "status_code": 1,
+      "auto_renew_enabled": true
+    },
+    "checkout_presentation": "sheet",
+    "experiment_variant_id": 3
+  },
+  "server_time": "2026-04-20T18:12:05.412831+00:00"
+}
+```
+
+### Example: `upgrade_storekit_to_web`
+
+User is on StoreKit and the campaign upgrades them to a higher-tier web product
+(not the same-price migration flow). The `apple_subscription` block and
+`requires_apple_cancel: true` still apply.
+
+```json
+{
+  "user_id": "user_abc123",
+  "app_id": 42,
+  "is_sandbox": false,
+  "subscription": {
+    "type": "active_storekit",
+    "product_id": "com.example.basic.monthly",
+    "subscription_group_id": 7,
+    "status": "active",
+    "expires_at": "2026-05-11T00:00:00+00:00",
+    "is_trial": false,
+    "trial_ends_at": null,
+    "will_renew": true,
+    "storekit_original_transaction_id": "2000000123456789",
+    "entitlement_id": 9812
+  },
+  "offer": {
+    "action_type": "upgrade_storekit_to_web",
+    "is_eligible": true,
+    "checkout_product_id": "com.example.pro.annual.web",
+    "from_product_id": "com.example.basic.monthly",
+    "savings_percent": 35,
+    "free_trial_days": 0,
+    "min_subscription_days": 30,
+    "display": {
+      "title": "Upgrade to Pro Annual",
+      "body": "Get Pro features and save 35% annually by switching to web billing.",
+      "cta_text": "Upgrade & Save",
+      "dismiss_text": "Not now",
+      "accepted_title": "Upgrading \u2026",
+      "accepted_body": "Cancel your old Apple subscription once the new plan is active.",
+      "completed_title": "You're on Pro Annual",
+      "completed_body": "Enjoy your new plan!",
+      "apple_cancel_instructions": "Open Settings \u203a Apple ID \u203a Subscriptions to cancel the old plan."
+    },
+    "proration": null,
+    "requires_apple_cancel": true,
+    "apple_subscription": {
+      "is_active": true,
+      "expires_at": "2026-05-11T00:00:00+00:00",
+      "status_code": 1,
+      "auto_renew_enabled": true
+    },
+    "checkout_presentation": "sheet",
+    "experiment_variant_id": null
+  },
+  "server_time": "2026-04-20T18:12:05.412831+00:00"
+}
+```
+
+### Example: `upgrade_web_to_web`
+
+User already has an active web subscription and is eligible to upgrade within the
+same subscription group. `proration` previews the Stripe credit that will auto-apply
+on the next renewal. `requires_apple_cancel` is always `false` for this branch.
+
+```json
+{
+  "user_id": "user_abc123",
+  "app_id": 42,
+  "is_sandbox": false,
+  "subscription": {
+    "type": "active_web",
+    "product_id": "com.example.pro.monthly.web",
+    "subscription_group_id": 7,
+    "status": "active",
+    "expires_at": "2026-05-11T00:00:00+00:00",
+    "trial_ends_at": null,
+    "is_trial": false,
+    "will_renew": true,
+    "stripe_subscription_id": "sub_1OaBcDeFgHiJkLmN",
+    "entitlement_id": 9810
+  },
+  "offer": {
+    "action_type": "upgrade_web_to_web",
+    "is_eligible": true,
+    "checkout_product_id": "com.example.pro.annual.web",
+    "from_product_id": "com.example.pro.monthly.web",
+    "savings_percent": 40,
+    "free_trial_days": 0,
+    "min_subscription_days": 0,
+    "display": {
+      "title": "Save 40% with annual billing",
+      "body": "Switch to annual and save 40% compared to monthly.",
+      "cta_text": "Switch to Annual",
+      "dismiss_text": "Keep monthly",
+      "accepted_title": "Upgrading \u2026",
+      "accepted_body": "We're finalizing your plan change.",
+      "completed_title": "You're on Annual",
+      "completed_body": "Thanks for upgrading!",
+      "apple_cancel_instructions": ""
+    },
+    "proration": {
+      "amount_cents": -340,
+      "currency": "usd",
+      "next_billing_date": "2027-04-20T18:12:05+00:00"
+    },
+    "requires_apple_cancel": false,
+    "apple_subscription": null,
+    "checkout_presentation": "native_pay",
+    "experiment_variant_id": null
+  },
+  "server_time": "2026-04-20T18:12:05.412831+00:00"
+}
+```
+
+## Error responses
+
+- **400** — `user_id` query parameter is missing or empty.
+- **401** — `X-ZeroSettle-Key` header is missing or invalid.
+- **404** — The supplied `user_id` has no identity associated with this app.

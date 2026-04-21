@@ -2,3 +2,32 @@
 title: 'Get StoreKit Subscription Status'
 openapi: 'GET /iap/storekit-subscription-status'
 ---
+
+## Canonical vs diagnostic fields
+
+SDK 1.2+ clients should rely on the two normalized boolean fields:
+
+- **`is_active`** — derived server-side from the raw Apple status code
+  (`1`=active, `3`=billing retry, `4`=grace period are all treated as active).
+  Use this to gate access to paid features.
+- **`auto_renew_enabled`** — boolean equivalent of `auto_renew_status == 1`,
+  exposed as a boolean for consistency with the rest of the API.
+
+The existing `status` and `auto_renew_status` fields are **diagnostic only** —
+they mirror the raw Apple payload (`status` is an SDK-collapsed integer,
+`auto_renew_status` is the raw `autoRenewStatus` integer). Prefer
+`is_active` and `auto_renew_enabled` for canonical access decisions;
+interpreting the integer fields yourself is error-prone and the rules can
+shift as Apple evolves the status model.
+
+## Example response
+
+```json
+{
+  "status": 1,
+  "auto_renew_status": 1,
+  "expires_at": "2026-05-11T00:00:00+00:00",
+  "is_active": true,
+  "auto_renew_enabled": true
+}
+```
