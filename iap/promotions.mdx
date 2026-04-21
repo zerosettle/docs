@@ -1,0 +1,88 @@
+---
+title: 'Promotions & Free Trials'
+description: 'Display promotional pricing and free trial eligibility in your paywall'
+icon: 'tag'
+---
+
+If a product has an active promotion, the checkout sheet automatically shows the promotional price. Read promotion metadata from the `Product` object to update your paywall copy before presenting checkout.
+
+## Reading Promotion Data
+
+```swift
+// Framework-neutral — identical in SwiftUI and UIKit
+if let promo = product.promotion {
+    print("\(promo.displayName): \(promo.promotionalPrice.formatted)")
+    // e.g. "Launch Sale: $4.99"
+}
+```
+
+Promotion types:
+- **Percent off** — e.g., 50% off the regular price
+- **Fixed amount** — e.g., $5 off
+- **Free trial** — e.g., 7 days free
+
+## Free Trials
+
+Free trial configuration is **server-side** — configure trial length per product in the [ZeroSettle dashboard](https://dashboard.zerosettle.io). The SDK reads trial data from your product catalog automatically.
+
+Two fields on `Product` reflect trial status:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isTrialEligible` | `Bool` | Whether this user is eligible for a trial on this product (server-determined based on prior trial history) |
+| `freeTrialDuration` | `String?` | Human-readable trial length (e.g., `"7 days"`) when configured |
+
+Use these to update your paywall CTA copy:
+
+```swift
+// Framework-neutral — identical in SwiftUI and UIKit
+if product.isTrialEligible, let duration = product.freeTrialDuration {
+    buyButtonTitle = "Start \(duration) Free Trial"
+} else {
+    buyButtonTitle = "Subscribe — \(product.webPrice.formatted)"
+}
+```
+
+No trial parameter is needed when presenting the checkout sheet — the server applies the trial automatically when the user is eligible.
+
+<Note>
+  As of ZeroSettleKit 1.1.5, the legacy `freeTrialDays:` parameter on `.checkoutSheet`, `CheckoutSheet.init`, `preload()`, `warmUp()`, and `warmUpAll()` is silently ignored. Configure trials in the dashboard instead.
+</Note>
+
+## Stripe Customer Attachment
+
+To attach a checkout to an existing Stripe customer (for unified billing portal use cases), pass `stripeCustomerId`:
+
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    .checkoutSheet(
+        item: $selectedProduct,
+        userId: currentUser.id,
+        stripeCustomerId: "cus_abc123"
+    ) { result in
+        handleResult(result)
+    }
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    CheckoutSheet.present(
+        from: self,
+        product: product,
+        userId: currentUser.id,
+        stripeCustomerId: "cus_abc123"
+    ) { result in
+        handleResult(result)
+    }
+    ```
+  </Tab>
+</Tabs>
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `stripeCustomerId` | `String?` | `nil` | Existing Stripe Customer ID (`cus_xxx`). Attaches the checkout to this customer for a consolidated [Stripe Billing Portal](https://docs.stripe.com/customer-management/integrate-customer-portal) view. |
+
+## Testing Promotions
+
+Create a test promotion in the ZeroSettle dashboard under your product settings. Promotions appear immediately in sandbox mode — no app release required.
