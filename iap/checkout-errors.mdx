@@ -1,0 +1,108 @@
+---
+title: 'Checkout Errors'
+description: 'Error types returned by ZeroSettle checkout and how to handle them'
+icon: 'triangle-exclamation'
+---
+
+When a checkout attempt fails, the result handler or `try/catch` block receives an error. On iOS, catch `ZeroSettleError` — it's the unified error type across all SDK surfaces.
+
+## Catching Errors
+
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+        switch result {
+        case .success(let transaction):
+            unlockContent(transaction.productId)
+
+        case .failure(let error):
+            // Cancellations are not errors — user changed their mind
+            if ZeroSettleError.isCancellation(error) { return }
+
+            if let zsError = error as? ZeroSettleError {
+                switch zsError {
+                case .checkoutFailed(let reason):
+                    showError("Payment failed: \(reason)")
+                case .userIdRequired:
+                    showError("Please sign in to purchase.")
+                case .apiError(let detail):
+                    showError("Could not load checkout: \(detail.message)")
+                default:
+                    showError(error.localizedDescription)
+                }
+            }
+        }
+    }
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    CheckoutSheet.present(from: self, product: product, userId: currentUser.id) { result in
+        switch result {
+        case .success(let transaction):
+            self.unlockContent(transaction.productId)
+
+        case .failure(let error):
+            if ZeroSettleError.isCancellation(error) { return }
+
+            if let zsError = error as? ZeroSettleError {
+                switch zsError {
+                case .checkoutFailed(let reason):
+                    self.showError("Payment failed: \(reason)")
+                case .userIdRequired:
+                    self.showError("Please sign in to purchase.")
+                case .apiError(let detail):
+                    self.showError("Could not load checkout: \(detail.message)")
+                default:
+                    self.showError(error.localizedDescription)
+                }
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+`ZeroSettleError.isCancellation(_:)` returns `true` for user-initiated cancellations regardless of which layer threw — `ZeroSettleError.cancelled`, Swift's `CancellationError`, StoreKit's `.userCancelled`, or `PaymentSheetError.cancelled`. Always filter cancellations before showing an error UI.
+
+## iOS Error Reference (`ZeroSettleError`)
+
+| Error | Cause | Recommended Action |
+|-------|-------|--------------------|
+| `.cancelled` | User dismissed the sheet | No action — use `isCancellation(_:)` to filter |
+| `.checkoutFailed(reason:)` | Payment processing failed | Show error to user; inspect `reason` for detail |
+| `.userIdRequired(productId:)` | Subscription or non-consumable purchased without a `userId` | Require sign-in before presenting checkout |
+| `.apiError(APIErrorDetail)` | Network or server error creating PaymentIntent | Show retry prompt |
+| `.notConfigured` | `configure()` was not called | Call `configure()` before any SDK use |
+| `.invalidPublishableKey` | Key format invalid | Check key from dashboard |
+| `.productNotFound(String)` | Product ID not in catalog | Verify product ID matches dashboard |
+| `.transactionVerificationFailed(String)` | Server verification failed after payment | Log and contact support; do not unlock content |
+| `.webCheckoutDisabledForJurisdiction` | Dashboard config disables web checkout in this region | Gracefully fall back or hide the button |
+| `.purchasePending` | Ask to Buy pending parental approval | Show "Purchase pending approval" UI |
+| `.restoreEntitlementsFailed` | Partial restore failure | Check `partialEntitlements` for recovered items |
+
+## Android Error Reference (`ZeroSettleError`)
+
+| Error | Description |
+|-------|-------------|
+| `ZeroSettleError.Cancelled` | User dismissed — no action needed |
+| `ZeroSettleError.NotConfigured` | Call `configure()` first |
+| `ZeroSettleError.CheckoutFailed(reason)` | Inspect `reason` (`CheckoutFailure`) for detail |
+| `ZeroSettleError.UserIdRequired(productId)` | Require sign-in before checkout |
+| `ZeroSettleError.TransactionVerificationFailed(detail)` | Server verification failed |
+
+### Android `CheckoutFailure` reasons
+
+| Reason | Description |
+|--------|-------------|
+| `CheckoutFailure.NetworkUnavailable` | No network connection |
+| `CheckoutFailure.StripeError(code, message)` | Card declined or Stripe error |
+| `CheckoutFailure.ServerError(statusCode, message)` | Server returned non-2xx |
+| `CheckoutFailure.ProductNotFound` | Product not in catalog |
+| `CheckoutFailure.MerchantNotOnboarded` | Stripe onboarding incomplete |
+| `CheckoutFailure.Other(message)` | Unclassified error |
+
+<Note>
+  `.cancelled` / `ZeroSettleError.Cancelled` is not a real error — it means the user changed their mind. Do not show an error message for cancellations.
+</Note>
