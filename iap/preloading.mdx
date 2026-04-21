@@ -59,6 +59,26 @@ After PI caching completes:
   WebView pre-rendering is iOS-only. On Android, `ZeroSettle.purchase()` creates the PaymentIntent at call time.
 </Note>
 
+<Note>
+  **UIKit:** WebView pre-rendering requires `WKWebView` instances to be in the app's view hierarchy. The `.zeroSettleHandler()` modifier handles this automatically in SwiftUI apps. In UIKit apps, add a 1pt invisible child view controller to your root view controller so WebKit can render off-screen:
+
+  ```swift
+  // At the top of your file:
+  import SwiftUI
+  import ZeroSettleKit
+
+  // In your root UIViewController.viewDidLoad():
+  let host = UIHostingController(rootView: Color.clear.zeroSettleHandler())
+  addChild(host)
+  host.view.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
+  host.view.isUserInteractionEnabled = false
+  view.addSubview(host.view)
+  host.didMove(toParent: self)
+  ```
+
+  Without this, the SDK still caches PaymentIntents (Layer 1) — checkout works fine — but the WebView won't pre-render. The first tap on "Buy" shows a brief spinner (~1–2s) while Stripe's payment element renders.
+</Note>
+
 ## What Happens in Stripe
 
 Different product types create different Stripe objects:
@@ -103,26 +123,42 @@ try? await ZeroSettle.shared.bootstrap(userId: currentUser.id)
 
 Control preloading per-modifier with the `preload:` parameter:
 
-```swift
-// Preload all products
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id, preload: .all) { result in
-    handleResult(result)
-}
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    // Preload all products
+    .checkoutSheet(item: $selectedProduct, userId: currentUser.id, preload: .all) { result in
+        handleResult(result)
+    }
 
-// Preload specific products
-.checkoutSheet(
-    item: $selectedProduct,
-    userId: currentUser.id,
-    preload: .specified(topProducts)
-) { result in
-    handleResult(result)
-}
+    // Preload specific products
+    .checkoutSheet(
+        item: $selectedProduct,
+        userId: currentUser.id,
+        preload: .specified(topProducts)
+    ) { result in
+        handleResult(result)
+    }
 
-// Default: preloads only the bound product
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
-    handleResult(result)
-}
-```
+    // Default: preloads only the bound product
+    .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+        handleResult(result)
+    }
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    // The preload: parameter is specific to the .checkoutSheet() SwiftUI modifier.
+    // In UIKit, use CheckoutSheet.warmUp() or warmUpAll() for equivalent preloading.
+
+    // Warm up a single product
+    await CheckoutSheet.warmUp(productId: product.id, userId: currentUser.id)
+
+    // Warm up all products
+    await CheckoutSheet.warmUpAll(userId: currentUser.id)
+    ```
+  </Tab>
+</Tabs>
 
 | Strategy | Behavior |
 |----------|----------|
@@ -153,23 +189,43 @@ await CheckoutSheet.warmUpAll(userId: currentUser.id)
 
 Returns the checkout URL and transaction ID for manual presentation (e.g., UIKit):
 
-```swift
-let preloaded = await CheckoutSheet.preload(
-    productId: product.id,
-    userId: currentUser.id
-)
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    let preloaded = await CheckoutSheet.preload(
+        productId: product.id,
+        userId: currentUser.id
+    )
 
-// Later, pass to CheckoutSheet or present()
-CheckoutSheet.present(
-    from: self,
-    product: product,
-    userId: currentUser.id,
-    checkoutURL: preloaded?.checkoutURL,
-    transactionId: preloaded?.transactionId
-) { result in
-    handleResult(result)
-}
-```
+    .checkoutSheet(
+        item: $selectedProduct,
+        userId: currentUser.id,
+        checkoutURL: preloaded?.checkoutURL,
+        transactionId: preloaded?.transactionId
+    ) { result in
+        handleResult(result)
+    }
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    let preloaded = await CheckoutSheet.preload(
+        productId: product.id,
+        userId: currentUser.id
+    )
+
+    CheckoutSheet.present(
+        from: self,
+        product: product,
+        userId: currentUser.id,
+        checkoutURL: preloaded?.checkoutURL,
+        transactionId: preloaded?.transactionId
+    ) { result in
+        handleResult(result)
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Performance & Memory
 

@@ -67,6 +67,8 @@
                 "pages": [
                   "iap/payment-sheet",
                   "iap/preloading",
+                  "iap/checkout-errors",
+                  "iap/promotions",
                   "iap/switch-and-save",
                   "iap/offer-tip-view",
                   "iap/migration-manager",

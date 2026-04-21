@@ -8,63 +8,136 @@ icon: 'wand-magic-sparkles'
 
 ## Quick Start
 
-```swift
-struct CustomOfferBanner: View {
-    @StateObject private var manager = ZSOfferManager(userId: "user_42")
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    struct CustomOfferBanner: View {
+        @StateObject private var manager = ZSOfferManager(userId: "user_42")
 
-    var body: some View {
-        switch manager.state {
-        case .eligible:
-            if let display = manager.display {
-                VStack {
-                    Text(display.offerTitleOrDefault("Save on your subscription"))
-                    Text(display.offerMessageOrDefault("Switch to direct billing and save."))
-                    Button(display.offerCtaOrDefault("Switch Now")) {
-                        manager.present()
+        var body: some View {
+            switch manager.state {
+            case .eligible:
+                if let display = manager.display {
+                    VStack {
+                        Text(display.offerTitleOrDefault("Save on your subscription"))
+                        Text(display.offerMessageOrDefault("Switch to direct billing and save."))
+                        Button(display.offerCtaOrDefault("Switch Now")) {
+                            manager.present()
+                        }
                     }
                 }
-            }
 
-        case .presented:
-            ProgressView("Starting checkout...")
-                .task { await startCheckout() }
+            case .presented:
+                ProgressView("Starting checkout...")
+                    .task { await startCheckout() }
 
-        case .accepted:
-            VStack {
-                Text(manager.display?.acceptedTitleOrDefault("Almost done!") ?? "Almost done!")
-                Button(manager.display?.acceptedCtaOrDefault("Cancel Apple Billing") ?? "Cancel Apple Billing") {
-                    Task { await manager.showAppleSubscriptionManagement() }
+            case .accepted:
+                VStack {
+                    Text(manager.display?.acceptedTitleOrDefault("Almost done!") ?? "Almost done!")
+                    Button(manager.display?.acceptedCtaOrDefault("Cancel Apple Billing") ?? "Cancel Apple Billing") {
+                        Task { await manager.showAppleSubscriptionManagement() }
+                    }
                 }
+
+            case .completed:
+                Text(manager.display?.completedTitleOrDefault("You're all set!") ?? "You're all set!")
+
+            default:
+                EmptyView()
             }
+        }
 
-        case .completed:
-            Text(manager.display?.completedTitleOrDefault("You're all set!") ?? "You're all set!")
-
-        default:
-            EmptyView()
+        private func startCheckout() async {
+            if let url = await manager.startCheckout() {
+                // Open url in a WebView or SFSafariViewController
+            }
+            // nil for web-to-web upgrades — completed server-side, no WebView needed
         }
     }
+    ```
 
-    private func startCheckout() async {
-        if let url = await manager.startCheckout() {
-            // Open url in a WebView or SFSafariViewController
+    Pass a `stripeCustomerId` to attach the checkout to an existing Stripe customer:
+
+    ```swift
+    @StateObject private var manager = ZSOfferManager(
+        userId: "user_42",
+        stripeCustomerId: "cus_abc123"
+    )
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    import UIKit
+    import SafariServices
+    import Combine
+    import ZeroSettleKit
+
+    class CustomOfferViewController: UIViewController {
+        private let manager: ZSOfferManager
+        private var cancellables = Set<AnyCancellable>()
+
+        // Pass stripeCustomerId to attach the checkout to an existing Stripe customer
+        init(userId: String, stripeCustomerId: String? = nil) {
+            self.manager = ZSOfferManager(userId: userId, stripeCustomerId: stripeCustomerId)
+            super.init(nibName: nil, bundle: nil)
         }
-        // If nil, check manager.flowType — web-to-web upgrades
-        // complete without a URL (handled internally)
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            ctaButton.addTarget(self, action: #selector(ctaTapped), for: .touchUpInside)
+            cancelAppleButton.addTarget(self, action: #selector(cancelAppleTapped), for: .touchUpInside)
+
+            manager.objectWillChange
+                .receive(on: RunLoop.main)
+                .sink { [weak self] in self?.render() }
+                .store(in: &cancellables)
+            render()
+        }
+
+        private func render() {
+            switch manager.state {
+            case .eligible:
+                if let display = manager.display {
+                    titleLabel.text = display.offerTitleOrDefault("Save on your subscription")
+                    messageLabel.text = display.offerMessageOrDefault("Switch to direct billing and save.")
+                    ctaButton.setTitle(display.offerCtaOrDefault("Switch Now"), for: .normal)
+                }
+            case .accepted:
+                cancelAppleButton.setTitle(
+                    manager.display?.acceptedCtaOrDefault("Cancel Apple Billing") ?? "Cancel Apple Billing",
+                    for: .normal
+                )
+            case .completed:
+                completedLabel.text = manager.display?.completedTitleOrDefault("You're all set!") ?? "You're all set!"
+            default:
+                break
+            }
+        }
+
+        @objc private func ctaTapped() {
+            manager.present()
+            Task { await handleCheckout() }
+        }
+
+        private func handleCheckout() async {
+            guard let url = await manager.startCheckout() else {
+                // nil for web-to-web upgrades — completed server-side, no WebView needed
+                return
+            }
+            present(SFSafariViewController(url: url), animated: true)
+        }
+
+        @objc private func cancelAppleTapped() {
+            Task { await manager.showAppleSubscriptionManagement() }
+        }
     }
-}
-```
+    ```
+  </Tab>
+</Tabs>
 
-If you have an existing Stripe customer ID for the user, pass it at init to attach the checkout to their Stripe account:
-
-```swift
-@StateObject private var manager = ZSOfferManager(
-    userId: "user_42",
-    stripeCustomerId: "cus_abc123"
-)
-```
-
-The manager is an `ObservableObject` — SwiftUI re-renders automatically when the state changes.
+`ZSOfferManager` is an `ObservableObject`. SwiftUI views update automatically; in UIKit, subscribe to `objectWillChange` with Combine to react to state changes.
 
 ## State Machine
 
@@ -229,44 +302,69 @@ ZSOfferManager.setDismissed(false, forUserId: "user_42")
 
 For `.webToWeb` upgrades, the flow is different from migrations and StoreKit-to-web upgrades. There is no WebView or Apple cancel step — the manager calls the upgrade API directly and transitions to `.completed`.
 
-```swift
-struct OfferView: View {
-    @StateObject private var manager = ZSOfferManager(userId: "user_42")
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    struct OfferView: View {
+        @StateObject private var manager = ZSOfferManager(userId: "user_42")
 
-    var body: some View {
-        switch manager.state {
-        case .eligible:
-            if let display = manager.display {
-                Button(display.offerCtaOrDefault("Upgrade Now")) {
-                    Task { await handleCheckout() }
+        var body: some View {
+            switch manager.state {
+            case .eligible:
+                if let display = manager.display {
+                    Button(display.offerCtaOrDefault("Upgrade Now")) {
+                        Task { await handleCheckout() }
+                    }
                 }
+
+            case .completed:
+                Text("Upgrade complete!")
+
+            default:
+                EmptyView()
+            }
+        }
+
+        private func handleCheckout() async {
+            manager.present()
+            let url = await manager.startCheckout()
+
+            if manager.flowType == .upgrade,
+               manager.offerData?.upgradeType == .webToWeb {
+                // No URL returned — upgrade was executed server-side.
+                // State is already .completed. Nothing else to do.
+                return
             }
 
-        case .completed:
-            Text("Upgrade complete!")
-
-        default:
-            EmptyView()
+            if let url {
+                // Open WebView for migration or StoreKit-to-web upgrade
+            }
         }
     }
-
-    private func handleCheckout() async {
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    @objc private func upgradeTapped() {
         manager.present()
-        let url = await manager.startCheckout()
+        Task {
+            let url = await manager.startCheckout()
 
-        if manager.flowType == .upgrade,
-           manager.offerData?.upgradeType == .webToWeb {
-            // No URL returned — upgrade was executed server-side.
-            // State is already .completed. Nothing else to do.
-            return
-        }
+            if manager.flowType == .upgrade,
+               manager.offerData?.upgradeType == .webToWeb {
+                // No URL — upgrade executed server-side.
+                // manager.state is now .completed.
+                return
+            }
 
-        if let url {
-            // Open WebView for migration or StoreKit-to-web upgrade
+            if let url {
+                present(SFSafariViewController(url: url), animated: true)
+            }
         }
     }
-}
-```
+    ```
+  </Tab>
+</Tabs>
 
 <Note>
   Web-to-web upgrades cancel the old subscription with proration. The unused time on the old plan becomes a credit on the customer's Stripe balance and is automatically applied on the next renewal. See [Upgrade Offers](/iap/upgrade-offer#web-to-web-proration) for details.

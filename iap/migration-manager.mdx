@@ -13,41 +13,108 @@ icon: 'wand-magic-sparkles'
 
 ## Quick Start
 
-```swift
-struct SwitchAndSaveBanner: View {
-    // Pass stripeCustomerId to attach checkouts to an existing Stripe customer
-    @StateObject private var manager = ZSMigrationManager(userId: "user_42")
-    // Or: ZSMigrationManager(userId: "user_42", stripeCustomerId: "cus_abc123")
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    struct SwitchAndSaveBanner: View {
+        // Pass stripeCustomerId to attach checkouts to an existing Stripe customer
+        @StateObject private var manager = ZSMigrationManager(userId: "user_42")
+        // Or: ZSMigrationManager(userId: "user_42", stripeCustomerId: "cus_abc123")
 
-    var body: some View {
-        switch manager.state {
-        case .eligible:
-            if let offer = manager.offerData {
-                VStack {
-                    Text(offer.prompt.title)
-                    Text(offer.prompt.message)
-                    Button(offer.prompt.ctaText) {
-                        Task { await manager.startCheckout() }
+        var body: some View {
+            switch manager.state {
+            case .eligible:
+                if let offer = manager.offerData {
+                    VStack {
+                        Text(offer.prompt.title)
+                        Text(offer.prompt.message)
+                        Button(offer.prompt.ctaText) {
+                            Task { await manager.startCheckout() }
+                        }
                     }
                 }
+
+            case .accepted:
+                Button("Cancel Apple Billing") {
+                    Task { await manager.showAppleSubscriptionManagement() }
+                }
+
+            case .completed:
+                Text("You're saving \(manager.offerData?.prompt.discountPercent ?? 15)%!")
+
+            default:
+                EmptyView()
             }
-
-        case .accepted:
-            Button("Cancel Apple Billing") {
-                Task { await manager.showAppleSubscriptionManagement() }
-            }
-
-        case .completed:
-            Text("You're saving \(manager.offerData?.prompt.discountPercent ?? 15)%!")
-
-        default:
-            EmptyView()
         }
     }
-}
-```
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    import UIKit
+    import SafariServices
+    import Combine
+    import ZeroSettleKit
 
-The manager is an `ObservableObject` — SwiftUI re-renders automatically when the state changes.
+    class SwitchAndSaveViewController: UIViewController {
+        private let manager: ZSMigrationManager
+        private var cancellables = Set<AnyCancellable>()
+
+        // Pass stripeCustomerId to attach checkouts to an existing Stripe customer
+        init(userId: String, stripeCustomerId: String? = nil) {
+            self.manager = ZSMigrationManager(userId: userId, stripeCustomerId: stripeCustomerId)
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            ctaButton.addTarget(self, action: #selector(ctaTapped), for: .touchUpInside)
+            cancelAppleButton.addTarget(self, action: #selector(cancelAppleTapped), for: .touchUpInside)
+
+            manager.objectWillChange
+                .receive(on: RunLoop.main)
+                .sink { [weak self] in self?.render() }
+                .store(in: &cancellables)
+            render()
+        }
+
+        private func render() {
+            switch manager.state {
+            case .eligible, .presented:
+                if let offer = manager.offerData {
+                    titleLabel.text = offer.prompt.title
+                    messageLabel.text = offer.prompt.message
+                    ctaButton.setTitle(offer.prompt.ctaText, for: .normal)
+                    ctaButton.isEnabled = !manager.isLoading
+                }
+            case .accepted:
+                cancelAppleButton.setTitle("Cancel Apple Billing", for: .normal)
+            case .completed:
+                completedLabel.text = "You're saving \(manager.offerData?.prompt.discountPercent ?? 15)%!"
+            default:
+                break
+            }
+        }
+
+        @objc private func ctaTapped() {
+            Task {
+                if let url = await manager.startCheckout() {
+                    present(SFSafariViewController(url: url), animated: true)
+                }
+            }
+        }
+
+        @objc private func cancelAppleTapped() {
+            Task { await manager.showAppleSubscriptionManagement() }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+`ZSMigrationManager` is an `ObservableObject`. SwiftUI views update automatically; in UIKit, subscribe to `objectWillChange` with Combine to react to state changes.
 
 ## State Machine
 
@@ -195,92 +262,188 @@ Unlike `demoMode`, `forceUSARegion()` only bypasses the region check. All other 
 
 A complete custom switch and save card with loading, error, checkout, and completion states:
 
-```swift
-struct CustomSwitchAndSaveCard: View {
-    @StateObject private var manager: ZSMigrationManager
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    struct CustomSwitchAndSaveCard: View {
+        @StateObject private var manager: ZSMigrationManager
 
-    init(userId: String) {
-        _manager = StateObject(wrappedValue: ZSMigrationManager(userId: userId))
+        init(userId: String) {
+            _manager = StateObject(wrappedValue: ZSMigrationManager(userId: userId))
+        }
+
+        var body: some View {
+            Group {
+                switch manager.state {
+                case .loading, .ineligible, .dismissed:
+                    EmptyView()
+
+                case .eligible, .presented:
+                    eligibleView
+
+                case .accepted:
+                    acceptedView
+
+                case .completed:
+                    completedView
+                }
+            }
+            .animation(.easeInOut, value: manager.state)
+        }
+
+        private var eligibleView: some View {
+            VStack(spacing: 12) {
+                if let offer = manager.offerData {
+                    Text(offer.prompt.title).font(.headline)
+                    Text(offer.prompt.message).font(.subheadline)
+
+                    if let error = manager.checkoutError {
+                        Text(error.localizedDescription)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+
+                    Button {
+                        Task { await manager.startCheckout() }
+                    } label: {
+                        if manager.isLoading {
+                            ProgressView()
+                        } else {
+                            Text(offer.prompt.ctaText)
+                        }
+                    }
+                    .disabled(manager.isLoading)
+                }
+            }
+            .padding()
+        }
+
+        private var acceptedView: some View {
+            VStack(spacing: 12) {
+                Text("Almost done!")
+                Text("Cancel your Apple subscription to start saving.")
+                Button("Cancel Apple Billing") {
+                    Task { await manager.showAppleSubscriptionManagement() }
+                }
+            }
+            .padding()
+        }
+
+        private var completedView: some View {
+            VStack(spacing: 8) {
+                Text("You're all set!").font(.headline)
+                Text("Saving \(manager.offerData?.prompt.discountPercent ?? 15)% forever.")
+            }
+            .padding()
+        }
     }
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    import UIKit
+    import SafariServices
+    import Combine
+    import ZeroSettleKit
 
-    var body: some View {
-        Group {
+    class CustomSwitchAndSaveViewController: UIViewController {
+        private let manager: ZSMigrationManager
+        private var cancellables = Set<AnyCancellable>()
+
+        private let titleLabel = UILabel()
+        private let messageLabel = UILabel()
+        private let errorLabel = UILabel()
+        private let ctaButton = UIButton(type: .system)
+        private let loadingIndicator = UIActivityIndicatorView(style: .medium)
+        private let cancelAppleButton = UIButton(type: .system)
+        private let completedLabel = UILabel()
+
+        init(userId: String) {
+            self.manager = ZSMigrationManager(userId: userId)
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            setupLayout()
+            ctaButton.addTarget(self, action: #selector(ctaTapped), for: .touchUpInside)
+            cancelAppleButton.addTarget(self, action: #selector(cancelAppleTapped), for: .touchUpInside)
+
+            manager.objectWillChange
+                .receive(on: RunLoop.main)
+                .sink { [weak self] in self?.render() }
+                .store(in: &cancellables)
+            render()
+        }
+
+        private func render() {
+            let offer = manager.offerData
+
+            [titleLabel, messageLabel, errorLabel, ctaButton, loadingIndicator,
+             cancelAppleButton, completedLabel].forEach { $0.isHidden = true }
+
             switch manager.state {
             case .loading, .ineligible, .dismissed:
-                EmptyView()
+                break
 
             case .eligible, .presented:
-                eligibleView
+                titleLabel.text = offer?.prompt.title
+                titleLabel.isHidden = false
+                messageLabel.text = offer?.prompt.message
+                messageLabel.isHidden = false
+                errorLabel.text = manager.checkoutError?.localizedDescription
+                errorLabel.isHidden = manager.checkoutError == nil
+                ctaButton.setTitle(offer?.prompt.ctaText, for: .normal)
+                ctaButton.isEnabled = !manager.isLoading
+                ctaButton.isHidden = false
+                loadingIndicator.isHidden = !manager.isLoading
+                if manager.isLoading { loadingIndicator.startAnimating() }
 
             case .accepted:
-                acceptedView
+                cancelAppleButton.setTitle("Cancel Apple Billing", for: .normal)
+                cancelAppleButton.isHidden = false
 
             case .completed:
-                completedView
+                completedLabel.text = "Saving \(offer?.prompt.discountPercent ?? 15)% forever."
+                completedLabel.isHidden = false
             }
         }
-        .animation(.easeInOut, value: manager.state)
-    }
 
-    private var eligibleView: some View {
-        VStack(spacing: 12) {
-            if let offer = manager.offerData {
-                Text(offer.prompt.title).font(.headline)
-                Text(offer.prompt.message).font(.subheadline)
-
-                if let error = manager.checkoutError {
-                    Text(error.localizedDescription)
-                        .foregroundColor(.red)
-                        .font(.caption)
+        @objc private func ctaTapped() {
+            Task {
+                if let url = await manager.startCheckout() {
+                    present(SFSafariViewController(url: url), animated: true)
                 }
-
-                Button {
-                    Task { await manager.startCheckout() }
-                } label: {
-                    if manager.isLoading {
-                        ProgressView()
-                    } else {
-                        Text(offer.prompt.ctaText)
-                    }
-                }
-                .disabled(manager.isLoading)
             }
         }
-        .padding()
-    }
 
-    private var acceptedView: some View {
-        VStack(spacing: 12) {
-            Text("Almost done!")
-            Text("Cancel your Apple subscription to start saving.")
-            Button("Cancel Apple Billing") {
-                Task { await manager.showAppleSubscriptionManagement() }
-            }
+        @objc private func cancelAppleTapped() {
+            Task { await manager.showAppleSubscriptionManagement() }
         }
-        .padding()
-    }
 
-    private var completedView: some View {
-        VStack(spacing: 8) {
-            Text("You're all set!").font(.headline)
-            Text("Saving \(manager.offerData?.prompt.discountPercent ?? 15)% forever.")
+        private func setupLayout() {
+            // Add titleLabel, messageLabel, errorLabel, ctaButton,
+            // loadingIndicator, cancelAppleButton, and completedLabel
+            // to your view hierarchy with Auto Layout or frames.
         }
-        .padding()
     }
-}
-```
+    ```
+  </Tab>
+</Tabs>
 
 ## Relationship to Views and Managers
 
 `MigrationTipView` uses `ZSMigrationManager` internally. For the unified offer system, `OfferTipView` uses `ZSOfferManager`. Choose based on your needs:
 
-| | `MigrationTipView` | `OfferTipView` | `ZSMigrationManager` | `ZSOfferManager` |
+| | `MigrationTipView` (deprecated) | `OfferTipView` | `ZSMigrationManager` | `ZSOfferManager` |
 |---|---|---|---|---|
 | **Approach** | Drop-in view | Drop-in view | Custom UI | Custom UI |
 | **Migration** | Yes | Yes | Yes | Yes |
 | **StoreKit→web upgrade** | No | Yes | No | Yes |
 | **Web→web upgrade** | No | Yes | No | Yes |
-| **Platform** | SwiftUI, RN, Flutter | SwiftUI | SwiftUI | SwiftUI |
+| **Platform** | SwiftUI, RN, Flutter | SwiftUI | SwiftUI, UIKit | SwiftUI, UIKit |
 
 ## Next Steps
 

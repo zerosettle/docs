@@ -132,30 +132,63 @@ ZeroSettle will add your app to the `apple-app-site-association` file hosted at 
 
 ## Step 3: Handle the Callback
 
-### SwiftUI
+<Tabs>
+  <Tab title="SwiftUI">
+    Add `.zeroSettleHandler()` to your root view. This modifier handles both `onOpenURL` and `onContinueUserActivity` automatically.
 
-Use the `.zeroSettleHandler()` view modifier on your root view (or handle deep links in your Android Activity):
-
-<CodeGroup>
-```swift Swift
-@main
-struct YourApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .zeroSettleHandler()
+    ```swift
+    @main
+    struct YourApp: App {
+        var body: some Scene {
+            WindowGroup {
+                ContentView()
+                    .zeroSettleHandler()
+            }
         }
     }
-}
-```
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    In your `SceneDelegate`, implement `scene(_:continue:)`:
 
+    ```swift
+    class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+        func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+            guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+                  let url = userActivity.webpageURL else { return }
+            ZeroSettle.shared.handleUniversalLink(url)
+        }
+    }
+    ```
+
+    <Note>
+      **iOS 12 and earlier (no SceneDelegate):** Use `AppDelegate` instead:
+
+      ```swift
+      class AppDelegate: UIResponder, UIApplicationDelegate {
+          func application(
+              _ application: UIApplication,
+              continue userActivity: NSUserActivity,
+              restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+          ) -> Bool {
+              guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+                    let url = userActivity.webpageURL else { return false }
+              return ZeroSettle.shared.handleUniversalLink(url)
+          }
+      }
+      ```
+    </Note>
+  </Tab>
+</Tabs>
+
+For Android and cross-platform frameworks:
+
+<CodeGroup>
 ```kotlin Kotlin
 class MainActivity : ComponentActivity() {
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent?.data?.let { uri ->
-            ZeroSettle.handleDeepLink(uri)
-        }
+        intent.data?.let { ZeroSettle.handleDeepLink(it) }
     }
 
     override fun onResume() {
@@ -169,165 +202,17 @@ class MainActivity : ComponentActivity() {
 import { ZeroSettle } from 'react-native-zerosettle-kit';
 import { Linking } from 'react-native';
 
-// Handle deep links
-Linking.addEventListener('url', ({ url }) => {
-  ZeroSettle.handleUniversalLink(url);
-});
+Linking.addEventListener('url', ({ url }) => ZeroSettle.handleUniversalLink(url));
 ```
 
 ```dart Flutter
-// Flutter handles deep links automatically via the native plugin.
-// Ensure your iOS Associated Domains and Android intent-filter are configured.
 await ZeroSettle.instance.handleUniversalLink(url);
-```
-</CodeGroup>
-
-This automatically handles both `onOpenURL` and `onContinueUserActivity` for you on iOS. On Android, `handleDeepLink` parses the callback URI, and `onResume` lets the SDK poll for transaction status when the user returns from the browser.
-
-### UIKit (SceneDelegate)
-
-<CodeGroup>
-```swift Swift
-class SceneDelegate: UIResponder, UIWindowSceneDelegate {
-    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
-              let url = userActivity.webpageURL else {
-            return
-        }
-        ZeroSettle.shared.handleUniversalLink(url)
-    }
-}
-```
-
-```tsx React Native
-// For UIKit SceneDelegate, use the cross-platform deep link handler instead.
-// See the SwiftUI / Kotlin tab above for the Linking.addEventListener approach.
-```
-
-```dart Flutter
-// For UIKit SceneDelegate, use the cross-platform deep link handler instead.
-// See the SwiftUI / Kotlin tab above for the handleUniversalLink approach.
-```
-</CodeGroup>
-
-### UIKit (AppDelegate - iOS 12 and earlier)
-
-<CodeGroup>
-```swift Swift
-class AppDelegate: UIResponder, UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        continue userActivity: NSUserActivity,
-        restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
-    ) -> Bool {
-        guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
-              let url = userActivity.webpageURL else {
-            return false
-        }
-        return ZeroSettle.shared.handleUniversalLink(url)
-    }
-}
-```
-
-```tsx React Native
-// For UIKit AppDelegate, use the cross-platform deep link handler instead.
-// See the SwiftUI / Kotlin tab above for the Linking.addEventListener approach.
-```
-
-```dart Flutter
-// For UIKit AppDelegate, use the cross-platform deep link handler instead.
-// See the SwiftUI / Kotlin tab above for the handleUniversalLink approach.
 ```
 </CodeGroup>
 
 ## Step 4: Handle Checkout Results
 
-Use the delegate to respond to checkout completion:
-
-<CodeGroup>
-```swift Swift
-class PurchaseManager: ZeroSettleDelegate {
-    init() {
-        ZeroSettle.shared.delegate = self
-    }
-
-    func zeroSettleCheckoutDidComplete(transaction: CheckoutTransaction) {
-        // Purchase successful - unlock content
-        unlockProduct(transaction.productId)
-        showSuccessMessage()
-    }
-
-    func zeroSettleCheckoutDidCancel(productId: String) {
-        // User cancelled - no action needed, or show a prompt
-    }
-
-    func zeroSettleCheckoutDidFail(productId: String, error: Error) {
-        // Something went wrong
-        showError(error.localizedDescription)
-    }
-}
-```
-
-```kotlin Kotlin
-class PurchaseManager : ZeroSettleDelegate {
-    override fun zeroSettleCheckoutDidComplete(transaction: CheckoutTransaction) {
-        // Purchase successful - unlock content
-        unlockProduct(transaction.productId)
-        showSuccessMessage()
-    }
-
-    override fun zeroSettleCheckoutDidCancel(productId: String) {
-        // User cancelled - no action needed, or show a prompt
-    }
-
-    override fun zeroSettleCheckoutDidFail(productId: String, error: Throwable) {
-        // Something went wrong
-        showError(error.localizedMessage)
-    }
-}
-```
-
-```tsx React Native
-ZeroSettle.onEntitlementUpdate((entitlements) => {
-  // Purchase successful - unlock content
-  updatePremiumUI(entitlements);
-});
-
-// Purchases are handled via try/catch
-try {
-  const transaction = await ZeroSettle.purchase(productId, userId);
-  unlockProduct(transaction.productId);
-  showSuccessMessage();
-} catch (error) {
-  if (error.code === 'cancelled') {
-    // User cancelled - no action needed
-  } else {
-    showError(error.message);
-  }
-}
-```
-
-```dart Flutter
-ZeroSettle.instance.entitlementUpdates.listen((entitlements) {
-  // Purchase successful - unlock content
-  updatePremiumUI(entitlements);
-});
-
-// Purchases are handled via try/catch
-try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
-    productId: productId,
-    userId: userId,
-  );
-  unlockProduct(transaction.productId);
-  showSuccessMessage();
-} on ZSCancelledException {
-  // User cancelled - no action needed
-} on ZSCheckoutFailedException catch (e) {
-  showError(e.message);
-}
-```
-</CodeGroup>
+Checkout results — successful purchases, cancellations, and errors — are handled via the `CheckoutSheet` result callback, not universal links. See [Checkout Errors](/iap/checkout-errors) for the complete result handling API and error reference.
 
 ## Callback URL Format
 

@@ -1,12 +1,12 @@
 ---
-title: 'Quickstart (Swift)'
-description: 'Get started with ZeroSettle In-App Purchase for Swift'
+title: 'Quickstart (iOS)'
+description: 'Get started with ZeroSettle In-App Purchase on iOS'
 icon: 'rocket'
 ---
 
 ## What You'll Build
 
-In this quickstart, you'll integrate ZeroSettle into a SwiftUI app and make your first test purchase. By the end, your app will:
+In this quickstart, you'll integrate ZeroSettle into your iOS app and make your first test purchase. By the end, your app will:
 
 - Fetch your product catalog from ZeroSettle
 - Display products with web checkout pricing
@@ -24,12 +24,10 @@ In this quickstart, you'll integrate ZeroSettle into a SwiftUI app and make your
 </Tip>
 
 <Tip>
-  **Want to see a complete integration?** The [JustOne habit tracker](/iap/sample-app) is a production app that demonstrates every pattern in this quickstart. Clone it and follow along.
+  **Want to see a complete integration?** The [JustOne habit tracker](/iap/sample-app) is a production app that demonstrates every pattern in this quickstart.
 </Tip>
 
 ## Prerequisites
-
-Before starting, make sure you have:
 
 <Check>A ZeroSettle account with at least one product created ([Account Setup](/iap/account-setup))</Check>
 <Check>ZeroSettleKit added to your Xcode project ([Installation](/iap/installation))</Check>
@@ -37,62 +35,135 @@ Before starting, make sure you have:
 <Check>Xcode 15.0+ with an iOS 17.0+ target</Check>
 
 <Steps>
-<Step title="Configure the SDK (~1 min)">
+<Step title="Configure the SDK">
 
-Configure the SDK early in your app's lifecycle. `configure()` is synchronous. Then call `bootstrap()` to fetch products and restore entitlements:
+Configure the SDK early in your app lifecycle. `configure()` is synchronous — call it before anything else. Then call `bootstrap()` to fetch products and restore entitlements.
 
-```swift
-import ZeroSettleKit
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    import ZeroSettleKit
 
-@main
-struct YourApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .task {
-                    ZeroSettle.shared.configure(.init(
-                        publishableKey: "your_live_key"  // From your ZeroSettle dashboard
-                    ))
-                    try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id)
-                }
-                .zeroSettleHandler()  // Handles universal link callbacks
+    @main
+    struct YourApp: App {
+        var body: some Scene {
+            WindowGroup {
+                ContentView()
+                    .task {
+                        ZeroSettle.shared.configure(.init(
+                            publishableKey: "zs_pk_test_..."
+                        ))
+                        try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id)
+                    }
+                    .zeroSettleHandler()
+            }
         }
     }
-}
-```
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    import UIKit
+    import ZeroSettleKit
 
-After configuring, `bootstrap()` automatically:
+    class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+        var window: UIWindow?
 
-1. Fetches your product catalog
-2. Restores entitlements
-3. Pre-creates PaymentIntents for all products (when `preloadCheckout: true`)
+        func scene(
+            _ scene: UIScene,
+            willConnectTo session: UISceneSession,
+            options connectionOptions: UIScene.ConnectionOptions
+        ) {
+            ZeroSettle.shared.configure(.init(
+                publishableKey: "zs_pk_test_..."
+            ))
+            Task {
+                try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id)
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
 
-All automatic steps are non-fatal — failures are logged but won't prevent the SDK from working.
+`bootstrap()` automatically fetches your product catalog, restores entitlements, and optionally pre-creates PaymentIntents for all products.
 
-**Configuration Options**
+**Configuration options**
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `publishableKey` | Required | Your publishable key from the dashboard |
 | `syncStoreKitTransactions` | `true` | Set to `false` if using RevenueCat |
 | `preloadCheckout` | `false` | Pre-create PaymentIntents on bootstrap for instant checkout. See [Preloading](/iap/preloading) |
-| `maxPreloadedWebViews` | `nil` (no limit) | Cap WebView pre-rendering pool (iOS only). See [Preloading](/iap/preloading) |
-
-**Sandbox vs Live Mode**
-
-Your publishable key prefix determines the mode:
-
-| Prefix | Mode | Description |
-|--------|------|-------------|
-| `zs_pk_test_` | Sandbox | Use for development. No real charges. |
-| `zs_pk_live_` | Live | Real payments processed. |
+| `maxPreloadedWebViews` | `nil` | Cap WebView pre-rendering pool size. See [Preloading](/iap/preloading) |
 
 </Step>
-<Step title="Fetch and display products (~2 min)">
+<Step title="Install the universal link handler">
 
-If you need to refresh products later, you can fetch them manually:
+ZeroSettle uses universal links to return checkout results to your app when the user pays in Safari or an in-app browser. You must install a handler so these callbacks reach the SDK.
+
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    // Add .zeroSettleHandler() to your root view (already shown in Step 1).
+    // It handles onContinueUserActivity and onOpenURL automatically.
+    ContentView()
+        .zeroSettleHandler()
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    // SceneDelegate.swift — add all three methods.
+    class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+
+        // Cold-start: app launched directly from a universal link tap
+        func scene(
+            _ scene: UIScene,
+            willConnectTo session: UISceneSession,
+            options connectionOptions: UIScene.ConnectionOptions
+        ) {
+            // ... configure() and bootstrap() calls from Step 1 ...
+
+            if let activity = connectionOptions.userActivities.first(where: {
+                $0.activityType == NSUserActivityTypeBrowsingWeb
+            }), let url = activity.webpageURL {
+                ZeroSettle.shared.handleUniversalLink(url)
+            }
+        }
+
+        // Warm-start: app already running when universal link is tapped
+        func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+            guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+                  let url = userActivity.webpageURL else { return }
+            if !ZeroSettle.shared.handleUniversalLink(url) {
+                // Not a ZeroSettle URL — handle your own deep links here
+            }
+        }
+
+        // Safety net for edge cases
+        func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+            for ctx in URLContexts {
+                ZeroSettle.shared.handleUniversalLink(ctx.url)
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Make sure you've added the Associated Domains entitlement to your app target:
+- **Sandbox:** `applinks:api.zerosettle.io?mode=developer`
+- **Production:** `applinks:api.zerosettle.io`
+
+See [Universal Links](/iap/universal-links) for step-by-step setup.
+
+</Step>
+<Step title="Fetch and display products">
+
+`fetchProducts()` returns your product catalog. Products are also cached in `ZeroSettle.shared.products` after `bootstrap()`.
 
 ```swift
+// Framework-neutral — identical in SwiftUI and UIKit
 let catalog = try await ZeroSettle.shared.fetchProducts(userId: currentUser.id)
 
 for product in catalog.products {
@@ -100,106 +171,111 @@ for product in catalog.products {
 }
 ```
 
-`fetchProducts()` returns a ``ProductCatalog`` containing both the product list and remote configuration. Products are also cached in `ZeroSettle.shared.products` for convenience.
-
 </Step>
-<Step title="Present the payment sheet (~2 min)">
+<Step title="Present the payment sheet">
 
-Present a checkout sheet with Apple Pay and card support. The checkout mode (embedded webview, Safari VC, or external Safari) is controlled by your remote config on the dashboard — `checkoutSheet` handles all modes automatically.
+Present a checkout sheet with Apple Pay and card support. The checkout mode (embedded webview, in-app browser, or Safari) is controlled by your dashboard configuration — the SDK chooses automatically.
 
-```swift
-struct PaywallView: View {
-    @State private var selectedProduct: Product?
-    let product: Product
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    struct PaywallView: View {
+        @State private var selectedProduct: Product?
+        let product: Product
 
-    var body: some View {
-        Button("Subscribe — \(product.webPrice.formatted)") {
-            selectedProduct = product
-        }
-        .checkoutSheet(
-            item: $selectedProduct,
-            userId: currentUser.id
-        ) { result in
-            switch result {
-            case .success(let transaction):
-                print("Purchased: \(transaction.productId)")
-            case .failure(let error):
-                print("Error: \(error)")
+        var body: some View {
+            Button("Subscribe — \(product.webPrice.formatted)") {
+                selectedProduct = product
+            }
+            .checkoutSheet(
+                item: $selectedProduct,
+                userId: currentUser.id
+            ) { result in
+                switch result {
+                case .success(let transaction):
+                    print("Purchased: \(transaction.productId)")
+                case .failure(let error):
+                    if ZeroSettleError.isCancellation(error) { return }
+                    print("Error: \(error)")
+                }
             }
         }
     }
-}
-```
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    class PaywallViewController: UIViewController {
+        private let product: Product
 
-See [Payment Sheet](/iap/payment-sheet) for the full guide on `checkoutSheet`, including preloading, custom headers, and UIKit usage.
+        init(product: Product) {
+            self.product = product
+            super.init(nibName: nil, bundle: nil)
+        }
 
-</Step>
-<Step title="Handle the callback (~1 min)">
+        required init?(coder: NSCoder) { fatalError() }
 
-For Safari-based checkout modes, the result comes back via universal link. Add the `.zeroSettleHandler()` modifier to your root view:
-
-```swift
-@main
-struct YourApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .zeroSettleHandler()
+        @objc private func handleBuyTap() {
+            CheckoutSheet.present(
+                from: self,
+                product: product,
+                userId: currentUser.id
+            ) { result in
+                switch result {
+                case .success(let transaction):
+                    print("Purchased: \(transaction.productId)")
+                case .failure(let error):
+                    if ZeroSettleError.isCancellation(error) { return }
+                    print("Error: \(error)")
+                }
+            }
         }
     }
-}
-```
+    ```
 
-This handles both `onOpenURL` and `onContinueUserActivity` automatically.
+    `CheckoutSheet.present(from:)` uses `UIWindowScene` lookup internally — it does not need to be called from a specific view controller hierarchy.
+  </Tab>
+</Tabs>
 
-For UIKit apps, handle it manually in your SceneDelegate:
-
-```swift
-// SceneDelegate.swift
-func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-    guard let url = userActivity.webpageURL else { return }
-    ZeroSettle.shared.handleUniversalLink(url)
-}
-```
+See [Checkout Sheet](/iap/payment-sheet) for the full guide, including custom headers, non-dismissible sheets, and preloading.
 
 </Step>
-<Step title="Listen for events (~2 min)">
+<Step title="Listen for purchase events">
 
-Use the delegate to respond to checkout events:
+Use the delegate to respond to checkout events from anywhere in your app:
 
 ```swift
+// Framework-neutral — identical in SwiftUI and UIKit
 class PurchaseManager: ZeroSettleDelegate {
     init() {
         ZeroSettle.shared.delegate = self
     }
 
     func zeroSettleCheckoutDidComplete(transaction: CheckoutTransaction) {
-        // Unlock content
         unlockProduct(transaction.productId)
     }
 
     func zeroSettleCheckoutDidCancel(productId: String) {
-        // User cancelled checkout
+        // User cancelled — no action needed
     }
 
     func zeroSettleCheckoutDidFail(productId: String, error: Error) {
-        // Handle error
         showError(error)
     }
 
     func zeroSettleEntitlementsDidUpdate(_ entitlements: [Entitlement]) {
-        // Entitlements changed
         updateUI(entitlements)
     }
 }
 ```
 
 </Step>
-<Step title="Check entitlements (~1 min)">
+<Step title="Check entitlements">
 
 Restore and check entitlements on app launch:
 
 ```swift
+// Framework-neutral — identical in SwiftUI and UIKit
 let entitlements = try await ZeroSettle.shared.restoreEntitlements(
     userId: currentUser.id
 )
@@ -213,73 +289,152 @@ let hasPremium = entitlements.contains {
 </Steps>
 
 <Tip>
-  **First purchase?** Use test card `4242 4242 4242 4242` with any future expiry and CVC. See [Testing & Sandbox](/iap/testing) for more test cards and debugging tips.
+  **First purchase?** Use test card `4242 4242 4242 4242` with any future expiry and CVC. See [Testing & Sandbox](/iap/testing) for more test cards.
 </Tip>
 
 ## Complete Example
 
-```swift
-import SwiftUI
-import ZeroSettleKit
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    import SwiftUI
+    import ZeroSettleKit
 
-@main
-struct MyApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .task {
-                    // Configure SDK, then fetch products,
-                    // warm up PaymentIntent, and restore entitlements
-                    ZeroSettle.shared.configure(.init(
-                        publishableKey: "your_live_key"
-                    ))
-                    try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id)
-                }
-                .zeroSettleHandler()
-        }
-    }
-}
-
-struct ContentView: View {
-    @ObservedObject var iap = ZeroSettle.shared
-    @State private var selectedProduct: Product?
-
-    var body: some View {
-        VStack {
-            ForEach(iap.products) { product in
-                Button("\(product.displayName) — \(product.webPrice.formatted)") {
-                    selectedProduct = product
-                }
-            }
-        }
-        .checkoutSheet(
-            item: $selectedProduct,
-            userId: Auth.currentUser.id
-        ) { result in
-            switch result {
-            case .success(let transaction):
-                print("Purchased \(transaction.productId)")
-            case .failure(let error):
-                print("Error: \(error)")
+    @main
+    struct MyApp: App {
+        var body: some Scene {
+            WindowGroup {
+                ContentView()
+                    .task {
+                        ZeroSettle.shared.configure(.init(
+                            publishableKey: "zs_pk_test_..."
+                        ))
+                        try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id)
+                    }
+                    .zeroSettleHandler()
             }
         }
     }
-}
-```
+
+    struct ContentView: View {
+        @ObservedObject var iap = ZeroSettle.shared
+        @State private var selectedProduct: Product?
+
+        var body: some View {
+            VStack {
+                ForEach(iap.products) { product in
+                    Button("\(product.displayName) — \(product.webPrice.formatted)") {
+                        selectedProduct = product
+                    }
+                }
+            }
+            .checkoutSheet(
+                item: $selectedProduct,
+                userId: Auth.currentUser.id
+            ) { result in
+                switch result {
+                case .success(let transaction):
+                    print("Purchased \(transaction.productId)")
+                case .failure(let error):
+                    if ZeroSettleError.isCancellation(error) { return }
+                    print("Error: \(error)")
+                }
+            }
+        }
+    }
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    import UIKit
+    import ZeroSettleKit
+
+    class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+        var window: UIWindow?
+
+        func scene(
+            _ scene: UIScene,
+            willConnectTo session: UISceneSession,
+            options connectionOptions: UIScene.ConnectionOptions
+        ) {
+            ZeroSettle.shared.configure(.init(publishableKey: "zs_pk_test_..."))
+            Task { try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id) }
+
+            if let activity = connectionOptions.userActivities.first(where: {
+                $0.activityType == NSUserActivityTypeBrowsingWeb
+            }), let url = activity.webpageURL {
+                ZeroSettle.shared.handleUniversalLink(url)
+            }
+        }
+
+        func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+            guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+                  let url = userActivity.webpageURL else { return }
+            ZeroSettle.shared.handleUniversalLink(url)
+        }
+
+        func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+            for ctx in URLContexts { ZeroSettle.shared.handleUniversalLink(ctx.url) }
+        }
+    }
+
+    class PaywallViewController: UIViewController {
+        private let product: Product
+
+        init(product: Product) {
+            self.product = product
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+
+            let buyButton = UIButton(type: .system)
+            buyButton.setTitle("Subscribe — \(product.webPrice.formatted)", for: .normal)
+            buyButton.addTarget(self, action: #selector(handleBuyTap), for: .touchUpInside)
+            buyButton.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(buyButton)
+            NSLayoutConstraint.activate([
+                buyButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                buyButton.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            ])
+        }
+
+        @objc private func handleBuyTap() {
+            CheckoutSheet.present(
+                from: self,
+                product: product,
+                userId: Auth.currentUser.id
+            ) { result in
+                switch result {
+                case .success(let transaction):
+                    print("Purchased \(transaction.productId)")
+                case .failure(let error):
+                    if ZeroSettleError.isCancellation(error) { return }
+                    print("Error: \(error)")
+                }
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Payment Sheet" icon="credit-card" href="/iap/payment-sheet">
-    The recommended checkout UI — preloading, custom headers, UIKit
-  </Card>
-  <Card title="User Identity" icon="user" href="/iap/user-identity">
-    Learn about the different ways to identify users
+  <Card title="Checkout Sheet" icon="credit-card" href="/iap/payment-sheet">
+    Custom headers, preloading, non-dismissible mode
   </Card>
   <Card title="Universal Links" icon="link" href="/iap/universal-links">
-    Set up universal links for Safari checkout callbacks
+    Full setup guide for Safari checkout callbacks
+  </Card>
+  <Card title="User Identity" icon="user" href="/iap/user-identity">
+    How to identify users across sessions
   </Card>
   <Card title="Best Practices" icon="star" href="/iap/best-practices">
-    Recommendations for a reliable implementation
+    Recommendations for a reliable integration
   </Card>
 </CardGroup>
