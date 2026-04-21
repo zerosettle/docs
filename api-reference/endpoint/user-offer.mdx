@@ -20,7 +20,7 @@ It replaces the overlapping legacy surface of:
 | Legacy endpoint | What it still does |
 | --- | --- |
 | [`GET /iap/products/`](/api-reference/endpoint/get-products) `config.migration` / `config.offer` | Old SDKs continue to read these fields. They are now derived from the same resolver — the wire format is byte-identical. |
-| [`GET /iap/upgrade-offer/`](/api-reference/endpoint/get-upgrade-offer) | Still supported for SDKs <1.2. Derives from the same resolver. |
+| [`GET /iap/upgrade-offer/`](/api-reference/endpoint/get-upgrade-offer) | Still supported for SDKs &lt;1.2. Derives from the same resolver. |
 | `/iap/storekit-subscription-status/` status parsing | Prefer `offer.apple_subscription.is_active` on the user-offer response, or the new `is_active` / `auto_renew_enabled` booleans on [that endpoint](/api-reference/endpoint/get-storekit-subscription-status). |
 
 SDK 1.2+ apps should call `/iap/user-offer/` and ignore the legacy fields.
