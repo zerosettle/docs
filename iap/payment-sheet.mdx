@@ -4,305 +4,161 @@ description: 'Embedded checkout UI with Apple Pay and card support'
 icon: 'credit-card'
 ---
 
-`checkoutSheet` is an embedded checkout experience that presents a native-feeling bottom sheet inside your app. Users can pay with Apple Pay or enter a card — without ever leaving your app. It automatically reads your dashboard configuration to choose the correct checkout mode (webview, Safari VC, or external Safari).
+`CheckoutSheet` is an embedded checkout experience that presents a native-feeling bottom sheet inside your app. Users can pay with Apple Pay or enter a card — without ever leaving your app. It automatically reads your dashboard configuration to choose the correct checkout mode (webview, in-app browser, or external Safari).
 
-This is the recommended way to accept payments with ZeroSettle.
+This is the recommended way to accept payments on iOS with ZeroSettle.
 
 <Frame caption="ZeroSettle payment sheet with Apple Pay and card entry">
   <img src="/images/payment-sheet-ios.png" alt="Payment sheet showing Apple Pay button, product name, and card entry option" style={{ maxWidth: '350px' }} />
 </Frame>
 
-## SwiftUI
+## Basic Usage
 
-### Basic Usage
+<Tabs>
+  <Tab title="SwiftUI">
+    Use the `.checkoutSheet()` view modifier on any view. Pass an optional `Product?` binding — the sheet presents when the binding is non-nil and resets to `nil` on dismiss. This mirrors SwiftUI's `.sheet(item:)` pattern, and works for both single-product paywalls and multi-product stores.
 
-Use the `.checkoutSheet()` view modifier to present the checkout sheet:
+    ```swift
+    struct PaywallView: View {
+        @State private var selectedProduct: Product?
+        let product: Product
 
-<CodeGroup>
-
-```swift Swift
-struct PaywallView: View {
-    @State private var selectedProduct: Product?
-    let product: Product
-
-    var body: some View {
-        Button("Subscribe — \(product.webPrice.formatted)") {
-            selectedProduct = product
-        }
-        .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
-            switch result {
-            case .success(let transaction):
-                unlockContent(transaction.productId)
-            case .failure(let error):
-                showError(error)
-            }
-        }
-    }
-}
-```
-
-```kotlin Kotlin
-@Composable
-fun PaywallScreen(product: Product) {
-    val context = LocalContext.current
-    val activity = context as Activity
-    val scope = rememberCoroutineScope()
-
-    Button(onClick = {
-        scope.launch {
-            try {
-                val transaction = ZeroSettle.purchase(
-                    activity = activity,
-                    productId = product.id,
-                    userId = currentUser.id,
-                )
-                unlockContent(transaction.productId)
-            } catch (e: ZeroSettleError.Cancelled) {
-                // User dismissed — no action needed
-            } catch (e: Exception) {
-                showError(e)
-            }
-        }
-    }) {
-        Text("Subscribe — ${product.webPrice?.formatted}")
-    }
-}
-```
-
-```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
-
-const handlePurchase = async () => {
-  try {
-    const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-    unlockContent(transaction.productId);
-  } catch (e) {
-    if (e.code === 'cancelled') return;
-    showError(e.message);
-  }
-};
-```
-
-```dart Flutter
-try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
-    productId: product.id,
-    userId: currentUser.id,
-  );
-  unlockContent(transaction.productId);
-} on ZSCancelledException {
-  // User dismissed
-} on ZSCheckoutFailedException catch (e) {
-  showError(e.message);
-}
-```
-
-</CodeGroup>
-
-### Custom Header
-
-Add a custom header view above the checkout sheet to show product details, branding, or promotional messaging:
-
-<CodeGroup>
-
-```swift Swift
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id, header: {
-    VStack(spacing: 8) {
-        Image("premium-icon")
-            .resizable()
-            .frame(width: 60, height: 60)
-        Text(selectedProduct?.displayName ?? "")
-            .font(.title2.bold())
-        Text(selectedProduct?.productDescription ?? "")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-    }
-    .padding()
-}) { result in
-    // Handle result
-}
-```
-
-```kotlin Kotlin
-// Custom headers are not available on Android.
-// The payment sheet UI is handled by ZSPaymentSheetActivity.
-// See the Android section below for the purchase API.
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-)
-```
-
-```tsx React Native
-// Custom headers are not available in React Native.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// Custom headers are iOS-only (SwiftUI).
-// Use presentPaymentSheet() for the standard checkout flow.
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-### Item-Based Presentation
-
-The `checkoutSheet` modifier uses an item-based binding by default. Pass an optional `Product?` binding — the sheet presents when the binding is non-nil and automatically sets it back to `nil` on dismiss:
-
-<CodeGroup>
-
-```swift Swift
-struct PaywallView: View {
-    @ObservedObject var iap = ZeroSettle.shared
-    @State private var selectedProduct: Product?
-
-    var body: some View {
-        ForEach(iap.products) { product in
-            Button(product.displayName) {
+        var body: some View {
+            Button("Subscribe — \(product.webPrice.formatted)") {
                 selectedProduct = product
             }
-        }
-        .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
-            handleResult(result)
+            .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+                switch result {
+                case .success(let transaction):
+                    unlockContent(transaction.productId)
+                case .failure(let error):
+                    if ZeroSettleError.isCancellation(error) { return }
+                    showError(error)
+                }
+            }
         }
     }
-}
-```
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    Call `CheckoutSheet.present(from:)` from any view controller. It uses `UIWindowScene` lookup internally and does not need to be called from a specific view controller hierarchy.
 
-```kotlin Kotlin
-// Item-based presentation is not available on Android.
-// The payment sheet UI is handled by ZSPaymentSheetActivity.
-// See the Android section below for the purchase API.
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-)
-```
+    ```swift
+    class PaywallViewController: UIViewController {
+        private let product: Product
 
-```tsx React Native
-// Item-based presentation is not available in React Native.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
+        init(product: Product) {
+            self.product = product
+            super.init(nibName: nil, bundle: nil)
+        }
 
-```dart Flutter
-// Item-based presentation is iOS-only (SwiftUI).
-// Use presentPaymentSheet() for the standard checkout flow.
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
+        required init?(coder: NSCoder) { fatalError() }
 
-</CodeGroup>
+        @objc private func handleBuyTap() {
+            CheckoutSheet.present(
+                from: self,
+                product: product,
+                userId: currentUser.id
+            ) { result in
+                switch result {
+                case .success(let transaction):
+                    self.unlockContent(transaction.productId)
+                case .failure(let error):
+                    if ZeroSettleError.isCancellation(error) { return }
+                    self.showError(error)
+                }
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
 
-### Non-Dismissible Sheet
+## Custom Header
 
-Pass `dismissible: false` to prevent the user from swiping to dismiss the sheet. This hides the close button and disables interactive dismiss:
+Add a custom header view above the payment sheet to show product details, branding, or promotional copy.
 
-<CodeGroup>
-
-```swift Swift
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id, dismissible: false) { result in
-    handleResult(result)
-}
-```
-
-```kotlin Kotlin
-// Non-dismissible sheets are not available on Android.
-// The payment sheet UI is handled by ZSPaymentSheetActivity.
-// See the Android section below for the purchase API.
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-)
-```
-
-```tsx React Native
-// Non-dismissible sheets are not available in React Native.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// Non-dismissible sheets are iOS-only (SwiftUI).
-// Use presentPaymentSheet() for the standard checkout flow.
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-### Direct View Usage
-
-You can also use `CheckoutSheet` as a standalone view, for example inside a `.sheet()`:
-
-<CodeGroup>
-
-```swift Swift
-.sheet(item: $selectedProduct) { product in
-    CheckoutSheet(
-        product: product,
-        userId: currentUser.id
-    ) { result in
-        selectedProduct = nil
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    .checkoutSheet(item: $selectedProduct, userId: currentUser.id, header: {
+        VStack(spacing: 8) {
+            Image("premium-icon")
+                .resizable()
+                .frame(width: 60, height: 60)
+            Text(selectedProduct?.displayName ?? "")
+                .font(.title2.bold())
+            Text(selectedProduct?.productDescription ?? "")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+    }) { result in
         handleResult(result)
     }
-}
-```
-
-```kotlin Kotlin
-// Direct view usage is not available on Android.
-// The payment sheet UI is handled by ZSPaymentSheetActivity.
-// See the Android section below for the purchase API.
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-)
-```
-
-```tsx React Native
-// Direct view usage is not available in React Native.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// Direct view usage is iOS-only (SwiftUI).
-// Use presentPaymentSheet() for the standard checkout flow.
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-Or with a custom header:
-
-<CodeGroup>
-
-```swift Swift
-.sheet(item: $selectedProduct) { product in
-    CheckoutSheet(
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    CheckoutSheet.present(
+        from: self,
         product: product,
         userId: currentUser.id,
         header: {
-            Text("Premium Access")
-                .font(.title.bold())
+            AnyView(
+                VStack(spacing: 8) {
+                    Image("premium-icon")
+                        .resizable()
+                        .frame(width: 60, height: 60)
+                    Text(product.displayName)
+                        .font(.title2.bold())
+                }
                 .padding()
+            )
         }
+    ) { result in
+        handleResult(result)
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Non-Dismissible Sheet
+
+Pass `dismissible: false` to hide the close button and disable interactive dismiss.
+
+<Tabs>
+  <Tab title="SwiftUI">
+    ```swift
+    .checkoutSheet(item: $selectedProduct, userId: currentUser.id, dismissible: false) { result in
+        handleResult(result)
+    }
+    ```
+  </Tab>
+  <Tab title="UIKit">
+    ```swift
+    CheckoutSheet.present(
+        from: self,
+        product: product,
+        userId: currentUser.id,
+        dismissible: false
+    ) { result in
+        handleResult(result)
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Direct View Usage
+
+Use `CheckoutSheet` as a standalone SwiftUI `View` inside a `.sheet()` — useful when you need full control over sheet presentation:
+
+```swift
+.sheet(item: $selectedProduct) { product in
+    CheckoutSheet(
+        product: product,
+        userId: currentUser.id,
+        header: { Text("Premium Access").font(.title.bold()).padding() }
     ) { result in
         selectedProduct = nil
         handleResult(result)
@@ -310,951 +166,53 @@ Or with a custom header:
 }
 ```
 
-```kotlin Kotlin
-// Custom headers are not available on Android.
-// The payment sheet UI is handled by ZSPaymentSheetActivity.
-// See the Android section below for the purchase API.
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-)
-```
-
-```tsx React Native
-// Custom headers are not available in React Native.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// Custom headers are iOS-only (SwiftUI).
-// Use presentPaymentSheet() for the standard checkout flow.
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-<Info>
-  The SwiftUI-specific APIs above (`checkoutSheet` modifier, custom headers, `dismissible:`) are iOS-only. On Android, use `ZeroSettle.purchase()` which handles all presentation automatically. See the [Android section](#android) below.
-</Info>
-
-## UIKit
-
-Present the payment sheet from any view controller:
-
-<CodeGroup>
-
-```swift Swift
-CheckoutSheet.present(
-    from: self,
-    product: product,
-    userId: currentUser.id
-) { result in
-    switch result {
-    case .success(let transaction):
-        self.unlockContent(transaction.productId)
-    case .failure(let error):
-        self.showError(error)
-    }
-}
-```
-
-```kotlin Kotlin
-// UIKit is iOS-only. On Android, use ZeroSettle.purchase().
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-)
-```
-
-```tsx React Native
-// UIKit is iOS-only. Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// UIKit is iOS-only.
-// Use presentPaymentSheet() for the standard checkout flow.
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-You can also pass `dismissible: false`, or provide a preloaded `checkoutURL` and `transactionId` for instant presentation:
-
-<CodeGroup>
-
-```swift Swift
-CheckoutSheet.present(
-    from: self,
-    product: product,
-    userId: currentUser.id,
-    dismissible: false,
-    checkoutURL: preloadedURL,
-    transactionId: preloadedTransactionId
-) { result in
-    handleResult(result)
-}
-```
-
-```kotlin Kotlin
-// UIKit is iOS-only. On Android, use ZeroSettle.purchase().
-// Preloading and dismissible options are not available on Android.
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-)
-```
-
-```tsx React Native
-// UIKit and preloading are iOS-only.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// UIKit and preloading are iOS-only.
-// Use presentPaymentSheet() for the standard checkout flow.
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-## Kotlin / Android
-
-On Android, `ZeroSettle.purchase()` is a single suspend function that handles creating the `PaymentIntent`, launching the checkout UI, and returning the completed transaction. There is no separate modifier or preloading step.
-
-<CodeGroup>
-
-```kotlin Compose
-@Composable
-fun PaywallScreen(product: Product) {
-    val context = LocalContext.current
-    val activity = context as Activity
-    val scope = rememberCoroutineScope()
-
-    Button(onClick = {
-        scope.launch {
-            try {
-                val transaction = ZeroSettle.purchase(
-                    activity = activity,
-                    productId = product.id,
-                    userId = currentUser.id,
-                )
-                unlockContent(transaction.productId)
-            } catch (e: ZeroSettleError.Cancelled) {
-                // User dismissed — no action needed
-            } catch (e: ZeroSettleError.CheckoutFailed) {
-                showError(e.message)
-            } catch (e: Exception) {
-                showError(e.message ?: "Unknown error")
-            }
-        }
-    }) {
-        Text("Subscribe — ${product.webPrice?.formatted}")
-    }
-}
-```
-
-```kotlin Activity / Fragment
-class PaywallActivity : AppCompatActivity() {
-
-    private fun purchaseProduct(product: Product) {
-        lifecycleScope.launch {
-            try {
-                val transaction = ZeroSettle.purchase(
-                    activity = this@PaywallActivity,
-                    productId = product.id,
-                    userId = currentUser.id,
-                )
-                unlockContent(transaction.productId)
-            } catch (e: ZeroSettleError.Cancelled) {
-                // User dismissed — no action needed
-            } catch (e: ZeroSettleError.CheckoutFailed) {
-                showError(e.message)
-            } catch (e: Exception) {
-                showError(e.message ?: "Unknown error")
-            }
-        }
-    }
-}
-```
-
-```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
-
-const handlePurchase = async () => {
-  try {
-    const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-    unlockContent(transaction.productId);
-  } catch (e) {
-    if (e.code === 'cancelled') return;
-    showError(e.message);
-  }
-};
-```
-
-```dart Flutter
-try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
-    productId: product.id,
-    userId: currentUser.id,
-  );
-  unlockContent(transaction.productId);
-} on ZSCancelledException {
-  // User dismissed
-} on ZSCheckoutFailedException catch (e) {
-  showError(e.message);
-}
-```
-
-</CodeGroup>
-
-## Presentation API
-
-The `checkoutSheet` modifier uses an `item:` binding (`Binding<Product?>`) that mirrors SwiftUI's `.sheet(item:)` pattern. Set the binding to a product to present the sheet, and it automatically resets to `nil` on dismiss.
-
-This works for both single-product paywalls (set `selectedProduct = product` on a "Buy" button) and multi-product stores (set `selectedProduct` from a list selection).
-
-The modifier shares the same caching and preloading behavior described below.
-
 <Note>
-  On Android, there is a single `ZeroSettle.purchase()` API that handles all presentation. The `checkoutSheet` modifier is iOS-only.
-</Note>
-
-## Performance & Caching
-
-<Tip>
-  For a deep dive on how preloading works — including what gets created in Stripe, deduplication, memory usage, and configuration — see [Preloading & Prefetching](/iap/preloading).
-</Tip>
-
-### Automatic Preloading
-
-The `.checkoutSheet()` view modifier automatically preloads both the `PaymentIntent` and the `WKWebView` before presenting the sheet. When the user taps "Buy", the checkout is fully rendered the moment it slides up — no manual preloading is needed.
-
-<CodeGroup>
-
-```swift Swift
-// The modifier handles preloading automatically — just use it as normal
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
-    handleResult(result)
-}
-```
-
-```kotlin Kotlin
-// On Android, no preloading is needed.
-// ZeroSettle.purchase() handles the full flow automatically.
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-)
-```
-
-```tsx React Native
-// Preloading is handled automatically.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// Preloading is handled automatically.
-// Use presentPaymentSheet() for the standard checkout flow.
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-### Built-In Caching
-
-The SDK automatically caches `PaymentIntent` results (the checkout URL and transaction ID) for **5 minutes**. This means:
-
-- **Re-opens after dismiss are near-instant** — if the user dismisses and re-opens the sheet for the same product, the API call is skipped entirely. Only the WebView needs to reload.
-- **The cache is shared** across all payment sheet instances in your app.
-- **The cache invalidates automatically** after a successful payment, so the next open gets a fresh `PaymentIntent`.
-
-No code changes are needed to benefit from caching — it works automatically with the `checkoutSheet` modifier.
-
-### Eager Warm-Up
-
-When you provide `userId` in `configure()`, the first product's `PaymentIntent` is automatically warmed up. For most apps, this is sufficient and no manual warm-up is needed.
-
-For advanced scenarios — such as warming up multiple products or a specific product the user is likely to buy — call `CheckoutSheet.warmUp()` manually:
-
-<CodeGroup>
-
-```swift Swift
-struct StoreView: View {
-    @ObservedObject var iap = ZeroSettle.shared
-    @State private var selectedProduct: Product?
-
-    var body: some View {
-        ProductList(products: iap.products, selection: $selectedProduct)
-            .task {
-                // Products already fetched by configure() — warm up additional ones
-                for product in iap.products.prefix(3) {
-                    await CheckoutSheet.warmUp(
-                        productId: product.id,
-                        userId: currentUser.id
-                    )
-                }
-            }
-            .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
-                handleResult(result)
-            }
-    }
-}
-```
-
-```kotlin Kotlin
-// Warm-up is not available on Android.
-// Products are cached in ZeroSettle.products after fetchProducts() or bootstrap().
-val products by ZeroSettle.products.collectAsState()
-```
-
-```tsx React Native
-// Warm-up is not available in React Native.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// Warm up the payment sheet for faster presentation.
-await ZeroSettle.instance.warmUpPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-<Tip>
-  `warmUp()` caches the `PaymentIntent` for 5 minutes. If the user reaches the paywall within that window, the sheet opens without any network delay.
-</Tip>
-
-<Note>
-  Preloading and warm-up are not available on Android. `ZeroSettle.purchase()` creates the `PaymentIntent` at call time. The checkout UI is presented as soon as the intent is ready.
-</Note>
-
-### UX Impact
-
-Understanding what's cached and what must reload helps you set the right expectations:
-
-| Scenario | API Call | WebView Load | Perceived Speed |
-|----------|---------|-------------|-----------------|
-| First open (no warm-up) | Network call | Full load | ~1-2s depending on network |
-| First open (with `warmUp()`) | Cache hit | Full load | ~0.5-1s (WebView only) |
-| Re-open after dismiss (same product) | Cache hit | Full load | ~0.5-1s (WebView only) |
-| Re-open after successful payment | Network call | Full load | ~1-2s (cache was invalidated) |
-
-The API call is typically 200-500ms. Warm-up eliminates this entirely for the first open.
-
-### Manual Preloading
-
-For the direct `CheckoutSheet` init or UIKit's `present` method, you can preload the `PaymentIntent` yourself using `CheckoutSheet.preload()`:
-
-<CodeGroup>
-
-```swift Swift
-// Preload while the user browses
-let preloaded = await CheckoutSheet.preload(
-    productId: product.id,
-    userId: currentUser.id
-)
-
-// Later, pass the preloaded data to the direct init
-.sheet(item: $selectedProduct) { product in
-    CheckoutSheet(
-        product: product,
-        userId: currentUser.id,
-        checkoutURL: preloaded?.checkoutURL,
-        transactionId: preloaded?.transactionId
-    ) { result in
-        handleResult(result)
-    }
-}
-```
-
-```kotlin Kotlin
-// Manual preloading is not available on Android.
-// purchase() creates the PaymentIntent at call time.
-```
-
-```tsx React Native
-// Manual preloading is not available in React Native.
-// Use ZeroSettle.purchase() for the standard checkout flow.
-const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-```
-
-```dart Flutter
-// Preload the payment sheet for faster presentation.
-await ZeroSettle.instance.preloadPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-<Note>
-  `preload()` also populates the cache, so subsequent calls for the same product + user are instant. `warmUp()` is just a convenience wrapper around `preload()`.
-</Note>
-
-<Tip>
-  Manual preloading is only needed when using `CheckoutSheet` as a standalone view or via UIKit's `present` method. The `.checkoutSheet()` modifier handles this automatically.
-</Tip>
-
-### Declarative Preloading (Swift)
-
-For the `.checkoutSheet()` modifier, you can pass a `preload:` parameter to automatically preload payment intents:
-
-```swift Swift
-// Preload all products
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id, preload: .all) { result in
-    handleResult(result)
-}
-
-// Preload specific products
-.checkoutSheet(
-    item: $selectedProduct,
-    userId: currentUser.id,
-    preload: .specified(iap.products.prefix(3).map { $0 })
-) { result in
-    handleResult(result)
-}
-```
-
-| Strategy | Behavior |
-|----------|----------|
-| `.all` | Preloads PaymentIntents for all fetched products |
-| `.specified([Product])` | Preloads only the specified products |
-| `nil` (default) | Preloads only the bound product |
-
-<Note>
-  This is an iOS-only SwiftUI feature. On Android, `ZeroSettle.purchase()` creates the `PaymentIntent` at call time.
-</Note>
-
-## Android
-
-On Android, the checkout sheet is presented as a `ZSPaymentSheetActivity` — a full-screen Activity with an embedded WebView. The SDK handles creating and launching this Activity automatically when you call `purchase()`.
-
-### Compose
-
-<CodeGroup>
-
-```kotlin Kotlin
-@Composable
-fun PaywallScreen(product: Product) {
-    val context = LocalContext.current
-    val activity = context as Activity
-    val scope = rememberCoroutineScope()
-
-    Button(onClick = {
-        scope.launch {
-            try {
-                val transaction = ZeroSettle.purchase(
-                    activity = activity,
-                    productId = product.id,
-                    userId = currentUser.id,
-                )
-                unlockContent(transaction.productId)
-            } catch (e: ZeroSettleError.Cancelled) {
-                // User dismissed — no action needed
-            } catch (e: ZeroSettleError.CheckoutFailed) {
-                when (e.reason) {
-                    is CheckoutFailure.NetworkUnavailable -> showRetry("No internet connection")
-                    is CheckoutFailure.StripeError -> showError(e.reason.message)
-                    else -> showError(e.message)
-                }
-            } catch (e: ZeroSettleError.NotConfigured) {
-                // SDK not configured — call ZeroSettle.configure() first
-            } catch (e: Exception) {
-                showError(e.message ?: "Unknown error")
-            }
-        }
-    }) {
-        Text("Subscribe — ${product.webPrice?.formatted}")
-    }
-}
-```
-
-```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
-
-const handlePurchase = async () => {
-  try {
-    const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-    unlockContent(transaction.productId);
-  } catch (e) {
-    if (e.code === 'cancelled') return;
-    showError(e.message);
-  }
-};
-```
-
-```dart Flutter
-try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
-    productId: product.id,
-    userId: currentUser.id,
-  );
-  unlockContent(transaction.productId);
-} on ZSCancelledException {
-  // User dismissed
-} on ZSCheckoutFailedException catch (e) {
-  showError(e.message);
-}
-```
-
-</CodeGroup>
-
-### Activity / Fragment
-
-<CodeGroup>
-
-```kotlin Kotlin
-class PaywallActivity : AppCompatActivity() {
-
-    private fun purchaseProduct(product: Product) {
-        lifecycleScope.launch {
-            try {
-                val transaction = ZeroSettle.purchase(
-                    activity = this@PaywallActivity,
-                    productId = product.id,
-                    userId = currentUser.id,
-                )
-                unlockContent(transaction.productId)
-            } catch (e: ZeroSettleError.Cancelled) {
-                // User dismissed — no action needed
-            } catch (e: ZeroSettleError.CheckoutFailed) {
-                when (e.reason) {
-                    is CheckoutFailure.NetworkUnavailable -> showRetry("No internet connection")
-                    is CheckoutFailure.StripeError -> showError(e.reason.message)
-                    else -> showError(e.message)
-                }
-            } catch (e: ZeroSettleError.NotConfigured) {
-                // SDK not configured — call ZeroSettle.configure() first
-            } catch (e: Exception) {
-                showError(e.message ?: "Unknown error")
-            }
-        }
-    }
-}
-```
-
-```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
-
-const handlePurchase = async () => {
-  try {
-    const transaction = await ZeroSettle.purchase(product.id, currentUser.id);
-    unlockContent(transaction.productId);
-  } catch (e) {
-    if (e.code === 'cancelled') return;
-    showError(e.message);
-  }
-};
-```
-
-```dart Flutter
-try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
-    productId: product.id,
-    userId: currentUser.id,
-  );
-  unlockContent(transaction.productId);
-} on ZSCancelledException {
-  // User dismissed
-} on ZSCheckoutFailedException catch (e) {
-  showError(e.message);
-}
-```
-
-</CodeGroup>
-
-### Checkout Modes
-
-The checkout mode is controlled by your remote config (set from the ZeroSettle dashboard). The SDK reads this automatically at runtime:
-
-| Mode | Behavior |
-|------|----------|
-| `WEBVIEW` (default) | Launches `ZSPaymentSheetActivity` — a full-screen Activity with an embedded WebView. This provides the most native-feeling experience. |
-| `CUSTOM_TAB` | Opens the checkout page in a Chrome Custom Tab. Shares cookies with Chrome for autofill support. |
-| `EXTERNAL_BROWSER` | Opens the checkout page in the user's default browser. Use this as a fallback if Custom Tabs are unavailable. |
-
-You do not need to specify the checkout mode in code — `purchase()` reads it from the remote config and routes automatically.
-
-### Android Error Handling
-
-`ZeroSettle.purchase()` is a suspend function that throws on failure. Errors are thrown as subtypes of `ZeroSettleError`:
-
-<CodeGroup>
-
-```kotlin Kotlin
-try {
-    val transaction = ZeroSettle.purchase(activity, productId, userId)
-    unlockContent(transaction.productId)
-} catch (e: ZeroSettleError.Cancelled) {
-    // User dismissed — no action needed
-} catch (e: ZeroSettleError.CheckoutFailed) {
-    when (e.reason) {
-        is CheckoutFailure.NetworkUnavailable -> showRetry("No internet connection")
-        is CheckoutFailure.StripeError -> showError(e.reason.message)
-        is CheckoutFailure.ServerError -> showError("Server error: ${e.reason.statusCode}")
-        is CheckoutFailure.ProductNotFound -> showError("Product not found")
-        is CheckoutFailure.MerchantNotOnboarded -> showError("Payment setup incomplete")
-        is CheckoutFailure.Other -> showError(e.reason.message)
-    }
-} catch (e: ZeroSettleError.NotConfigured) {
-    // SDK not configured — call ZeroSettle.configure() first
-} catch (e: ZeroSettleError.UserIdRequired) {
-    // A userId is required for subscriptions and non-consumable products
-} catch (e: Exception) {
-    showError(e.message ?: "Unknown error")
-}
-```
-
-```tsx React Native
-try {
-  const transaction = await ZeroSettle.purchase(productId, userId);
-  unlockContent(transaction.productId);
-} catch (e) {
-  if (e.code === 'cancelled') {
-    // User dismissed — no action needed
-  } else if (e.code === 'checkout_failed') {
-    showError(e.message);
-  } else if (e.code === 'not_configured') {
-    // SDK not configured — call ZeroSettle.configure() first
-  } else {
-    showError(e.message);
-  }
-}
-```
-
-```dart Flutter
-try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
-    productId: productId,
-    userId: userId,
-  );
-  unlockContent(transaction.productId);
-} on ZSCancelledException {
-  // User dismissed — no action needed
-} on ZSCheckoutFailedException catch (e) {
-  showError(e.message);
-} catch (e) {
-  showError(e.toString());
-}
-```
-
-</CodeGroup>
-
-<Note>
-  The iOS-specific APIs (`checkoutSheet` modifier, `warmUp()`, `preload()`) are not available on Android. On Android, use `ZeroSettle.purchase()` directly — it creates the `PaymentIntent` and presents the checkout UI in a single call.
+  **UIKit:** If you embed SwiftUI inside UIKit (e.g., via `UIHostingController`), you can use the SwiftUI modifier path above. Otherwise use `CheckoutSheet.present(from:)` as shown in "Basic Usage".
 </Note>
 
 ## How It Works
 
-Under the hood, `CheckoutSheet`:
+The checkout sheet is backed by a `WKWebView` that loads a Stripe-hosted checkout page pre-configured for your product. The SDK:
 
-1. Checks the `PaymentIntent` cache (5-min TTL) — on a cache hit, skips the network call
-2. If no cache hit, creates a Stripe `PaymentIntent` via the ZeroSettle API and caches the result
-3. Loads the checkout page in a `WKWebView` with Apple Pay and card entry
-4. Communicates payment status back to your app via a JavaScript bridge
-5. Verifies the transaction server-side and invalidates the cache for this product
-6. Returns a `CheckoutTransaction` to your completion handler
+1. Creates (or reuses a cached) Stripe `PaymentIntent` for the product
+2. Loads the checkout URL into an off-screen `WKWebView` while the user navigates to your paywall
+3. Presents the pre-warmed WebView as a bottom sheet the moment the user taps "Buy"
+4. Receives a JavaScript callback on payment completion
+5. Verifies the transaction server-side and delivers the result to your handler
 
-The user sees a native-looking sheet with Apple Pay as the primary option and a card form as fallback.
+The checkout mode (embedded webview, in-app browser, or Safari) is determined by your dashboard configuration and the user's jurisdiction — the SDK selects it automatically.
+
+## Preloading
+
+Preloading eliminates checkout latency by pre-creating the PaymentIntent and pre-rendering the WebView before the user taps "Buy". When configured correctly, checkout opens with no spinner.
+
+See [Preloading](/iap/preloading) for setup and configuration options.
 
 ## Error Handling
 
-The completion handler receives a `Result<CheckoutTransaction, Error>`. Payment-specific errors are of type `PaymentSheetError` (iOS) or `ZeroSettleError` (Android):
+The result handler receives `Result<CheckoutTransaction, Error>`. Use `ZeroSettleError.isCancellation(_:)` to filter user-initiated cancellations before showing error UI.
 
-<CodeGroup>
+See [Checkout Errors](/iap/checkout-errors) for the full error reference and handling patterns.
 
-```swift Swift
-) { result in
-    switch result {
-    case .success(let transaction):
-        unlockContent(transaction.productId)
+## Promotions & Free Trials
 
-    case .failure(let error):
-        if let sheetError = error as? PaymentSheetError {
-            switch sheetError {
-            case .cancelled:
-                // User dismissed the sheet — no action needed
-                break
-            case .notConfigured:
-                // SDK not configured — call configure() first
-                break
-            case .paymentFailed(let detail):
-                // Payment processing failed
-                switch detail.kind {
-                case .cardDeclined:
-                    showError("Please check your card details.")
-                default:
-                    showError(detail.message)
-                }
-            case .verificationFailed(let detail):
-                showError("Verification failed: \(detail)")
-            case .preloadFailed:
-                showError("Could not load checkout.")
-            case .userIdRequired:
-                showError("Please sign in to purchase.")
-            }
-        }
-    }
-}
-```
+If a product has an active promotion, the sheet automatically displays the promotional price. Read `product.promotion` and `product.isTrialEligible` to update your paywall CTA copy before presenting.
 
-```kotlin Kotlin
-try {
-    val transaction = ZeroSettle.purchase(activity, productId, userId)
-    unlockContent(transaction.productId)
-} catch (e: ZeroSettleError.Cancelled) {
-    // User dismissed — no action needed
-} catch (e: ZeroSettleError.CheckoutFailed) {
-    when (e.reason) {
-        is CheckoutFailure.NetworkUnavailable -> showRetry("No internet connection")
-        is CheckoutFailure.StripeError -> showError(e.reason.message)
-        else -> showError(e.message)
-    }
-} catch (e: ZeroSettleError.NotConfigured) {
-    // SDK not configured
-} catch (e: Exception) {
-    showError(e.message ?: "Unknown error")
-}
-```
-
-```tsx React Native
-try {
-  const transaction = await ZeroSettle.purchase(productId, userId);
-  unlockContent(transaction.productId);
-} catch (e) {
-  if (e.code === 'cancelled') {
-    // User dismissed — no action needed
-  } else if (e.code === 'checkout_failed') {
-    showError(e.message);
-  } else if (e.code === 'not_configured') {
-    // SDK not configured — call configure() first
-  } else {
-    showError(e.message);
-  }
-}
-```
-
-```dart Flutter
-try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
-    productId: productId,
-    userId: userId,
-  );
-  unlockContent(transaction.productId);
-} on ZSCancelledException {
-  // User dismissed the sheet — no action needed
-} on ZSCheckoutFailedException catch (e) {
-  // Payment failed — show error to user
-  showError(e.message);
-} catch (e) {
-  showError(e.toString());
-}
-```
-
-</CodeGroup>
-
-### Error Types
-
-#### iOS (`PaymentSheetError`)
-
-| Error | Description |
-|-------|-------------|
-| `.cancelled` | User dismissed the payment sheet |
-| `.notConfigured` | SDK hasn't been configured yet |
-| `.paymentFailed(PaymentFailureDetail)` | Payment failed — inspect `.kind` and `.message` for details |
-| `.verificationFailed(String)` | Transaction completed but server verification failed |
-| `.preloadFailed(APIErrorDetail)` | PaymentIntent creation failed before sheet could open |
-| `.userIdRequired` | A `userId` is required for subscriptions and non-consumable products |
-
-##### `PaymentFailureDetail.Kind`
-
-| Kind | Description |
-|------|-------------|
-| `.cardDeclined` | Payment method was declined |
-| `.networkError` | Network connectivity issue |
-| `.serverError` | Server returned an error |
-| `.checkoutError` | Checkout flow error |
-| `.unknown` | Unclassified failure |
-
-#### Android (`ZeroSettleError`)
-
-| Error | Description |
-|-------|-------------|
-| `ZeroSettleError.Cancelled` | User dismissed the payment sheet |
-| `ZeroSettleError.NotConfigured` | SDK hasn't been configured yet — call `configure()` first |
-| `ZeroSettleError.CheckoutFailed(reason)` | Checkout failed — inspect `reason` for details (see `CheckoutFailure` below) |
-| `ZeroSettleError.UserIdRequired(productId)` | A `userId` is required for subscriptions and non-consumable products |
-| `ZeroSettleError.TransactionVerificationFailed(detail)` | Transaction completed but server-side verification failed |
-
-#### Android `CheckoutFailure` reasons
-
-| Reason | Description |
-|--------|-------------|
-| `CheckoutFailure.NetworkUnavailable` | No network connection |
-| `CheckoutFailure.StripeError(code, message)` | Stripe returned an error (e.g., card declined) |
-| `CheckoutFailure.ServerError(statusCode, message)` | Server returned a non-2xx response |
-| `CheckoutFailure.ProductNotFound` | The product was not found on the server |
-| `CheckoutFailure.MerchantNotOnboarded` | The merchant has not completed Stripe onboarding |
-| `CheckoutFailure.Other(message)` | An unclassified error occurred |
-
-<Note>
-  `.cancelled` / `ZeroSettleError.Cancelled` is not a real error — it just means the user changed their mind. Don't show an error message for cancellations.
-</Note>
-
-## Promotions
-
-If a product has an active promotion, the payment sheet automatically shows the promotional price. The `Product.promotion` property contains the details:
-
-<CodeGroup>
-
-```swift Swift
-if let promo = product.promotion {
-    print("\(promo.displayName): \(promo.promotionalPrice.formatted)")
-    // e.g. "Launch Sale: $4.99"
-}
-```
-
-```kotlin Kotlin
-product.promotion?.let { promo ->
-    println("${promo.displayName}: ${promo.promotionalPrice?.formatted}")
-}
-```
-
-```tsx React Native
-if (product.promotion) {
-  console.log(`${product.promotion.displayName}: ${product.promotion.promotionalPrice.formatted}`);
-}
-```
-
-```dart Flutter
-final promo = product.promotion;
-if (promo != null) {
-  print('${promo.displayName}: ${promo.promotionalPrice.formatted}');
-}
-```
-
-</CodeGroup>
-
-Promotion types include:
-- **Percent off** — e.g., 50% off
-- **Fixed amount** — e.g., $5 off
-- **Free trial** — e.g., 7 days free
-
-### Free Trials
-
-Free trials are configured **server-side per product** in the [ZeroSettle dashboard](https://dashboard.zerosettle.io). The SDK reads the trial configuration from your product catalog — there is no client-side trial parameter to pass.
-
-The catalog response exposes two fields you can read on each `Product`:
-
-| Field | Type | Description |
-|---|---|---|
-| `isTrialEligible` | `Bool` | Whether the current user is eligible for a trial on this product (server determines based on prior trial usage). |
-| `freeTrialDuration` | `String?` | Human-readable trial length (e.g., `"7 days"`) when a trial is configured. |
-
-<CodeGroup>
-
-```swift Swift
-if product.isTrialEligible {
-    // Show "Start Free Trial" instead of price
-    print("Trial: \(product.freeTrialDuration ?? "")")
-}
-
-// Just present the sheet — no trial parameter needed
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
-    handleResult(result)
-}
-```
-
-```kotlin Kotlin
-// Free trial configuration is server-side. The payment sheet displays the trial automatically.
-if (product.isTrialEligible) {
-    // Update your CTA copy
-}
-```
-
-```dart Flutter
-if (product.isTrialEligible) {
-    // Show "Start Free Trial" instead of price
-}
-
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
-```
-
-</CodeGroup>
-
-<Note>
-  As of ZeroSettleKit 1.1.5, the legacy `freeTrialDays:` parameter on `.checkoutSheet`, `CheckoutSheet.init`, `preload()`, `warmUp()`, and `warmUpAll()` is silently ignored. Configure trials in the dashboard instead.
-</Note>
-
-### Existing Stripe Customer
-
-To attach a checkout to an existing Stripe customer (for unified billing-portal use cases), pass `stripeCustomerId`:
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `stripeCustomerId` | `String?` (Optional) | `nil` | Existing Stripe Customer ID (`cus_xxx`). When provided, the checkout PaymentIntent is attached to this customer instead of creating a new one. Useful for showing a consolidated [Stripe Billing Portal](https://docs.stripe.com/customer-management/integrate-customer-portal) view across all of the user's purchases. |
-
-<CodeGroup>
-
-```swift Swift
-.checkoutSheet(
-    item: $selectedProduct,
-    userId: currentUser.id,
-    stripeCustomerId: "cus_abc123"
-) { result in
-    handleResult(result)
-}
-```
-
-```kotlin Kotlin
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = product.id,
-    userId = currentUser.id,
-    stripeCustomerId = "cus_abc123",
-)
-```
-
-</CodeGroup>
-
-<Tip>
-  **Production example:** See how [JustOne](/iap/sample-app) implements its paywall with dual StoreKit/web pricing and custom checkout headers in `PremiumUpsellView.swift`.
-</Tip>
+See [Promotions & Free Trials](/iap/promotions) for details.
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Universal Links" icon="link" href="/iap/universal-links">
-    Required setup for Safari checkout flows
+  <Card title="Preloading" icon="bolt" href="/iap/preloading">
+    Eliminate checkout latency with pre-warmed WebViews
   </Card>
-  <Card title="StoreKit Integration" icon="apple" href="/iap/storekit-integration">
-    Use StoreKit alongside web checkout
+  <Card title="Checkout Errors" icon="triangle-exclamation" href="/iap/checkout-errors">
+    Error reference and handling patterns
+  </Card>
+  <Card title="Universal Links" icon="link" href="/iap/universal-links">
+    Required setup for Safari checkout callbacks
+  </Card>
+  <Card title="Promotions" icon="tag" href="/iap/promotions">
+    Promotional pricing and free trial setup
   </Card>
 </CardGroup>
