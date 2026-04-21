@@ -135,8 +135,9 @@ ZeroSettle uses universal links to return checkout results to your app when the 
         func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
             guard userActivity.activityType == NSUserActivityTypeBrowsingWeb,
                   let url = userActivity.webpageURL else { return }
-            // Returns false if not a ZeroSettle URL — chain to your own router if needed
-            ZeroSettle.shared.handleUniversalLink(url)
+            if !ZeroSettle.shared.handleUniversalLink(url) {
+                // Not a ZeroSettle URL — handle your own deep links here
+            }
         }
 
         // Safety net for edge cases
@@ -205,9 +206,16 @@ Present a checkout sheet with Apple Pay and card support. The checkout mode (emb
   <Tab title="UIKit">
     ```swift
     class PaywallViewController: UIViewController {
-        let product: Product
+        private let product: Product
 
-        @objc func handleBuyTap() {
+        init(product: Product) {
+            self.product = product
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        @objc private func handleBuyTap() {
             CheckoutSheet.present(
                 from: self,
                 product: product,
@@ -339,7 +347,6 @@ let hasPremium = entitlements.contains {
   <Tab title="UIKit">
     ```swift
     import UIKit
-    import SwiftUI
     import ZeroSettleKit
 
     class SceneDelegate: UIResponder, UIWindowSceneDelegate {
@@ -387,7 +394,12 @@ let hasPremium = entitlements.contains {
             let buyButton = UIButton(type: .system)
             buyButton.setTitle("Subscribe — \(product.webPrice.formatted)", for: .normal)
             buyButton.addTarget(self, action: #selector(handleBuyTap), for: .touchUpInside)
-            // Add buyButton to view and set up constraints here
+            buyButton.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(buyButton)
+            NSLayoutConstraint.activate([
+                buyButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                buyButton.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            ])
         }
 
         @objc private func handleBuyTap() {
