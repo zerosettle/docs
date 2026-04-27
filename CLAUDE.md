@@ -17,7 +17,6 @@ This is the ZeroSettle documentation site, built with [Mintlify](https://mintlif
 docs/
 ├── iap/                    # In-App Purchase documentation (~28 pages)
 ├── api-reference/          # OpenAPI spec + endpoint MDX pages
-├── ai-tools/               # AI editor integration guides
 ├── images/                 # Screenshots and diagrams
 ├── logo/                   # Brand logos
 ├── docs.json               # Mintlify configuration

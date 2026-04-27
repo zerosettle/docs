@@ -2,3 +2,52 @@
 title: 'Update StoreKit Status'
 openapi: 'PATCH /iap/transactions/{transaction_id}/storekit-status'
 ---
+
+## How this endpoint behaves
+
+This is a **trigger to verify** endpoint. When the SDK reports a state change
+(typically the user toggling auto-renewal in Apple's UI, or StoreKit signaling
+that a renewal failed), the backend queries Apple's App Store Server API
+itself and persists what Apple reports onto the transaction. The client never
+supplies billing-relevant data — Apple is the single source of truth.
+
+The `storekit_subscription_end` field in the request body is **accepted but
+ignored** as of 2026-04-27. We retain backwards compatibility so existing SDK
+builds continue to work; new SDK releases should omit the field entirely.
+
+## Behavior by status code
+
+- **`storekit_status: 1`** (active) — Persisted directly. No Apple verification
+  call is made.
+- **`storekit_status: 2`** (anything-not-active: cancelled, expired, billing
+  retry, grace period, revoked) — Triggers a server-side query against Apple's
+  App Store Server API when the tenant has App Store Connect credentials
+  configured. The response populates two fields on the transaction:
+    - `storekit_apple_status` — Apple's full 5-state code (1 Active, 2 Expired,
+      3 BillingRetry, 4 GracePeriod, 5 Revoked)
+    - `storekit_subscription_end` — Apple's reported expiry timestamp
+
+  When ASC credentials are not configured (or the Apple call fails
+  transiently), only the coarse `storekit_status` flag is persisted. The
+  endpoint still returns success in that case — the verification is a
+  best-effort enrichment, not a hard dependency.
+
+## Migration note
+
+If your SDK previously sent `storekit_subscription_end` in the request body,
+no action is required — the backend ignores the value cleanly. We recommend
+omitting the field in future SDK releases for clarity.
+
+The optional `storekit_original_transaction_id` field is the Apple
+`originalTransactionId` used by the backend to look up subscription state.
+The backend will fall back to the value stored at transaction creation time
+when the field is omitted, so SDKs only need to send it for legacy
+transactions where the column may not have been captured.
+
+## Related events
+
+The same `storekit_apple_status` and `storekit_subscription_end` fields are
+also kept up-to-date by Apple's App Store Server Notifications V2 webhook —
+see the [Webhooks guide](/iap/webhooks) for the list of mirrored events. The
+PATCH endpoint exists primarily to drive immediate verification when the SDK
+observes a state change locally before Apple's webhook fires.

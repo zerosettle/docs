@@ -411,6 +411,18 @@ ZeroSettle processes the following ASSN v2 notification types:
   All Apple notifications are verified using JWS signature verification against Apple's Root CA certificate chain before processing. Duplicate notifications are automatically skipped via idempotency checks on the `notificationUUID`.
 </Note>
 
+<Note>
+  As of **2026-04-27**, the following ASSN v2 events also mirror Apple's reported state onto the originating migration `Transaction` record's `storekit_status`, `storekit_apple_status`, and `storekit_subscription_end` fields — keeping migration trial-end resolution and dashboard analytics in sync without an SDK round-trip:
+
+  - `DID_CHANGE_RENEWAL_STATUS` (subtypes `AUTO_RENEW_DISABLED`, `AUTO_RENEW_ENABLED`)
+  - `EXPIRED`
+  - `DID_FAIL_TO_RENEW` (default and `GRACE_PERIOD` subtype)
+  - `REVOKE`
+  - `REFUND`
+
+  No SDK changes are required to consume this — the propagation is purely server-side.
+</Note>
+
 ### Notification Forwarding
 
 If your app needs to receive ASSN v2 notifications on your own server (e.g., for analytics or custom logic), you can configure **notification forwarding** in the ZeroSettle dashboard. When enabled, ZeroSettle processes the notification first, then forwards the original signed payload to your URL.

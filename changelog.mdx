@@ -17,6 +17,17 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## April 2026
 
+<Update label="API" description="2026-04-27">
+### Migration trial-end resolution moved server-side
+
+The Switch & Save migration flow no longer sources the Stripe `trial_end` from the SDK's reported `storekit_subscription_end`. The backend now resolves it directly from Apple's App Store Server API (with a fallback to the server-stored, JWS-verified entitlement expiry). Billing-relevant data is no longer trusted from the client.
+
+- **`PATCH /iap/transactions/{id}/storekit-status/`** is now a *trigger to verify* endpoint. When the SDK reports `storekit_status=2`, the backend queries Apple's API itself and persists what Apple reports.
+- **`storekit_subscription_end`** in the PATCH request body is **accepted but ignored** as of this release. Existing SDKs that send the field continue to work unchanged; new SDK releases may omit it.
+- **`storekit_apple_status`** is a new optional field exposed on transaction responses (e.g., [`GET /iap/transactions/{id}`](/api-reference/endpoint/get-transaction)). It carries Apple's full 5-state subscription code: `1` = Active, `2` = Expired, `3` = BillingRetry, `4` = GracePeriod, `5` = Revoked. Null when no Apple-verified state has been recorded.
+- **ASSN v2 webhook events** `DID_CHANGE_RENEWAL_STATUS`, `EXPIRED`, `DID_FAIL_TO_RENEW`, `REVOKE`, and `REFUND` now mirror Apple's reported state onto the migration `Transaction` record automatically (`storekit_status`, `storekit_apple_status`, `storekit_subscription_end`) — no SDK changes required. See [Webhooks](/iap/webhooks#app-store-server-notifications) for details.
+</Update>
+
 <Update label="API" description="2026-04-26">
 ### GET /iap/products/ — `?demo=migration|upgrade` preview flag
 
