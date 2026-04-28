@@ -39,7 +39,7 @@ Before starting, make sure you have:
 <Steps>
 <Step title="Configure the SDK (~1 min)">
 
-Configure the SDK early in your app's lifecycle. `configure()` is synchronous. Then call `bootstrap()` to fetch products and restore entitlements:
+Configure the SDK early in your app's lifecycle. `configure()` is synchronous. Then call `identify()` to set the active user, fetch products, and restore entitlements.
 
 ```swift
 import ZeroSettleKit
@@ -53,7 +53,7 @@ struct YourApp: App {
                     ZeroSettle.shared.configure(.init(
                         publishableKey: "your_live_key"  // From your ZeroSettle dashboard
                     ))
-                    try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id)
+                    try? await ZeroSettle.shared.identify(userId: Auth.currentUser.id)
                 }
                 .zeroSettleHandler()  // Handles universal link callbacks
         }
@@ -61,13 +61,22 @@ struct YourApp: App {
 }
 ```
 
-After configuring, `bootstrap()` automatically:
+After configuring, `identify()` automatically:
 
 1. Fetches your product catalog
 2. Restores entitlements
-3. Pre-creates PaymentIntents for all products (when `preloadCheckout: true`)
+3. Syncs any pending StoreKit transactions to the backend
+4. Pre-creates PaymentIntents for all products (when `preloadCheckout: true`)
 
-All automatic steps are non-fatal — failures are logged but won't prevent the SDK from working.
+It is the canonical entry point for setting the active user — every other user-scoped API on `ZeroSettle.shared` reads from this identified user, so you never need to pass `userId` again. All automatic steps are non-fatal — failures are logged but won't prevent the SDK from working.
+
+<Warning>
+  **Don't skip `identify()`.** If you call `configure()` but never call `identify()`, StoreKit purchases that arrive via `Transaction.updates` won't be attributed to a user and will be left unfinished — they will not appear in your dashboard. The SDK logs a warning if no user is identified within 10 seconds of `configure()`.
+</Warning>
+
+<Note>
+  **Migrating from `bootstrap()`?** `identify(userId:name:email:)` replaces `bootstrap(userId:name:email:)` as of SDK **1.2.4**. The signatures are identical and `bootstrap()` still works (it's deprecated and slated for removal in 2.0). All user-scoped methods that took a `userId` parameter now have a `userId`-less variant — see the [migration guide](/iap/migration-guide#sdk-1-2-4-identify) for the full list.
+</Note>
 
 **Configuration Options**
 
@@ -228,12 +237,12 @@ struct MyApp: App {
         WindowGroup {
             ContentView()
                 .task {
-                    // Configure SDK, then fetch products,
-                    // warm up PaymentIntent, and restore entitlements
+                    // Configure SDK, then identify user — fetches products,
+                    // warms up PaymentIntents, and restores entitlements
                     ZeroSettle.shared.configure(.init(
                         publishableKey: "your_live_key"
                     ))
-                    try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id)
+                    try? await ZeroSettle.shared.identify(userId: Auth.currentUser.id)
                 }
                 .zeroSettleHandler()
         }

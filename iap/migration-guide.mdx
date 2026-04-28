@@ -33,10 +33,62 @@ This page maps deprecated ZeroSettleKit APIs to their current replacements. All 
 
 | Deprecated | Current |
 |---|---|
-| `getOrCreateMigrationManager(userId:)` | `migrationManager(for:stripeCustomerId:)` |
-| `openCustomerPortal(userId:)` | `presentCancelFlow(productId:userId:)` |
-| `showManageSubscription(userId:)` | `presentCancelFlow(productId:userId:)` |
-| `pauseSubscription(productId:userId:pauseOptionId:)` | `pauseSubscription(productId:userId:pauseDurationDays:)` |
+| `getOrCreateMigrationManager(userId:)` | `migrationManager(stripeCustomerId:)` after `identify()` |
+| `openCustomerPortal(userId:)` | `presentCancelFlow(productId:)` after `identify()` |
+| `showManageSubscription(userId:)` | `presentCancelFlow(productId:)` after `identify()` |
+| `pauseSubscription(productId:userId:pauseOptionId:)` | `pauseSubscription(productId:pauseDurationDays:)` after `identify()` |
+
+## SDK 1.2.4 — `identify()` and `userId`-less methods
+
+ZeroSettleKit 1.2.4 introduces `ZeroSettle.shared.identify(userId:name:email:)` as the canonical entry point for setting the active user. Once you've identified, every user-scoped method on `ZeroSettle.shared` reads from the identified user — you no longer need to pass `userId` on each call.
+
+The legacy `userId`-accepting overloads still compile and work in 1.x. They emit a `@available(deprecated)` warning at the call site and will be removed in **ZeroSettleKit 2.0**.
+
+### Why this matters
+
+Before 1.2.4, several public methods (most notably `fetchProducts(userId:)`) accepted a `userId` parameter but did **not** propagate it to the StoreKit transaction listener. Calling `configure()` followed by `fetchProducts(userId:)` would create a backend `Identity` for the user, but any subsequent StoreKit purchase would arrive on the listener with no `userId` set and would be silently left unfinished — never reaching the backend, never appearing on the dashboard.
+
+`identify()` is the single source of truth: it sets `currentUserId`, propagates it to the StoreKit listener, syncs any pending transactions, fetches the catalog, and restores entitlements. The deprecation pushes every integration onto the safe path.
+
+### Replacement table
+
+| Deprecated | Replacement (after `identify()`) |
+|---|---|
+| `bootstrap(userId:name:email:)` | `identify(userId:name:email:)` |
+| `claimEntitlement(productId:, userId:)` | `claimEntitlement(productId:)` |
+| `restoreEntitlements(userId:)` | `restoreEntitlements()` |
+| `migrationManager(for:stripeCustomerId:)` | `migrationManager(stripeCustomerId:)` |
+| `offerManager(for:stripeCustomerId:)` | `offerManager(stripeCustomerId:)` |
+| `cancelSubscription(productId:userId:immediate:)` | `cancelSubscription(productId:immediate:)` |
+| `presentCancelFlow(productId:userId:)` | `presentCancelFlow(productId:)` |
+| `acceptSaveOffer(productId:userId:)` | `acceptSaveOffer(productId:)` |
+| `pauseSubscription(productId:userId:pauseDurationDays:)` | `pauseSubscription(productId:pauseDurationDays:)` |
+| `resumeSubscription(productId:userId:)` | `resumeSubscription(productId:)` |
+| `presentUpgradeOffer(productId:userId:)` | `presentUpgradeOffer(productId:)` |
+| `fetchUpgradeOfferConfig(productId:userId:)` | `fetchUpgradeOfferConfig(productId:)` |
+| `fetchUserOffer(userId:)` | `fetchUserOffer()` |
+| `trackMigrationConversion(userId:)` | `trackMigrationConversion()` |
+| `fetchTransactionHistory(userId:)` | `fetchTransactionHistory()` |
+
+### Migration in two lines
+
+Before:
+```swift
+ZeroSettle.shared.configure(.init(publishableKey: "..."))
+try await ZeroSettle.shared.bootstrap(userId: user.id)
+let entitlements = try await ZeroSettle.shared.restoreEntitlements(userId: user.id)
+try await ZeroSettle.shared.cancelSubscription(productId: "premium", userId: user.id)
+```
+
+After:
+```swift
+ZeroSettle.shared.configure(.init(publishableKey: "..."))
+try await ZeroSettle.shared.identify(userId: user.id)
+let entitlements = try await ZeroSettle.shared.restoreEntitlements()
+try await ZeroSettle.shared.cancelSubscription(productId: "premium")
+```
+
+`fetchProducts(userId:)` and `purchaseViaStoreKit(productId:userId:)` keep their existing optional-`userId` signatures (no deprecation), but now fall back to the identified user when called without one — so `ZeroSettle.shared.fetchProducts()` after `identify()` returns the user-context catalog automatically.
 
 ## Parameter Removals
 

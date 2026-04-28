@@ -18,9 +18,9 @@ If a different account later logs in on the same device (same Apple ID), the SDK
 
 ## How It Works
 
-### During Bootstrap
+### During Identify
 
-When you call `bootstrap(userId:)`, the SDK:
+When you call `identify(userId:)`, the SDK:
 
 1. **Syncs StoreKit transactions** — sends each active Apple transaction to the backend
 2. **Backend checks ownership** — for each transaction, returns `owned: true` (this account's) or `owned: false` (another account's)
@@ -32,7 +32,7 @@ This happens automatically — no developer action required.
 
 ```swift Swift
 // This is all you need. Ownership filtering is internal.
-let catalog = try await ZeroSettle.shared.bootstrap(userId: currentUser.id)
+let catalog = try await ZeroSettle.shared.identify(userId: currentUser.id)
 
 // activeEntitlements only includes entitlements owned by currentUser
 let isPremium = ZeroSettle.shared.activeEntitlements.contains {
