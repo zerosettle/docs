@@ -169,6 +169,67 @@ Both sources are merged into a single entitlements list. Your app doesn't need t
   When multiple app accounts share the same Apple ID, StoreKit entitlements are filtered by ownership — each account only sees the purchases it made. See [Entitlement Ownership](/iap/entitlement-ownership) for details.
 </Info>
 
+## `appAccountToken` Derivation
+
+Apple's `Product.PurchaseOption.appAccountToken` field is a `UUID` that StoreKit forwards to App Store Server Notifications and `Transaction.appAccountToken`. ZeroSettle uses it as the bridge between an Apple StoreKit transaction and your app's user record — so when an `ASSN v2` event (`REFUND`, `EXPIRED`, etc.) arrives without context, the backend can still identify the right user.
+
+The catch: **Apple requires `appAccountToken` to be a UUID.** Most app user IDs are not UUIDs (Firebase, Clerk, Supabase, custom auth all use non-UUID identifiers), so the SDK derives a stable UUID from your user ID using **UUIDv5 (RFC 4122 §4.3, SHA-1 namespace-based)**.
+
+### When You Need This
+
+The SDK does this for you on every `ZeroSettle.shared.purchaseViaStoreKit(...)` call. You only need to derive the token yourself if you're calling `Product.purchase(options: ...)` directly (e.g., for a custom paywall flow).
+
+```swift
+// SDK does this automatically:
+try await ZeroSettle.shared.purchaseViaStoreKit(productId: "premium_monthly")
+
+// If you call StoreKit directly, ask the SDK for the right token:
+let token = try ZeroSettle.shared.recommendedAppAccountToken()
+let result = try await product.purchase(options: [.appAccountToken(token)])
+```
+
+### Algorithm
+
+The derivation is deterministic — the same `(userId, bundleId)` always produces the same UUID — and namespaced per app, so the same `userId` across two apps yields different tokens (preventing cross-app correlation).
+
+```
+namespace_root = uuid5(NAMESPACE_DNS, "appaccounttoken.zerosettle.com")
+namespace_app  = uuid5(namespace_root, bundle_id)
+token          = uuid5(namespace_app, user_id)
+```
+
+- **`NAMESPACE_DNS`** — RFC 4122 §C.2 (`6ba7b810-9dad-11d1-80b4-00c04fd430c8`).
+- **`uuid5(namespace, name)`** — UUID version 5: `SHA-1(namespace.bytes ++ name.utf8) → first 16 bytes → set version=5, variant=10`. Standard library implementation in most languages (e.g., Python's `uuid.uuid5`, Node's `crypto.randomUUID` is **not** the right primitive — use a UUIDv5 library).
+- **`bundle_id`** — `Bundle.main.bundleIdentifier` on iOS (e.g., `com.example.MyApp`).
+- **`user_id`** — your app's user identifier as passed to `identify(userId:)`.
+
+If `user_id` is already a UUID, the SDK passes it through unchanged (no derivation) — RevenueCat-style integrations preserve their existing IDs.
+
+### Backend Verification
+
+The backend runs the same algorithm in `api/services/appaccount_token.py` (`derive_app_account_token`). When a StoreKit transaction arrives via `POST /v1/iap/storekit-transactions/`, the backend:
+
+1. Decodes the JWS, extracts the `appAccountToken` claim.
+2. Reruns the derivation against the syncing user's `userId` and the app's `bundle_id`.
+3. If they match, the transaction's owner is verified — the backend can attribute future `ASSN` events to this user without ambiguity.
+
+This makes ownership transfers (`transferStoreKitOwnershipToCurrentUser`) deterministic too: the backend doesn't trust a self-reported `userId`; it verifies the JWS-signed `appAccountToken` was derived from the syncing user.
+
+### Reference Implementation
+
+If you're implementing a non-iOS client (Kotlin, React Native, Flutter) and need the same derivation, here's the canonical algorithm in pseudocode — port it using your platform's UUIDv5 primitive:
+
+```
+function deriveAppAccountToken(userId: String, bundleId: String) -> UUID:
+    if isUUID(userId):
+        return UUID(userId)
+    let namespaceRoot = uuid5(NAMESPACE_DNS, "appaccounttoken.zerosettle.com")
+    let namespaceApp  = uuid5(namespaceRoot, bundleId)
+    return uuid5(namespaceApp, userId)
+```
+
+The Swift implementation lives in `Sources/ZeroSettleKit/StoreKit/AppAccountToken.swift`. The backend implementation lives in `api/services/appaccount_token.py`.
+
 ## Error Types
 
 ### StoreKitPurchaseError
