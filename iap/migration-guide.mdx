@@ -50,7 +50,7 @@ public enum Identity {
 }
 ```
 
-Two earlier APIs are deprecated in this release: `bootstrap(userId:name:email:)` and the string-based `identify(userId:name:email:)` overload (which appeared briefly during the 1.2.4 cycle). Both still compile and route to `identify(.user(id:))` for source compat. They will be removed in **ZeroSettleKit 2.0**.
+`bootstrap(userId:name:email:)` is deprecated in this release. It still compiles and routes to `identify(.user(id:))` for source compat. It will be removed in **ZeroSettleKit 2.0**.
 
 ### Why this matters
 
@@ -63,7 +63,6 @@ Before 1.2.4, several public methods (most notably `fetchProducts(userId:)`) acc
 | Deprecated | Replacement (after `identify(_:)`) |
 |---|---|
 | `bootstrap(userId:name:email:)` | `identify(.user(id:name:email:))` |
-| `identify(userId:name:email:)` (string-based) | `identify(.user(id:name:email:))` |
 | `claimEntitlement(productId:, userId:)` | `transferStoreKitOwnershipToCurrentUser(productId:)` |
 | `claimEntitlement(productId:)` | `transferStoreKitOwnershipToCurrentUser(productId:)` |
 | `restoreEntitlements(userId:)` | `restoreEntitlements()` |

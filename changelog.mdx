@@ -39,7 +39,6 @@ public func identify(_ identity: Identity) async throws -> ProductCatalog?
 
 **What changed:**
 - **`identify(_ identity: Identity)`** added as the canonical entry point.
-- **`identify(userId:name:email:)`** (string-based, shipped earlier in this cycle) is **deprecated** and routes to `identify(.user(id:))`. Will be removed in 2.0.
 - **`bootstrap(userId:name:email:)`** stays deprecated and routes to `identify(.user(id:))`. Will be removed in 2.0.
 - **15 user-scoped methods** now have a `userId`-less variant: `claimEntitlement`, `restoreEntitlements`, `migrationManager`, `offerManager`, `cancelSubscription`, `presentCancelFlow`, `acceptSaveOffer`, `pauseSubscription`, `resumeSubscription`, `presentUpgradeOffer`, `fetchUpgradeOfferConfig`, `fetchUserOffer`, `trackMigrationConversion`, `fetchTransactionHistory`. The `userId`-accepting overloads are deprecated.
 - **`claimEntitlement(productId:)` renamed** to **`transferStoreKitOwnershipToCurrentUser(productId:)`**. The original name read as a passive lookup, but the operation is a destructive ownership transfer. The verbose name surfaces that. The original name is kept as a deprecated alias for source compatibility and will be removed in 2.0.

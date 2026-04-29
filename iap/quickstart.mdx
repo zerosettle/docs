@@ -94,7 +94,7 @@ try await ZeroSettle.shared.identify(.deferred)
 </Warning>
 
 <Note>
-  **Migrating from `bootstrap()` or string-based `identify(userId:)`?** Both are deprecated as of SDK **1.2.4** and slated for removal in 2.0. The replacement is `identify(.user(id:name:email:))`. All user-scoped methods that took a `userId` parameter also now have a `userId`-less variant — see the [migration guide](/iap/migration-guide#sdk-1-2-4-identify) for the full list.
+  **Migrating from `bootstrap()`?** It is deprecated as of SDK **1.2.4** and slated for removal in 2.0. The replacement is `identify(.user(id:name:email:))`. All user-scoped methods that took a `userId` parameter also now have a `userId`-less variant — see the [migration guide](/iap/migration-guide#sdk-1-2-4-identify) for the full list.
 </Note>
 
 **Configuration Options**
