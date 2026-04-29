@@ -55,7 +55,8 @@ Before 1.2.4, several public methods (most notably `fetchProducts(userId:)`) acc
 | Deprecated | Replacement (after `identify()`) |
 |---|---|
 | `bootstrap(userId:name:email:)` | `identify(userId:name:email:)` |
-| `claimEntitlement(productId:, userId:)` | `claimEntitlement(productId:)` |
+| `claimEntitlement(productId:, userId:)` | `transferStoreKitOwnershipToCurrentUser(productId:)` |
+| `claimEntitlement(productId:)` | `transferStoreKitOwnershipToCurrentUser(productId:)` |
 | `restoreEntitlements(userId:)` | `restoreEntitlements()` |
 | `migrationManager(for:stripeCustomerId:)` | `migrationManager(stripeCustomerId:)` |
 | `offerManager(for:stripeCustomerId:)` | `offerManager(stripeCustomerId:)` |

@@ -91,35 +91,36 @@ New purchases always belong to the currently logged-in account.
 | User B buys their own premium | User B gets their own entitlement |
 | User A logs back in | User A still has their original entitlement |
 
-## Explicit Entitlement Claiming
+## Explicit StoreKit Ownership Transfer
 
-For cases where you need to transfer an entitlement between accounts — testing, account migration, or support — the SDK provides an explicit claim API:
+For cases where you need to move an entitlement between accounts — testing, account migration, or support — the SDK provides an explicit transfer API. The method name is intentionally verbose to surface that this is a destructive operation, not a passive lookup.
 
 <CodeGroup>
 
 ```swift Swift
-// Transfer a StoreKit entitlement to the current account
-try await ZeroSettle.shared.claimEntitlement(
-    productId: "premium_monthly",
-    userId: currentUser.id
+// Transfer a StoreKit entitlement to the currently identified user
+try await ZeroSettle.shared.identify(userId: currentUser.id)
+try await ZeroSettle.shared.transferStoreKitOwnershipToCurrentUser(
+    productId: "premium_monthly"
 )
 ```
 
 ```kotlin Kotlin
-ZeroSettle.claimEntitlement(
+ZeroSettle.identify(userId = currentUser.id)
+ZeroSettle.transferStoreKitOwnershipToCurrentUser(
     productId = "premium_monthly",
-    userId = currentUser.id,
 )
 ```
 
 ```tsx React Native
-await ZeroSettle.claimEntitlement('premium_monthly', currentUser.id);
+await ZeroSettle.identify(currentUser.id);
+await ZeroSettle.transferStoreKitOwnershipToCurrentUser('premium_monthly');
 ```
 
 ```dart Flutter
-await ZeroSettle.instance.claimEntitlement(
+await ZeroSettle.instance.identify(userId: currentUser.id);
+await ZeroSettle.instance.transferStoreKitOwnershipToCurrentUser(
   productId: 'premium_monthly',
-  userId: currentUser.id,
 );
 ```
 
@@ -128,32 +129,37 @@ await ZeroSettle.instance.claimEntitlement(
 This:
 
 1. Finds the StoreKit transaction for this product on the current Apple ID
-2. Sends it to the backend's `/iap/claim-entitlement/` endpoint
-3. **Revokes** the entitlement from the previous owner
-4. **Grants** it to the current account
+2. Sends the JWS to the backend's `/iap/claim-entitlement/` endpoint
+3. **Revokes** the entitlement from its previous owner (`TRANSFERRED_OUT`)
+4. **Grants** it to the currently identified user (`GRANTED`)
 5. Refreshes `activeEntitlements` automatically
 
 <Warning>
-  `claimEntitlement` is destructive — it revokes the entitlement from whoever currently owns it. Use it intentionally, not as part of your normal app flow.
+  `transferStoreKitOwnershipToCurrentUser` is destructive — it revokes the entitlement from whoever currently owns it. Use it intentionally, not as part of your normal app flow.
 </Warning>
+
+<Note>
+  The shorter method name `claimEntitlement(productId:)` is deprecated as of 1.2.4. The original name read as a passive lookup, which masked that the operation is a destructive ownership transfer. The new name surfaces that. The deprecated alias is kept for source compatibility and will be removed in 2.0.
+</Note>
 
 ### Limitations
 
-- **Subscriptions and non-consumables only** — consumables cannot be claimed (they're single-use)
-- **Requires an active StoreKit transaction** — if the subscription has expired on the Apple ID, there's nothing to claim
+- **Subscriptions and non-consumables only** — consumables cannot be transferred (they're single-use)
+- **Requires an active StoreKit transaction** — if the subscription has expired on the Apple ID, there's nothing to transfer
 - **Atomic** — the revoke and grant happen in a single database transaction. If the grant fails, the revoke rolls back too
+- **Requires `identify()` to have been called** — the destination user is always the currently identified user
 
 ### Use Cases
 
 <AccordionGroup>
   <Accordion title="Testing with sandbox accounts">
-    When testing with multiple ZeroSettle accounts on the same Apple sandbox account, use `claimEntitlement` to move subscriptions between test accounts without creating new purchases.
+    When testing with multiple ZeroSettle accounts on the same Apple sandbox account, use `transferStoreKitOwnershipToCurrentUser` to move subscriptions between test accounts without creating new purchases.
   </Accordion>
   <Accordion title="Account migration">
-    If a user needs to move their subscription to a new account (e.g., they created a duplicate account by mistake), call `claimEntitlement` from the new account.
+    If a user needs to move their subscription to a new account (e.g., they created a duplicate account by mistake), call `identify()` with the new account's user ID, then call `transferStoreKitOwnershipToCurrentUser` to move the entitlement to the new account.
   </Accordion>
   <Accordion title="Customer support">
-    Build a support tool that lets agents transfer entitlements between accounts. Wire `claimEntitlement` to a "Transfer Subscription" button in your admin interface.
+    Build a support tool that lets agents transfer entitlements between accounts. Wire `transferStoreKitOwnershipToCurrentUser` to a "Transfer Subscription" button in your admin interface.
   </Accordion>
 </AccordionGroup>
 
@@ -208,6 +214,7 @@ The ownership model was introduced in SDK version 1.1.3. Older SDK versions that
 | < 1.1.3 | All StoreKit entitlements included (no ownership filter) |
 | >= 1.1.3 | Ownership-filtered StoreKit entitlements + `claimEntitlement()` API |
 | >= 1.1.5 | Offer manager hardening, checkout improvements |
+| >= 1.2.4 | `claimEntitlement()` deprecated and renamed to `transferStoreKitOwnershipToCurrentUser()` |
 
 The backend is backward compatible — the `owned` field is additional, not breaking.
 
