@@ -18,20 +18,35 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 ## April 2026
 
 <Update label="iOS SDK 1.2.4" description="2026-04-28">
-### `identify()` is the new canonical entry point — `userId` parameter deprecated
+### `identify(_:)` takes an `Identity` enum — anonymous + deferred sessions, deprecates `bootstrap()` and string-based `identify(userId:)`
 
-ZeroSettleKit 1.2.4 introduces `ZeroSettle.shared.identify(userId:name:email:)` as the single source of truth for setting the active user. Once you've identified, every user-scoped method on `ZeroSettle.shared` reads from the identified user — you no longer need to pass `userId` on each call.
+ZeroSettleKit 1.2.4 introduces a type-safe `Identity` enum as the canonical entry point for declaring the active user. The SDK can now distinguish between three states an app can be in at init: an authenticated user, an anonymous session, or "auth comes later" — none of which the previous string-based API could express.
 
-The legacy `userId`-accepting overloads still compile and work, but emit `@available(deprecated)` warnings and will be removed in **ZeroSettleKit 2.0**.
+```swift
+public enum Identity {
+    case user(id: String, name: String? = nil, email: String? = nil)
+    case anonymous
+    case deferred
+}
+
+public func identify(_ identity: Identity) async throws -> ProductCatalog?
+```
+
+**The three cases:**
+- **`.user(id:name:email:)`** — authenticated user. Runs the full bootstrap flow against the provided id (StoreKit sync, product fetch, entitlement restore, Stripe customer create/update). The common case.
+- **`.anonymous`** — no authenticated user. The SDK generates a UUID on first call and persists it under `UserDefaults` key `zerosettle.anonymous_session_uuid`. Subsequent `.anonymous` calls reuse the same UUID; `logout()` clears it so the next `.anonymous` call generates a fresh UUID (correct for shared-device "Continue as guest" flows). Anonymous purchases attach to this UUID and can be reconciled into a real user account later (server endpoint coming in PR C2).
+- **`.deferred`** — auth comes on a later screen. Suppresses the 10s "no user identified" warning. Otherwise a no-op. Call `identify(_:)` again with `.user(...)` or `.anonymous` once auth resolves.
 
 **What changed:**
-- **`identify(userId:name:email:)`** added as the canonical replacement for `bootstrap(userId:name:email:)`. Identical semantics; cleaner naming.
+- **`identify(_ identity: Identity)`** added as the canonical entry point.
+- **`identify(userId:name:email:)`** (string-based, shipped earlier in this cycle) is **deprecated** and routes to `identify(.user(id:))`. Will be removed in 2.0.
+- **`bootstrap(userId:name:email:)`** stays deprecated and routes to `identify(.user(id:))`. Will be removed in 2.0.
 - **15 user-scoped methods** now have a `userId`-less variant: `claimEntitlement`, `restoreEntitlements`, `migrationManager`, `offerManager`, `cancelSubscription`, `presentCancelFlow`, `acceptSaveOffer`, `pauseSubscription`, `resumeSubscription`, `presentUpgradeOffer`, `fetchUpgradeOfferConfig`, `fetchUserOffer`, `trackMigrationConversion`, `fetchTransactionHistory`. The `userId`-accepting overloads are deprecated.
 - **`claimEntitlement(productId:)` renamed** to **`transferStoreKitOwnershipToCurrentUser(productId:)`**. The original name read as a passive lookup, but the operation is a destructive ownership transfer. The verbose name surfaces that. The original name is kept as a deprecated alias for source compatibility and will be removed in 2.0.
 - **`fetchProducts()` and `purchaseViaStoreKit(productId:)`** now fall back to the identified user when called without a `userId`. No deprecation — existing callers keep working.
 - **Bug fix**: `fetchProducts(userId:)` now correctly propagates the `userId` to the StoreKit transaction listener. Prior to 1.2.4, calling `fetchProducts(userId:)` without `bootstrap()` would create a backend `Identity` but leave the listener with `userId=nil`, causing StoreKit purchases to be silently dropped. See the [migration guide](/iap/migration-guide#sdk-1-2-4-identify) for the full incident postmortem.
-- **Listener safety**: when a StoreKit transaction arrives before `identify()`, the SDK now logs an actionable error naming `identify()` and asserts in DEBUG so the bug surfaces during testing instead of in production. A separate warning fires 10 seconds after `configure()` if no user has been identified.
-- **New error case**: `ZeroSettleError.userNotIdentified` thrown by `userId`-less methods if `identify()` has not been called.
+- **Listener safety**: when a StoreKit transaction arrives before `identify(_:)`, the SDK logs an actionable error naming `identify(_:)` and asserts in DEBUG so the bug surfaces during testing instead of in production. The 10s no-user warning is suppressed when `.deferred` has been declared.
+- **New error case**: `ZeroSettleError.userNotIdentified` thrown by `userId`-less methods if no `Identity` has been declared (or if `.deferred` was declared and not yet superseded).
 
 **Migration:**
 
@@ -46,9 +61,18 @@ try await ZeroSettle.shared.cancelSubscription(productId: "premium", userId: use
 After:
 ```swift
 ZeroSettle.shared.configure(.init(publishableKey: "..."))
-try await ZeroSettle.shared.identify(userId: user.id)
+try await ZeroSettle.shared.identify(.user(id: user.id))
 let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 try await ZeroSettle.shared.cancelSubscription(productId: "premium")
+```
+
+Anonymous-launch flow:
+```swift
+ZeroSettle.shared.configure(.init(publishableKey: "..."))
+try await ZeroSettle.shared.identify(.anonymous)  // SDK generates + persists UUID
+// purchases now attach to the anonymous session
+// when user logs in:
+try await ZeroSettle.shared.identify(.user(id: user.id))  // PR C2 will reconcile anonymous purchases
 ```
 
 See the [migration guide](/iap/migration-guide#sdk-1-2-4-identify) for the full deprecation table and rationale.

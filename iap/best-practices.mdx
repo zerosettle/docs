@@ -10,7 +10,7 @@ Follow these recommendations to build a robust in-app purchase experience with Z
 
 ### Configure Early
 
-Initialize the SDK as early as possible in your app's lifecycle. On iOS, call `configure()` early, then `identify()` to set the active user and fetch products. On Android, `configure()` is synchronous and should be called in `Application.onCreate()`, then call `bootstrap()` to fetch products and restore entitlements:
+Initialize the SDK as early as possible in your app's lifecycle. On iOS, call `configure()` early, then `identify(_:)` with an `Identity` enum value (`.user(id:)`, `.anonymous`, or `.deferred`) to declare the active user and fetch products. On Android, `configure()` is synchronous and should be called in `Application.onCreate()`, then call `bootstrap()` to fetch products and restore entitlements:
 
 <CodeGroup>
 ```swift Swift
@@ -23,7 +23,7 @@ struct YourApp: App {
                     ZeroSettle.shared.configure(.init(
                         publishableKey: "your_live_key"
                     ))
-                    try? await ZeroSettle.shared.identify(userId: Auth.currentUser.id)
+                    try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                 }
                 .zeroSettleHandler()
         }

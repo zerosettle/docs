@@ -39,7 +39,7 @@ Before starting, make sure you have:
 <Steps>
 <Step title="Configure the SDK (~1 min)">
 
-Configure the SDK early in your app's lifecycle. `configure()` is synchronous. Then call `identify()` to set the active user, fetch products, and restore entitlements.
+Configure the SDK early in your app's lifecycle. `configure()` is synchronous. Then call `identify(_:)` with an `Identity` enum value to declare who the active user is — `.user(id:)` for authenticated users, `.anonymous` for guest sessions, or `.deferred` if auth resolves on a later screen.
 
 ```swift
 import ZeroSettleKit
@@ -53,7 +53,7 @@ struct YourApp: App {
                     ZeroSettle.shared.configure(.init(
                         publishableKey: "your_live_key"  // From your ZeroSettle dashboard
                     ))
-                    try? await ZeroSettle.shared.identify(userId: Auth.currentUser.id)
+                    try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                 }
                 .zeroSettleHandler()  // Handles universal link callbacks
         }
@@ -61,21 +61,40 @@ struct YourApp: App {
 }
 ```
 
-After configuring, `identify()` automatically:
+After configuring, `identify(.user(id:))` (or `.anonymous`) automatically:
 
 1. Fetches your product catalog
 2. Restores entitlements
 3. Syncs any pending StoreKit transactions to the backend
 4. Pre-creates PaymentIntents for all products (when `preloadCheckout: true`)
 
-It is the canonical entry point for setting the active user — every other user-scoped API on `ZeroSettle.shared` reads from this identified user, so you never need to pass `userId` again. All automatic steps are non-fatal — failures are logged but won't prevent the SDK from working.
+It is the canonical entry point for declaring the active user — every other user-scoped API on `ZeroSettle.shared` reads from this identity, so you never need to pass `userId` again. All automatic steps are non-fatal — failures are logged but won't prevent the SDK from working.
+
+**The three identity cases:**
+
+```swift
+// ① Authenticated user (the common case)
+try await ZeroSettle.shared.identify(.user(
+    id: currentUser.id,
+    name: "Jane Doe",     // optional — stored on the Stripe Customer
+    email: "jane@..."     // optional — stored on the Stripe Customer
+))
+
+// ② Anonymous session — SDK generates a stable UUID, persists it
+//    in UserDefaults, reuses it across launches until logout()
+try await ZeroSettle.shared.identify(.anonymous)
+
+// ③ "Auth comes later" — suppresses the no-user warning while you
+//    wait for the user to log in. Call identify() again when ready.
+try await ZeroSettle.shared.identify(.deferred)
+```
 
 <Warning>
-  **Don't skip `identify()`.** If you call `configure()` but never call `identify()`, StoreKit purchases that arrive via `Transaction.updates` won't be attributed to a user and will be left unfinished — they will not appear in your dashboard. The SDK logs a warning if no user is identified within 10 seconds of `configure()`.
+  **Don't skip `identify(_:)`.** If you call `configure()` but never call `identify(_:)`, StoreKit purchases that arrive via `Transaction.updates` won't be attributed to a user and will be left unfinished — they will not appear in your dashboard. The SDK logs a warning 10s after `configure()` unless you have explicitly declared `.deferred`. If your app has a guest-purchase flow, use `.anonymous` rather than skipping identification entirely.
 </Warning>
 
 <Note>
-  **Migrating from `bootstrap()`?** `identify(userId:name:email:)` replaces `bootstrap(userId:name:email:)` as of SDK **1.2.4**. The signatures are identical and `bootstrap()` still works (it's deprecated and slated for removal in 2.0). All user-scoped methods that took a `userId` parameter now have a `userId`-less variant — see the [migration guide](/iap/migration-guide#sdk-1-2-4-identify) for the full list.
+  **Migrating from `bootstrap()` or string-based `identify(userId:)`?** Both are deprecated as of SDK **1.2.4** and slated for removal in 2.0. The replacement is `identify(.user(id:name:email:))`. All user-scoped methods that took a `userId` parameter also now have a `userId`-less variant — see the [migration guide](/iap/migration-guide#sdk-1-2-4-identify) for the full list.
 </Note>
 
 **Configuration Options**
@@ -242,7 +261,7 @@ struct MyApp: App {
                     ZeroSettle.shared.configure(.init(
                         publishableKey: "your_live_key"
                     ))
-                    try? await ZeroSettle.shared.identify(userId: Auth.currentUser.id)
+                    try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                 }
                 .zeroSettleHandler()
         }
