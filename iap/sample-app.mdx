@@ -48,8 +48,7 @@ Instead of calling `fetchProducts()` and `restoreEntitlements()` separately, Jus
 // JustOneApp.swift
 .task(id: authViewModel.isAuthenticated) {
     if authViewModel.isAuthenticated, let userId = authViewModel.appleUserID {
-        try await ZeroSettle.shared.identify(.user(id: userId))
-        let catalog = ZeroSettle.shared.products
+        let catalog = try await ZeroSettle.shared.identify(.user(id: userId))
     }
 }
 ```

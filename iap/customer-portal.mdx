@@ -189,10 +189,9 @@ The questionnaire and retention offer are configured on the [ZeroSettle dashboar
 Button("Cancel Subscription") {
     showCancelFlow = true
 }
-.zsCancelFlow(
+.cancelFlow(
     isPresented: $showCancelFlow,
-    productId: "premium_monthly",
-    userId: currentUser.id
+    productId: "premium_monthly"
 ) { result in
     switch result {
     case .cancelled:
@@ -252,8 +251,7 @@ switch (result) {
 
 ```swift Swift
 let result = await ZeroSettle.shared.presentCancelFlow(
-    productId: "premium_monthly",
-    userId: currentUser.id
+    productId: "premium_monthly"
 )
 // result is CancelFlow.Result: .cancelled, .retained, .paused, or .dismissed
 ```

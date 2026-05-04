@@ -52,7 +52,7 @@ val isPremium = ZeroSettle.activeEntitlements.value.any {
 
 ```tsx React Native
 // Ownership filtering is handled internally
-const catalog = await ZeroSettle.bootstrap(currentUser.id);
+await ZeroSettle.identify(currentUser.id);
 
 const entitlements = ZeroSettle.getActiveEntitlements();
 const isPremium = entitlements.some(
@@ -106,7 +106,7 @@ try await ZeroSettle.shared.transferStoreKitOwnershipToCurrentUser(
 ```
 
 ```kotlin Kotlin
-ZeroSettle.identify(userId = currentUser.id)
+ZeroSettle.bootstrap(userId = currentUser.id)
 ZeroSettle.transferStoreKitOwnershipToCurrentUser(
     productId = "premium_monthly",
 )

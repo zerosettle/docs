@@ -957,16 +957,19 @@ Choose a user ID that won't change:
 <CodeGroup>
 ```swift Swift
 // Good: Backend-generated UUID
-ZeroSettle.shared.identify(.user(id: user.id))  // "usr_abc123"
+let userId = user.id  // "usr_abc123"
 
 // Good: Firebase UID
-ZeroSettle.shared.identify(.user(id: Auth.auth().currentUser?.uid ?? ""))
+let userId = Auth.auth().currentUser?.uid ?? ""
 
 // Bad: Email (users can change it)
-ZeroSettle.shared.identify(.user(id: user.email))
+let userId = user.email
 
 // Bad: Device identifier (changes on reinstall)
-ZeroSettle.shared.identify(.user(id: UIDevice.current.identifierForVendor?.uuidString ?? ""))
+let userId = UIDevice.current.identifierForVendor?.uuidString ?? ""
+
+// Then pass to identify:
+try await ZeroSettle.shared.identify(.user(id: userId))
 ```
 
 ```kotlin Kotlin
