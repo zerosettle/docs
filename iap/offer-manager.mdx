@@ -79,7 +79,7 @@ loading → eligible → presented → accepted → completed
 
 | State | Meaning | `offerData` |
 |-------|---------|-------------|
-| `loading` | Waiting for `ZeroSettle.bootstrap()` to finish. | `nil` |
+| `loading` | Waiting for `ZeroSettle.shared.identify(_:)` to finish. | `nil` |
 | `ineligible` | User doesn't qualify (no eligible entitlement, already dismissed, rollout excluded, no campaign configured). | `nil` |
 | `eligible` | User qualifies. Offer data is available — show your UI. | Available |
 | `presented` | Offer is on screen or checkout is in progress. | Available |
