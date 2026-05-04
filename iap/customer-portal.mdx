@@ -10,17 +10,19 @@ ZeroSettle provides a customer portal powered by Stripe where your customers can
 
 ### SwiftUI Modifier
 
-The simplest way to add subscription management is the `.zsManageSubscription()` modifier:
+The simplest way to add subscription management is the `.retentionSheet(isPresented:onResult:)` modifier:
 
 <CodeGroup>
 
 ```swift Swift
-@State private var showManageSubscription = false
+@State private var showRetention = false
 
 Button("Manage Subscription") {
-    showManageSubscription = true
+    showRetention = true
 }
-.zsManageSubscription(isPresented: $showManageSubscription, userId: currentUser.id)
+.retentionSheet(isPresented: $showRetention) { result in
+    // handle result
+}
 ```
 
 ```kotlin Kotlin
@@ -55,10 +57,10 @@ For more control, use the methods directly:
 
 ```swift Swift
 // Smart routing — picks the right UI based on entitlement sources
-try await ZeroSettle.shared.showManageSubscription(userId: currentUser.id)
+try await ZeroSettle.shared.showManageSubscription()
 
 // Always open the Stripe customer portal
-try await ZeroSettle.shared.openCustomerPortal(userId: currentUser.id)
+try await ZeroSettle.shared.openCustomerPortal()
 ```
 
 ```kotlin Kotlin
@@ -99,7 +101,7 @@ await ZeroSettle.instance.openCustomerPortal(userId: currentUser.id);
 | Both web + native store | Stripe customer portal |
 | No entitlements | Stripe customer portal |
 
-If you always want the Stripe portal regardless of source, call `openCustomerPortal(userId:)` directly.
+If you always want the Stripe portal regardless of source, call `openCustomerPortal()` directly.
 
 ## Auto-Refresh
 
