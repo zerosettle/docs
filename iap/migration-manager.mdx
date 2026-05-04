@@ -15,9 +15,8 @@ icon: 'wand-magic-sparkles'
 
 ```swift
 struct SwitchAndSaveBanner: View {
-    // Pass stripeCustomerId to attach checkouts to an existing Stripe customer
-    @StateObject private var manager = ZSMigrationManager(userId: "user_42")
-    // Or: ZSMigrationManager(userId: "user_42", stripeCustomerId: "cus_abc123")
+    // migrationManager() throws if identify(_:) hasn't been called — that's a programming error
+    @StateObject private var manager = (try? ZeroSettle.shared.migrationManager())!
 
     var body: some View {
         switch manager.state {
@@ -63,7 +62,7 @@ loading → eligible → presented → accepted → completed
 
 | State | Meaning | `offerData` |
 |-------|---------|-------------|
-| `loading` | Waiting for `ZeroSettle.bootstrap()` to finish. | `nil` |
+| `loading` | Waiting for `ZeroSettle.shared.identify(_:)` to finish. | `nil` |
 | `ineligible` | User doesn't qualify (no StoreKit subscription, already switched, no campaign configured). | `nil` |
 | `eligible` | User qualifies. Offer data is available — show your UI. | Available |
 | `presented` | Offer is on screen or checkout is in progress. | Available |
@@ -200,8 +199,8 @@ A complete custom switch and save card with loading, error, checkout, and comple
 struct CustomSwitchAndSaveCard: View {
     @StateObject private var manager: ZSMigrationManager
 
-    init(userId: String) {
-        _manager = StateObject(wrappedValue: ZSMigrationManager(userId: userId))
+    init() {
+        _manager = StateObject(wrappedValue: (try? ZeroSettle.shared.migrationManager())!)
     }
 
     var body: some View {
