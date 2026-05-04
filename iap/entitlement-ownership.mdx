@@ -14,13 +14,13 @@ When your app uses both StoreKit and ZeroSettle web checkout, multiple app accou
 
 When a user makes a StoreKit purchase, the SDK syncs the Apple-signed transaction (JWS) to the ZeroSettle backend. The backend records which account (user ID) was logged in at the time of purchase. That account permanently owns the entitlement.
 
-If a different account later logs in on the same device (same Apple ID), the SDK syncs the same StoreKit transactions during bootstrap. The backend recognizes each transaction's `originalTransactionId` and returns `owned: false` for transactions that belong to another account. The SDK filters these out — the new account never sees them.
+If a different account later logs in on the same device (same Apple ID), the SDK syncs the same StoreKit transactions during identify. The backend recognizes each transaction's `originalTransactionId` and returns `owned: false` for transactions that belong to another account. The SDK filters these out — the new account never sees them.
 
 ## How It Works
 
 ### During Identify
 
-When you call `identify(userId:)`, the SDK:
+When you call `identify(.user(id:))`, the SDK:
 
 1. **Syncs StoreKit transactions** — sends each active Apple transaction to the backend
 2. **Backend checks ownership** — for each transaction, returns `owned: true` (this account's) or `owned: false` (another account's)
@@ -32,7 +32,7 @@ This happens automatically — no developer action required.
 
 ```swift Swift
 // This is all you need. Ownership filtering is internal.
-let catalog = try await ZeroSettle.shared.identify(userId: currentUser.id)
+let catalog = try await ZeroSettle.shared.identify(.user(id: currentUser.id))
 
 // activeEntitlements only includes entitlements owned by currentUser
 let isPremium = ZeroSettle.shared.activeEntitlements.contains {
@@ -99,7 +99,7 @@ For cases where you need to move an entitlement between accounts — testing, ac
 
 ```swift Swift
 // Transfer a StoreKit entitlement to the currently identified user
-try await ZeroSettle.shared.identify(userId: currentUser.id)
+try await ZeroSettle.shared.identify(.user(id: currentUser.id))
 try await ZeroSettle.shared.transferStoreKitOwnershipToCurrentUser(
     productId: "premium_monthly"
 )
@@ -213,7 +213,6 @@ The ownership model was introduced in SDK version 1.1.3. Older SDK versions that
 |-------------|----------|
 | < 1.1.3 | All StoreKit entitlements included (no ownership filter) |
 | >= 1.1.3 | Ownership-filtered StoreKit entitlements + `claimEntitlement()` API |
-| >= 1.1.5 | Offer manager hardening, checkout improvements |
 | >= 1.2.4 | `claimEntitlement()` deprecated and renamed to `transferStoreKitOwnershipToCurrentUser()` |
 
 The backend is backward compatible — the `owned` field is additional, not breaking.
