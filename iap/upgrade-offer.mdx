@@ -26,8 +26,7 @@ Button("See Upgrade Options") {
 }
 .upgradeOffer(
     isPresented: $showUpgradeOffer,
-    productId: "premium_monthly",
-    userId: currentUser.id
+    productId: "premium_monthly"
 ) { result in
     switch result {
     case .upgraded:
@@ -81,8 +80,7 @@ For more control over when and how offers are presented:
 
 ```swift Swift
 let result = await ZeroSettle.shared.presentUpgradeOffer(
-    productId: "premium_monthly",
-    userId: currentUser.id
+    productId: "premium_monthly"
 )
 // result is UpgradeOffer.Result: .upgraded, .declined, or .dismissed
 ```
@@ -116,8 +114,7 @@ Fetch the upgrade offer configuration without presenting any UI. Use this to bui
 
 ```swift Swift
 let config = try await ZeroSettle.shared.fetchUpgradeOfferConfig(
-    productId: "premium_monthly",
-    userId: currentUser.id
+    productId: "premium_monthly"
 )
 
 if config.available, let target = config.targetProduct {
