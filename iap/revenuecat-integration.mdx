@@ -6,6 +6,8 @@ icon: 'puzzle-piece'
 
 ZeroSettle works alongside RevenueCat. You can use RevenueCat for StoreKit and Play Billing subscription management while routing eligible purchases through ZeroSettle's web checkout for lower fees.
 
+Both ZeroSettle and RevenueCat must be identified to the same user ID before purchase. On iOS, call `ZeroSettle.shared.identify(.user(id: rcUserId))` and `Purchases.shared.logIn(rcUserId)` together — typically right after sign-in. On Android and Flutter, ZeroSettle takes the user ID per call (`userId = rcUserId` / `userId: rcUserId`) and RevenueCat is identified with `Purchases.logIn(rcUserId)`.
+
 There are two integration approaches:
 
 ## Option 1: SDK Integration (Recommended)
@@ -101,17 +103,20 @@ await ZeroSettle.instance.configure(
 
 ### User Identity
 
-Pass RevenueCat's `appUserID` as the `userId` when making ZeroSettle purchases. This links web checkout purchases to the correct RevenueCat customer:
+Use RevenueCat's `appUserID` as the user ID for ZeroSettle. This links web checkout purchases to the correct RevenueCat customer. On iOS, identify ZeroSettle with the same ID; on Android and Flutter, pass it per call.
 
 <CodeGroup>
 ```swift Swift
 let rcUserId = Purchases.shared.appUserID
 
+// Identify ZeroSettle with the same user ID (do this once after sign-in)
+ZeroSettle.shared.identify(.user(id: rcUserId))
+
 // Fetch ZeroSettle product catalog
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: rcUserId)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 // Purchase via web checkout using .checkoutSheet() in your SwiftUI view:
-// .checkoutSheet(item: $selectedProduct, userId: rcUserId) { result in ... }
+// .checkoutSheet(item: $selectedProduct) { result in ... }
 ```
 
 ```kotlin Kotlin
@@ -165,10 +170,7 @@ struct PaywallView: View {
             Button("Subscribe — \(zsProduct.webPrice.formatted)") {
                 selectedProduct = zsProduct
             }
-            .checkoutSheet(
-                item: $selectedProduct,
-                userId: Purchases.shared.appUserID
-            ) { result in
+            .checkoutSheet(item: $selectedProduct) { result in
                 if case .success = result {
                     // Refresh RC customer info to pick up the webhook
                     try? await Purchases.shared.customerInfo()
