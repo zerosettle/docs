@@ -1,0 +1,70 @@
+---
+title: 'Payment Methods'
+description: 'Configure which payment methods buyers see at checkout'
+icon: 'credit-card'
+---
+
+The Payment Methods tab in your [ZeroSettle dashboard](https://dashboard.zerosettle.io) lets you choose how the checkout decides which payment methods to show buyers. Three modes cover the common cases.
+
+## Choose a Mode
+
+| Mode | When to use | What buyers see |
+|---|---|---|
+| **Automatic** *(recommended)* | You want Stripe to pick the best methods for each buyer based on country, currency, and device | Card, Apple Pay, Google Pay, plus regional methods Stripe enables for the buyer (Klarna in EU, Cash App in US, etc.) |
+| **Wallets-only** | You only want one-tap wallet checkout with no card form fallback | Apple Pay button on iOS, Google Pay button on Android — and nothing else |
+| **Custom** | You want explicit per-method control | Exactly the methods you toggle on, in the order you specify |
+
+## Automatic
+
+The default. Stripe surfaces every payment method it can render for the buyer's region and currency. Redirect-based methods (Klarna, PayPal, Cash App Pay) are automatically hidden inside in-app browsers that can't complete the redirect — buyers reach those via a "More ways to pay" Safari hand-off.
+
+No SDK version requirement; works on every supported ZeroSettleKit release.
+
+## Wallets-only
+
+Renders only the Apple Pay / Google Pay button via `ExpressCheckoutElement`. There is no card-form fallback. Buyers without a wallet configured see an empty checkout — choose this mode only if you've validated that >95% of your traffic has Apple Pay or Google Pay set up.
+
+No SDK version requirement.
+
+## Custom
+
+Per-method toggles for full control over the checkout's method ordering and visibility.
+
+<Note>
+  Requires **ZeroSettleKit 1.3.0+**. On older SDK versions, the buyer sees only Card / Apple Pay / Google Pay regardless of which methods you enable here. If your app distribution includes pre-1.3.0 builds, use Automatic instead.
+</Note>
+
+In Custom mode, the dashboard exposes ~20 payment method toggles. Each method has a WKWebView compatibility flag — methods marked "redirect-based" can render in Safari but not in the in-app `WKWebView` checkout that pre-1.3.0 SDKs use exclusively.
+
+### Method reference
+
+| Method | WKWebView compatible | Notes |
+|---|---|---|
+| Card | ✓ | Manual entry; the universal fallback |
+| Apple Pay | ✓ | Renders as a wallet button via ECE |
+| Google Pay | ✓ | Renders as a wallet button via ECE |
+| SEPA Debit | ✓ | EU only; form-based, no redirect |
+| Link | ✗ (1.3.0+ Safari only) | Stripe-account-level autofill; popup-based login |
+| Klarna | ✗ (1.3.0+ Safari only) | Redirect to Klarna app or web |
+| Cash App Pay | ✗ (1.3.0+ Safari only) | Redirect to Cash App |
+| PayPal | ✗ (1.3.0+ Safari only) | Popup to PayPal |
+| Amazon Pay | ✗ (1.3.0+ Safari only) | Popup to Amazon Pay |
+| Afterpay/Clearpay | ✗ (1.3.0+ Safari only) | Redirect-based |
+| iDEAL | ✗ (1.3.0+ Safari only) | EU bank redirect |
+| Bancontact | ✗ (1.3.0+ Safari only) | EU bank redirect |
+| Other regional | ✗ (1.3.0+ Safari only) | Most regional bank methods are redirect-based |
+
+In WKWebView (pre-1.3.0 SDK or in-app checkout sheet), the server silently drops redirect-based methods so the buyer doesn't see options that won't complete. In Safari (offer flows opened via `checkoutMode: .browser`), full method visibility is honored.
+
+## How It Applies
+
+The mode is fetched alongside your branding configuration on every `fetchProducts()` call. No SDK code change is required — pick the mode that fits your strategy and the checkout adapts.
+
+<Tip>
+Combine Payment Methods with [Checkout Branding](/iap/checkout-branding) for a fully customized buyer experience. Methods drive _what_ shows; branding drives _how it looks_.
+</Tip>
+
+## Related
+
+- [Checkout Branding](/iap/checkout-branding) — logo, icon, brand color
+- [Dashboard](/iap/dashboard) — overview of all configuration tabs
