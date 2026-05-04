@@ -50,8 +50,7 @@ Use `purchaseViaStoreKit()` to trigger a native StoreKit 2 purchase:
 ```swift
 do {
     let transaction = try await ZeroSettle.shared.purchaseViaStoreKit(
-        productId: "premium_monthly",
-        userId: currentUser.id
+        productId: "premium_monthly"
     )
     // transaction is a StoreKit.Transaction
     print("StoreKit purchase completed: \(transaction.id)")
@@ -88,10 +87,7 @@ struct ProductView: View {
             Button("Buy — \(product.webPrice.formatted)") {
                 selectedProduct = product
             }
-            .checkoutSheet(
-                item: $selectedProduct,
-                userId: currentUser.id
-            ) { result in
+            .checkoutSheet(item: $selectedProduct) { result in
                 handleResult(result)
             }
 
@@ -100,8 +96,7 @@ struct ProductView: View {
                 Button("Buy with App Store — \(skPrice.formatted)") {
                     Task {
                         try? await ZeroSettle.shared.purchaseViaStoreKit(
-                            productId: product.id,
-                            userId: currentUser.id
+                            productId: product.id
                         )
                     }
                 }
@@ -151,7 +146,7 @@ class PurchaseManager: ZeroSettleDelegate {
 Entitlements track where each purchase came from:
 
 ```swift
-let entitlements = try await ZeroSettle.shared.restoreEntitlements(userId: currentUser.id)
+let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 
 for entitlement in entitlements {
     switch entitlement.source {
@@ -201,7 +196,7 @@ token          = uuid5(namespace_app, user_id)
 - **`NAMESPACE_DNS`** — RFC 4122 §C.2 (`6ba7b810-9dad-11d1-80b4-00c04fd430c8`).
 - **`uuid5(namespace, name)`** — UUID version 5: `SHA-1(namespace.bytes ++ name.utf8) → first 16 bytes → set version=5, variant=10`. Standard library implementation in most languages (e.g., Python's `uuid.uuid5`, Node's `crypto.randomUUID` is **not** the right primitive — use a UUIDv5 library).
 - **`bundle_id`** — `Bundle.main.bundleIdentifier` on iOS (e.g., `com.example.MyApp`).
-- **`user_id`** — your app's user identifier as passed to `identify(userId:)`.
+- **`user_id`** — your app's user identifier as passed to `identify(.user(id:))`.
 
 If `user_id` is already a UUID, the SDK passes it through unchanged (no derivation) — RevenueCat-style integrations preserve their existing IDs.
 
