@@ -53,7 +53,7 @@ The SDK fetches your branding configuration automatically as part of `fetchProdu
 
 ```swift Swift
 // No branding code required — the SDK handles it.
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 // When the payment sheet is presented, your branding is already applied.
 ```
@@ -82,3 +82,7 @@ final catalog = await ZeroSettle.instance.fetchProducts(userId: user.id);
 </CodeGroup>
 
 If no branding is configured, the checkout uses ZeroSettle's default styling.
+
+## Related
+
+The Payment Methods configuration — choosing which methods (Card, Apple Pay, Klarna, etc.) appear at checkout — lives in a separate dashboard tab. See [Payment Methods](/iap/payment-methods) for the three modes (Automatic / Wallets-only / Custom) and the SDK 1.3.0+ requirement for Custom mode.
