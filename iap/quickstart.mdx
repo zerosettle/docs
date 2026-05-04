@@ -103,7 +103,7 @@ try await ZeroSettle.shared.identify(.deferred)
 |-----------|---------|-------------|
 | `publishableKey` | Required | Your publishable key from the dashboard |
 | `syncStoreKitTransactions` | `true` | Set to `false` if using RevenueCat |
-| `preloadCheckout` | `false` | Pre-create PaymentIntents on bootstrap for instant checkout. See [Preloading](/iap/preloading) |
+| `preloadCheckout` | `false` | Pre-create PaymentIntents during identify for instant checkout. See [Preloading](/iap/preloading) |
 | `maxPreloadedWebViews` | `nil` (no limit) | Cap WebView pre-rendering pool (iOS only). See [Preloading](/iap/preloading) |
 
 **Sandbox vs Live Mode**
