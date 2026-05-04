@@ -29,7 +29,7 @@ struct PaywallView: View {
         Button("Subscribe — \(product.webPrice.formatted)") {
             selectedProduct = product
         }
-        .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+        .checkoutSheet(item: $selectedProduct) { result in
             switch result {
             case .success(let transaction):
                 unlockContent(transaction.productId)
@@ -106,7 +106,7 @@ Add a custom header view above the checkout sheet to show product details, brand
 <CodeGroup>
 
 ```swift Swift
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id, header: {
+.checkoutSheet(item: $selectedProduct, header: {
     VStack(spacing: 8) {
         Image("premium-icon")
             .resizable()
@@ -168,7 +168,7 @@ struct PaywallView: View {
                 selectedProduct = product
             }
         }
-        .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+        .checkoutSheet(item: $selectedProduct) { result in
             handleResult(result)
         }
     }
@@ -210,7 +210,7 @@ Pass `dismissible: false` to prevent the user from swiping to dismiss the sheet.
 <CodeGroup>
 
 ```swift Swift
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id, dismissible: false) { result in
+.checkoutSheet(item: $selectedProduct, dismissible: false) { result in
     handleResult(result)
 }
 ```
@@ -251,10 +251,7 @@ You can also use `CheckoutSheet` as a standalone view, for example inside a `.sh
 
 ```swift Swift
 .sheet(item: $selectedProduct) { product in
-    CheckoutSheet(
-        product: product,
-        userId: currentUser.id
-    ) { result in
+    CheckoutSheet(product: product) { result in
         selectedProduct = nil
         handleResult(result)
     }
@@ -297,7 +294,6 @@ Or with a custom header:
 .sheet(item: $selectedProduct) { product in
     CheckoutSheet(
         product: product,
-        userId: currentUser.id,
         header: {
             Text("Premium Access")
                 .font(.title.bold())
@@ -351,8 +347,7 @@ Present the payment sheet from any view controller:
 ```swift Swift
 CheckoutSheet.present(
     from: self,
-    product: product,
-    userId: currentUser.id
+    product: product
 ) { result in
     switch result {
     case .success(let transaction):
@@ -396,7 +391,6 @@ You can also pass `dismissible: false`, or provide a preloaded `checkoutURL` and
 CheckoutSheet.present(
     from: self,
     product: product,
-    userId: currentUser.id,
     dismissible: false,
     checkoutURL: preloadedURL,
     transactionId: preloadedTransactionId
@@ -548,7 +542,7 @@ The `.checkoutSheet()` view modifier automatically preloads both the `PaymentInt
 
 ```swift Swift
 // The modifier handles preloading automatically — just use it as normal
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+.checkoutSheet(item: $selectedProduct) { result in
     handleResult(result)
 }
 ```
@@ -608,13 +602,10 @@ struct StoreView: View {
             .task {
                 // Products already fetched by configure() — warm up additional ones
                 for product in iap.products.prefix(3) {
-                    await CheckoutSheet.warmUp(
-                        productId: product.id,
-                        userId: currentUser.id
-                    )
+                    await CheckoutSheet.warmUp(productId: product.id)
                 }
             }
-            .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+            .checkoutSheet(item: $selectedProduct) { result in
                 handleResult(result)
             }
     }
@@ -672,16 +663,12 @@ For the direct `CheckoutSheet` init or UIKit's `present` method, you can preload
 
 ```swift Swift
 // Preload while the user browses
-let preloaded = await CheckoutSheet.preload(
-    productId: product.id,
-    userId: currentUser.id
-)
+let preloaded = await CheckoutSheet.preload(productId: product.id)
 
 // Later, pass the preloaded data to the direct init
 .sheet(item: $selectedProduct) { product in
     CheckoutSheet(
         product: product,
-        userId: currentUser.id,
         checkoutURL: preloaded?.checkoutURL,
         transactionId: preloaded?.transactionId
     ) { result in
@@ -725,14 +712,13 @@ For the `.checkoutSheet()` modifier, you can pass a `preload:` parameter to auto
 
 ```swift Swift
 // Preload all products
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id, preload: .all) { result in
+.checkoutSheet(item: $selectedProduct, preload: .all) { result in
     handleResult(result)
 }
 
 // Preload specific products
 .checkoutSheet(
     item: $selectedProduct,
-    userId: currentUser.id,
     preload: .specified(iap.products.prefix(3).map { $0 })
 ) { result in
     handleResult(result)
@@ -1171,7 +1157,7 @@ Pass `freeTrialDays` to offer a trial period before the first charge:
 <CodeGroup>
 
 ```swift Swift
-.checkoutSheet(item: $selectedProduct, userId: currentUser.id, freeTrialDays: 7) { result in
+.checkoutSheet(item: $selectedProduct, freeTrialDays: 7) { result in
     handleResult(result)
 }
 ```
