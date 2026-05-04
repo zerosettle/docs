@@ -55,8 +55,8 @@ ZeroSettle.shared.configure(.init(
     publishableKey: "zs_pk_test_..."
 ))
 
-// 2–3. Bootstrap fetches products and restores entitlements
-try await ZeroSettle.shared.bootstrap(userId: testUser.id)
+// 2–3. Identify the user, then fetch products and restore entitlements
+try await ZeroSettle.shared.identify(.user(id: testUser.id))
 
 // 4. Trigger purchase (payment sheet or Safari)
 // Use test card 4242 4242 4242 4242
@@ -67,9 +67,7 @@ func zeroSettleCheckoutDidComplete(transaction: ZSTransaction) {
 }
 
 // 6. Verify entitlements
-let entitlements = try await ZeroSettle.shared.restoreEntitlements(
-    userId: testUser.id
-)
+let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 print("Active: \(entitlements.filter { $0.isActive })")
 ```
 

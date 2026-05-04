@@ -22,14 +22,14 @@ Two options in `Configuration` control preloading behavior:
 ```swift
 ZeroSettle.shared.configure(.init(
     publishableKey: "your_live_key",
-    preloadCheckout: true,          // Pre-create PIs for all products on bootstrap
+    preloadCheckout: true,          // Pre-create PIs for all products on identify
     maxPreloadedWebViews: 3         // Cap WebView pool to 3 (nil = no limit)
 ))
 ```
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `preloadCheckout` | `false` | When `true`, `bootstrap()` calls `warmUpAll()` for every product |
+| `preloadCheckout` | `false` | When `true`, `identify(_:)` calls `warmUpAll()` for every product |
 | `maxPreloadedWebViews` | `nil` (no limit) | Caps the WebView pre-rendering pool. Set to `0` to disable WebView pre-rendering entirely (PI caching still works) |
 
 ## How It Works
@@ -86,16 +86,16 @@ The backend deduplicates pending PaymentIntents to avoid creating unnecessary St
 
 There are several ways to trigger preloading, from automatic to fully manual:
 
-### 1. Automatic via `bootstrap()`
+### 1. Automatic via `identify(_:)`
 
-When `preloadCheckout: true`, `bootstrap()` warms up **all** products after fetching the catalog:
+When `preloadCheckout: true`, `identify(_:)` warms up **all** products after fetching the catalog:
 
 ```swift
 ZeroSettle.shared.configure(.init(
     publishableKey: "your_live_key",
     preloadCheckout: true
 ))
-try? await ZeroSettle.shared.bootstrap(userId: currentUser.id)
+try? await ZeroSettle.shared.identify(.user(id: currentUser.id))
 // All products are now preloaded
 ```
 
@@ -189,7 +189,7 @@ CheckoutSheet.present(
 
 | Feature | Default | Opt-in |
 |---------|---------|--------|
-| PI preload on bootstrap | **OFF** | `preloadCheckout: true` |
+| PI preload on identify | **OFF** | `preloadCheckout: true` |
 | PI caching (5-min TTL) | **ON** | Built-in, no config needed |
 | Request coalescing | **ON** | Built-in, no config needed |
 | WebView pre-rendering | **ON** (no limit) | Cap with `maxPreloadedWebViews` |

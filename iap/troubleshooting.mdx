@@ -124,7 +124,7 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
   <Accordion title="User ID mismatch">
     Entitlements are tied to the `userId` passed during checkout. If you use a different user ID when restoring, the entitlements won't match.
 
-    **Fix:** Ensure the same `userId` is used consistently across `bootstrap()`, `checkoutSheet`, and `restoreEntitlements()`.
+    **Fix:** Ensure the same user identifier is used consistently across `identify(_:)` (iOS) / `bootstrap()` (Android/Flutter), `checkoutSheet`, and `restoreEntitlements()`.
   </Accordion>
 
   <Accordion title="Sandbox/Live environment mismatch">

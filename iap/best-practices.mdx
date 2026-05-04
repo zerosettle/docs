@@ -138,9 +138,7 @@ struct ContentView: View {
             }
         }
         .task {
-            entitlements = (try? await ZeroSettle.shared.restoreEntitlements(
-                userId: Auth.currentUser.id
-            )) ?? []
+            entitlements = (try? await ZeroSettle.shared.restoreEntitlements()) ?? []
             isLoading = false
         }
     }
@@ -250,7 +248,7 @@ class EntitlementCache {
 let cached = entitlementCache.load()
 updateUI(cached)
 
-let fresh = try await ZeroSettle.shared.restoreEntitlements(userId: userId)
+let fresh = try await ZeroSettle.shared.restoreEntitlements()
 entitlementCache.save(fresh)
 updateUI(fresh)
 ```
@@ -520,7 +518,7 @@ ElevatedButton(
 ### Preloading & Caching
 
 <Note>
-  Preloading and `warmUp()` are iOS-specific APIs. On Android, products are cached in the `ZeroSettle.products` StateFlow after calling `bootstrap()` or `fetchProducts()`. No additional preloading step is needed.
+  Preloading and `warmUp()` are iOS-specific APIs. On iOS, products are cached after calling `identify(_:)`. On Android, products are cached in the `ZeroSettle.products` StateFlow after calling `bootstrap()` or `fetchProducts()`. No additional preloading step is needed.
 </Note>
 
 The `.checkoutSheet()` modifier automatically preloads the `PaymentIntent` and `WKWebView` before presenting the sheet, so the checkout is fully rendered the moment it slides up.
@@ -873,9 +871,7 @@ Apple and Google require a way for users to restore purchases. Add a visible res
 Button("Restore Purchases") {
     Task {
         do {
-            let entitlements = try await ZeroSettle.shared.restoreEntitlements(
-                userId: Auth.currentUser.id
-            )
+            let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 
             if entitlements.isEmpty {
                 showMessage("No purchases found")
@@ -961,16 +957,16 @@ Choose a user ID that won't change:
 <CodeGroup>
 ```swift Swift
 // Good: Backend-generated UUID
-userId: user.id  // "usr_abc123"
+ZeroSettle.shared.identify(.user(id: user.id))  // "usr_abc123"
 
 // Good: Firebase UID
-userId: Auth.auth().currentUser?.uid ?? ""
+ZeroSettle.shared.identify(.user(id: Auth.auth().currentUser?.uid ?? ""))
 
 // Bad: Email (users can change it)
-userId: user.email
+ZeroSettle.shared.identify(.user(id: user.email))
 
 // Bad: Device identifier (changes on reinstall)
-userId: UIDevice.current.identifierForVendor?.uuidString ?? ""
+ZeroSettle.shared.identify(.user(id: UIDevice.current.identifierForVendor?.uuidString ?? ""))
 ```
 
 ```kotlin Kotlin
@@ -1233,9 +1229,7 @@ struct PaywallView: View {
     func loadProducts() {
         Task {
             do {
-                products = try await ZeroSettle.shared.fetchProducts(
-                    userId: Auth.currentUser.id
-                ).products
+                products = try await ZeroSettle.shared.fetchProducts().products
                 loadError = nil
             } catch {
                 loadError = error
@@ -1397,11 +1391,11 @@ await ZeroSettle.instance.configure(publishableKey: 'your_test_key');
 
 ### Fetch Products Once
 
-On iOS, call `bootstrap()` after `configure()` to fetch products and cache them in `ZeroSettle.shared.products`. On Android, call `bootstrap()` after `configure()` to fetch and cache products in the `ZeroSettle.products` StateFlow. There's no need for a separate fetch call or custom caching on either platform. Use `fetchProducts()` only for manual refresh (e.g., pull-to-refresh).
+On iOS, call `identify(_:)` after `configure()` to fetch products and cache them in `ZeroSettle.shared.products`. On Android, call `bootstrap()` after `configure()` to fetch and cache products in the `ZeroSettle.products` StateFlow. There's no need for a separate fetch call or custom caching on either platform. Use `fetchProducts()` only for manual refresh (e.g., pull-to-refresh).
 
 <CodeGroup>
 ```swift Swift
-// Products already fetched by bootstrap() — just use them
+// Products already fetched by identify(_:) — just use them
 let products = ZeroSettle.shared.products
 ```
 
@@ -1434,7 +1428,7 @@ final products = catalog.products;
   `warmUp()` and `PaymentIntent` preloading are iOS-specific APIs. On Android, products are cached in the `ZeroSettle.products` StateFlow after `bootstrap()` or `fetchProducts()` --- no additional warm-up step is needed.
 </Note>
 
-When you call `bootstrap()`, products are fetched and the first product's `PaymentIntent` is warmed up automatically. No separate calls are needed.
+When you call `identify(_:)` on iOS, products are fetched and the first product's `PaymentIntent` is warmed up automatically. No separate calls are needed.
 
 For manual control (e.g., warming up additional products or refreshing later), `fetchProducts()` and `warmUp()` are still available:
 
@@ -1446,7 +1440,7 @@ struct HomeView: View {
             // ...
         }
         .task {
-            // Products already fetched by bootstrap() — warm up additional products
+            // Products already fetched by identify(_:) — warm up additional products
             let products = ZeroSettle.shared.products
             for product in products.prefix(3) {
                 await CheckoutSheet.warmUp(

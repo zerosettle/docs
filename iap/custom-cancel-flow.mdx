@@ -49,8 +49,7 @@ if selectedOption?.triggersOffer == true, let offer = config.offer, offer.enable
 
 // 4. If user accepts the offer, apply it
 let result = try await ZeroSettle.shared.acceptSaveOffer(
-    productId: "premium_monthly",
-    userId: currentUser.id
+    productId: "premium_monthly"
 )
 // result.message = "40% off for 3 months"
 
@@ -170,7 +169,7 @@ await submitCancelFlowResponse({
 
 ## Configuration
 
-The cancel flow config is fetched automatically during `bootstrap()` — no extra network call is needed. Access it directly from the SDK.
+The cancel flow config is fetched automatically during `identify(_:)` (iOS) or `bootstrap()` (Android/Flutter) — no extra network call is needed. Access it directly from the SDK.
 
 <CodeGroup>
 
@@ -264,8 +263,7 @@ When a user selects a questionnaire option where `triggersOffer` is `true`, show
 ```swift Swift
 do {
     let result = try await ZeroSettle.shared.acceptSaveOffer(
-        productId: "premium_monthly",
-        userId: currentUser.id
+        productId: "premium_monthly"
     )
     showConfirmation(result.message) // "40% off for 3 months"
 } catch {
@@ -330,7 +328,6 @@ When a user selects a questionnaire option where `triggersPause` is `true`, show
 do {
     let resumesAt = try await ZeroSettle.shared.pauseSubscription(
         productId: "premium_monthly",
-        userId: currentUser.id,
         pauseOptionId: selectedPauseOption.id
     )
     if let resumesAt {
@@ -383,8 +380,7 @@ To resume a paused subscription early:
 
 ```swift Swift
 try await ZeroSettle.shared.resumeSubscription(
-    productId: "premium_monthly",
-    userId: currentUser.id
+    productId: "premium_monthly"
 )
 ```
 
@@ -403,7 +399,6 @@ If the user completes the questionnaire and still wants to cancel:
 ```swift Swift
 try await ZeroSettle.shared.cancelSubscription(
     productId: "premium_monthly",
-    userId: currentUser.id,
     immediate: false // Cancel at period end (default)
 )
 ```
