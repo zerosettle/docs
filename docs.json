@@ -55,6 +55,7 @@
                 "pages": [
                   "iap/dashboard",
                   "iap/checkout-branding",
+                  "iap/payment-methods",
                   "iap/stripe-catalog",
                   "iap/cancel-flow",
                   "iap/campaigns"
