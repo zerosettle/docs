@@ -118,7 +118,7 @@ await ZeroSettle.transferStoreKitOwnershipToCurrentUser('premium_monthly');
 ```
 
 ```dart Flutter
-await ZeroSettle.instance.identify(userId: currentUser.id);
+await ZeroSettle.instance.bootstrap(userId: currentUser.id);
 await ZeroSettle.instance.transferStoreKitOwnershipToCurrentUser(
   productId: 'premium_monthly',
 );
