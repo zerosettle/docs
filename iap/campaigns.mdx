@@ -37,7 +37,7 @@ The SDK returns campaign data in `ProductCatalog.config.migration` (legacy) and 
 
 <CodeGroup>
 ```swift Swift (Unified Offer)
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 // Preferred: unified offer field (handles migration + upgrades)
 if let offer = catalog.config?.offer {
@@ -47,7 +47,7 @@ if let offer = catalog.config?.offer {
 ```
 
 ```swift Swift (Legacy Migration)
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 if let migration = catalog.config?.migration {
     // Show migration prompt to eligible users
@@ -87,7 +87,7 @@ After a successful migration purchase, track the conversion:
 
 <CodeGroup>
 ```swift Swift
-try await ZeroSettle.shared.trackMigrationConversion(userId: user.id)
+try await ZeroSettle.shared.trackMigrationConversion()
 ```
 
 ```kotlin Kotlin

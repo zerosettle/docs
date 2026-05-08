@@ -121,7 +121,7 @@ Your publishable key prefix determines the mode:
 If you need to refresh products later, you can fetch them manually:
 
 ```swift
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: currentUser.id)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 for product in catalog.products {
     print("\(product.displayName): \(product.webPrice.formatted)")
