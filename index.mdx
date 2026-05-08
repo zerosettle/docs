@@ -100,11 +100,11 @@ import ZeroSettleKit
 // Configure once
 ZeroSettle.shared.configure(.init(publishableKey: "your_key"))
 
-// Fetch your product catalog
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+// Identify the user — fetches the product catalog and restores entitlements
+let catalog = try await ZeroSettle.shared.identify(.user(id: user.id))
 
 // Show the payment sheet
-.checkoutSheet(item: $selectedProduct, userId: user.id) { result in
+.checkoutSheet(item: $selectedProduct) { result in
     // Done. That's it.
 }
 ```

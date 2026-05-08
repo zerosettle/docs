@@ -117,7 +117,7 @@ There are three checkout modes, controlled server-side via remote config:
 <CodeGroup>
 
 ```swift Swift
-.checkoutSheet(item: $selectedProduct, userId: user.id) { result in
+.checkoutSheet(item: $selectedProduct) { result in
     switch result {
     case .success(let transaction):
         print("Purchased: \(transaction.productId)")

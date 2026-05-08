@@ -158,7 +158,7 @@ Lowered the minimum deployment target from iOS 17.4 to iOS 17.0, expanding devic
 Added an `onPresent` callback to the `checkoutSheet` modifier, letting you know when the payment sheet is actually visible:
 
 ```swift
-.checkoutSheet(item: $product, userId: user.id) {
+.checkoutSheet(item: $product) {
     // Custom header
 } onPresent: {
     // Sheet is now visible — track analytics
