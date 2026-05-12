@@ -121,6 +121,18 @@
             ]
           },
           {
+            "group": "Android SDK",
+            "icon": "android",
+            "pages": [
+              "sdk/android/quickstart",
+              "sdk/android/offers",
+              "sdk/android/pending-actions",
+              "sdk/android/sync-queue",
+              "sdk/android/acknowledgement-model",
+              "sdk/android/migration-from-v0"
+            ]
+          },
+          {
             "group": "Escrow Services",
             "pages": [
               "skill-escrow/overview",

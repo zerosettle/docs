@@ -1,0 +1,91 @@
+---
+title: 'Android Quickstart'
+description: 'Add the ZeroSettle Android SDK and make your first purchase'
+icon: 'android'
+---
+
+<Note>
+  The Android SDK v1.0.0 is a ground-up rewrite mirroring the current iOS ZeroSettleKit API. **v0.15.x is yanked.** Requires **Android API 23+** and **Kotlin 2.1+**.
+</Note>
+
+## Install
+
+```kotlin
+dependencies {
+    implementation("io.zerosettle:zerosettle-android:1.0.0")        // headless core
+    implementation("io.zerosettle:zerosettle-android-ui:1.0.0")     // optional Compose components
+}
+```
+
+`:core` is pure Kotlin + coroutines + OkHttp + Play Billing + DataStore (no Compose). Add `:ui` only if you want the drop-in Compose components.
+
+## Configure
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        ZeroSettle.configure(
+            this,
+            ZeroSettleConfig(publishableKey = "zs_pk_live_…"),  // zs_pk_test_… = sandbox
+        )
+    }
+}
+```
+
+The publishable-key prefix is the only sandbox/live signal — there is no separate flag.
+
+## Identify the user
+
+```kotlin
+lifecycleScope.launch {
+    ZeroSettle.identify(Identity.User(id = appUserId, name = displayName, email = email))
+}
+```
+
+`id` need not be a UUID — the SDK derives a deterministic UUIDv5 `appAccountToken` from it, matching the iOS and backend derivation byte-for-byte. `identify()` bootstraps: sync Play purchases, fetch products, restore entitlements. Use `Identity.Anonymous` for a stable per-install UUID, or `Identity.Deferred` to defer (suppresses the "no identity" warning).
+
+## Fetch products & purchase
+
+```kotlin
+val catalog = ZeroSettle.fetchProducts().getOrThrow()
+
+// Web checkout (Stripe, in a Custom Tab — Google Pay surfaces automatically):
+ZeroSettle.purchase(activity, productId = "pro_monthly")
+
+// Native Play Billing:
+ZeroSettle.purchaseViaPlayBilling(activity, productId = "pro_monthly")
+```
+
+For web checkout, add the return deep link to your manifest and forward it back:
+
+```xml
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="zerosettle" android:host="checkout" />
+</intent-filter>
+```
+
+```kotlin
+override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    intent.data?.toString()?.let { lifecycleScope.launch { ZeroSettle.completeWebCheckout(it) } }
+}
+```
+
+## Observe entitlements
+
+```kotlin
+ZeroSettle.entitlements.collect { ents -> /* StateFlow<List<Entitlement>> */ }
+ZeroSettle.events.collect { e -> /* structured ZeroSettleEvent */ }
+fun isPro() = ZeroSettle.hasActiveEntitlement("pro_monthly")
+```
+
+## Next
+
+- [Offers](/sdk/android/offers) — Switch & Save migrations + upgrades.
+- [Pending actions](/sdk/android/pending-actions) — backend-initiated prompts.
+- [Sync queue](/sdk/android/sync-queue) and the [acknowledgement model](/sdk/android/acknowledgement-model).
+- [Migrating from v0](/sdk/android/migration-from-v0).

@@ -1,0 +1,20 @@
+---
+title: 'Acknowledgement Model (Android)'
+description: 'How and when the SDK acknowledges Play Billing purchases'
+icon: 'circle-check'
+---
+
+Google Play **auto-refunds an unacknowledged purchase after 3 days** — unlike Apple's `Transaction.finish()`, which has no such deadline. The ZeroSettle Android SDK manages acknowledgement for you, balancing "don't acknowledge something we haven't validated" against "don't let a backend outage cost the developer the sale".
+
+## The rules
+
+1. **Backend confirms ownership (`owned = true`)** → the SDK acknowledges immediately.
+2. **Backend fails (5xx / timeout)** → the SDK does **not** acknowledge; it enqueues the purchase to the [persistent sync queue](/sdk/android/sync-queue) and Play redelivers it.
+3. **Queued purchase failing for >24h, `strictAck = false` (default)** → the SDK **defensive-acks** it. The user already paid; acking avoids the 3-day auto-refund. The row stays queued so the SDK keeps trying to sync the entitlement.
+4. **`strictAck = true`** → the SDK *never* acknowledges without backend validation. A purchase that can't sync within the 5-attempt schedule emits a terminal `ZeroSettleEvent.SyncFailed` and is left for Play to auto-refund. Opt in only if you'd rather refund than risk granting an unvalidated entitlement.
+5. **Backend says `not owned` / ownership conflict** → the SDK does **not** acknowledge; it surfaces a `PendingClaim` (another ZeroSettle user owns this purchase — resolve via `transferPlayOwnershipToCurrentUser`).
+6. **Subscription state `CANCELED` (state 6) with a future expiry** → access is still granted (the period runs out) but the SDK skips the acknowledgement step for it.
+
+## Defaults
+
+`strictAck` defaults to `false` — i.e., the SDK *will* defensive-ack after 24h. This matches the "developer keeps the sale" expectation; flip it only if your risk model prefers refunds over unvalidated grants.

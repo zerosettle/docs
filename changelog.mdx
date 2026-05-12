@@ -17,6 +17,22 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## May 2026
 
+<Update label="Android" description="2026-05-11">
+### Android SDK v1.0.0 — ground-up rebuild
+
+The Android SDK has been rebuilt from scratch at **v1.0.0**, mirroring the current iOS ZeroSettleKit API. **v0.15.x is yanked from Maven Central.**
+
+- New artifacts: `io.zerosettle:zerosettle-android:1.0.0` (headless core) + `io.zerosettle:zerosettle-android-ui:1.0.0` (optional Compose components).
+- `Identity` sealed class (`User` / `Anonymous` / `Deferred`); `identify()`-then-parameterless API surface (no per-userId overloads).
+- Unified `OfferManager` with auto-bookkeeping (migration + upgrade, incl. the Android-new `PLAY_TO_WEB` Switch & Save flow). No migration-specific manager.
+- Native Play Billing origination with a persistent sync queue (the Android `StoreKitSyncQueue`); SDK-led acknowledgement after backend confirmation; defensive ack after 24h when `strictAck` is off (default).
+- First consumer of the `pending_actions[]` surface on `GET /v1/iap/entitlements/` (`MigrationCompletedInfo` / `ManualPlayCancel`).
+- Structured `events: SharedFlow<ZeroSettleEvent>` + pluggable `ZeroSettleLogger`; minSdk 23; Kotlin 2.1; coroutines/Flow async model.
+- Google Pay surfaces automatically inside the Stripe Payment Element on web checkout (no bespoke GPay button).
+
+See the [Android SDK guide](/sdk/android/quickstart).
+</Update>
+
 <Update label="API" description="2026-05-11">
 ### Switch & Save: Play Store support
 

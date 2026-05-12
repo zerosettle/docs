@@ -1,0 +1,29 @@
+---
+title: 'Play Sync Queue (Android)'
+description: 'How the persistent Play purchase sync queue works'
+icon: 'list-check'
+---
+
+When `syncPlayPurchases` is on (the default), the SDK installs a `PurchasesUpdatedListener` and forwards every Play Billing purchase to `POST /v1/iap/play-store-transactions/`. If that sync fails (backend 5xx / timeout), the purchase is enqueued to a **DataStore-backed persistent queue** — the Android equivalent of iOS's `StoreKitSyncQueue` — and retried later. The purchase is left **unacknowledged** so Play redelivers it on the next launch even if the queue is lost.
+
+## Retry schedule
+
+`[1s, 5s, 30s, 5m]` with a **5-attempt cap**. After the schedule exhausts:
+
+- `strictAck = false` (default) → the SDK **defensive-acks** the purchase 24h in (the user already paid; acking avoids Play's 3-day auto-refund) and keeps the row so it keeps trying to sync.
+- `strictAck = true` → the SDK never acks without backend validation and emits a terminal `ZeroSettleEvent.SyncFailed(terminal = true)`.
+
+## Drain triggers
+
+The queue drains:
+- on launch (after `identify()` bootstraps),
+- when network connectivity is regained,
+- after each new purchase event.
+
+`logout()` clears the queue.
+
+## Inspecting it
+
+`ZeroSettle.playSyncQueueDepthForDebug()` returns the current queue depth (debug-only; not part of the supported product surface). The `:sample` app's Debug screen uses it.
+
+See also the [acknowledgement model](/sdk/android/acknowledgement-model).

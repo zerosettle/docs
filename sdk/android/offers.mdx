@@ -1,0 +1,50 @@
+---
+title: 'Offers (Android)'
+description: 'Switch & Save migrations and subscription upgrades with the unified OfferManager'
+icon: 'tags'
+---
+
+The Android SDK exposes a single `OfferManager` for **both** Switch & Save migrations (Play→web, StoreKit→web) and subscription upgrades. It's a pure state machine with auto-bookkeeping — you call `evaluate()` / `acceptOffer()` / `dismiss()` and it runs every transition internally.
+
+## State machine
+
+```
+LOADING → INELIGIBLE
+        → PRESENTED → ACCEPTED → COMPLETED
+                    → DISMISSED
+```
+
+```kotlin
+val mgr = ZeroSettle.offerManager()        // throws if identify() hasn't run
+mgr.evaluate()                              // checks GET /v1/iap/user-offer/
+mgr.state.collect { /* OfferManager.OfferState */ }
+mgr.offerData.collect { /* server-provided title / message / CTA / disclosure text */ }
+```
+
+`evaluate()` returns `INELIGIBLE` if the offer was dismissed (dismissals persist per-userId), the user has no eligible store subscription, or the backend says so.
+
+## Accepting
+
+```kotlin
+val result = mgr.acceptOffer()
+```
+
+- **Play→web migration** — creates a web checkout carrying the active Play purchase token (so the backend can cancel that Play sub), launches it, goes to `ACCEPTED`. When the checkout completes, call `mgr.onWebCheckoutSucceeded()` — it records the conversion (`source: play_store`) and waits on the Play sub's auto-renew to flip off (the backend cancels it; the SDK never does) before `COMPLETED`. The user keeps Play access for the period they already paid for.
+- **`PLAY_TO_WEB` upgrade** — same shape as a Play migration.
+- **Web→web upgrade** (`upgradeType == WEB_TO_WEB`) — no WebView; executes the server-side plan switch and jumps straight to `COMPLETED`.
+
+## Drop-in UI
+
+```kotlin
+ZeroSettleOfferTip(offerManager = mgr)   // :ui module — handles all bookkeeping
+```
+
+`ZeroSettleOfferTip` renders the offer banner from `offerData`, calls `acceptOffer()` / `dismiss()` for you, and hides itself when the manager isn't `PRESENTED`. For custom UI, drive the headless `OfferManager` directly — `mgr.checkoutUrl()` returns the checkout URL (or `null` for web→web) so you can present your own WebView.
+
+## Retryable errors
+
+A `503 PLAY_API_UNREACHABLE` from the checkout (Play Developer API briefly down) surfaces as `ZeroSettleError.PlayApiUnreachable` on `mgr.checkoutError` and leaves the manager `PRESENTED` so the host can retry. `disclosureText` on the offer carries any required billing disclosure (e.g., "You'll be billed via Google Pay").
+
+## Conversion tracking
+
+If you build a fully custom flow without `OfferManager`, call `ZeroSettle.trackMigrationConversion(source = Offer.SourceStorefront.PLAY_STORE)` after the web checkout succeeds.

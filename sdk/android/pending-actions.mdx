@@ -1,0 +1,40 @@
+---
+title: 'Pending Actions (Android)'
+description: 'Backend-initiated prompts surfaced via the pending_actions[] entitlements extension'
+icon: 'bell'
+---
+
+<Note>
+  Android is the **first consumer** of the `pending_actions[]` surface; iOS adopts it later. The wire contract lives on `GET /v1/iap/entitlements/`.
+</Note>
+
+`pending_actions[]` lets the backend ask the app to surface a one-off prompt — e.g., "your Switch & Save migration completed" or "cancel your old Play subscription manually". The SDK decodes them into a typed `PendingAction` sealed class and publishes a `StateFlow`.
+
+```kotlin
+ZeroSettle.pendingActions.collect { actions -> /* List<PendingAction> */ }
+```
+
+## Action types
+
+- **`PendingAction.MigrationCompletedInfo`** — informational. Carries `playAccessEndsAtIso`, the new subscription's price / currency / interval. Show a one-time info card; "Got it" → `ZeroSettle.dismissPendingAction(action)`.
+- **`PendingAction.ManualPlayCancel`** — the backend couldn't cancel the user's Play subscription programmatically; the user must do it. Carries `deepLink` (the Play subscriptions page) and `expiresAtIso`. Show a banner: "Cancel on Google Play" → open `deepLink` via an `ACTION_VIEW` intent; "Later" → just hide the banner — it re-appears on the next poll until Play sends the cancel RTDN, so **do not** call `dismissPendingAction` for the "Later" action.
+
+Unknown action types are logged (via `ZeroSettleLogger`) and ignored — forward-compatible.
+
+## Poll cadence
+
+The entitlement poller refreshes `pending_actions[]` on foreground, after a purchase, and every ~5 minutes.
+
+## Drop-in UI
+
+```kotlin
+ZeroSettle.pendingActions.collectAsState().value.firstOrNull()?.let { action ->
+    ZeroSettlePendingActionBanner(
+        action = action,
+        onDeepLink = { url -> ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+        onDismiss = { a -> scope.launch { ZeroSettle.dismissPendingAction(a) } },  // for the "Got it" / explicit-dismiss case
+    )
+}
+```
+
+`ZeroSettlePendingActionBanner` (the `:ui` module) renders both action types with the right buttons.

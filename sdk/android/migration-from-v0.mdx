@@ -1,0 +1,36 @@
+---
+title: 'Migrating from v0.x (Android)'
+description: 'API mapping from the yanked v0.15.x Android SDK to v1.0.0'
+icon: 'arrows-rotate'
+---
+
+<Note>
+  v0.15.x is **yanked** from Maven Central. There were no active production customers on it, so for most teams "migration" means "delete the old dependency, follow the [Quickstart](/sdk/android/quickstart)". This page is a reference for the symbol changes.
+</Note>
+
+## Coordinates
+
+| v0.15.x | v1.0.0 |
+|---|---|
+| `com.zerosettle:android-sdk` (single artifact) | `io.zerosettle:zerosettle-android` (headless core) + `io.zerosettle:zerosettle-android-ui` (optional Compose) |
+
+## API mapping
+
+| v0.x | v1.0 |
+|---|---|
+| `ZeroSettle.configure(publishableKey, userId)` and per-`userId` method overloads | `ZeroSettle.configure(context, ZeroSettleConfig(...))` then `ZeroSettle.identify(Identity.User(id = ...))` — no per-userId overloads |
+| string user id passed everywhere | `Identity` sealed class: `User(id, name?, email?)` / `Anonymous` / `Deferred` |
+| `ZSMigrationManager` (migration-specific) | unified `OfferManager` (migration **and** upgrade) |
+| `ZSMigrationManager.present()` | `OfferManager.evaluate()` then `acceptOffer()` |
+| `ZSMigrationManager.markCheckoutSucceeded()` | `OfferManager.onWebCheckoutSucceeded()` |
+| `MigrationTipView` | `ZeroSettleOfferTip` (`:ui`) |
+| callback-based listeners | coroutines / `StateFlow` / `SharedFlow` (`entitlements`, `products`, `pendingActions`, `events`, …) |
+| n/a (no Play Billing origination) | `purchaseViaPlayBilling()` + persistent `PlaySyncQueue` |
+| n/a | `pendingActions` (`PendingAction.MigrationCompletedInfo` / `ManualPlayCancel`); `dismissPendingAction()` |
+| `appAccountToken` not derived | `recommendedAppAccountToken()` — deterministic UUIDv5, parity with iOS + backend |
+
+## Behavioural changes
+
+- minSdk raised to 23; Kotlin 2.1.
+- Sandbox vs live is signalled purely by the publishable-key prefix (`zs_pk_test_` vs `zs_pk_live_`) — no separate flag.
+- Google Pay surfaces automatically inside the Stripe Payment Element on web checkout — there is no bespoke Google Pay button.
