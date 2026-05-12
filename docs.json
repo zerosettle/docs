@@ -159,7 +159,8 @@
             "pages": [
               "api-reference/endpoint/create-payment-intent",
               "api-reference/endpoint/create-payment-intent-batch",
-              "api-reference/endpoint/create-checkout-session"
+              "api-reference/endpoint/create-checkout-session",
+              "api-reference/endpoint/create-checkout-config"
             ]
           },
           {
@@ -210,7 +211,8 @@
           {
             "group": "Migration",
             "pages": [
-              "api-reference/endpoint/migration-converted"
+              "api-reference/endpoint/migration-converted",
+              "api-reference/endpoint/dismiss-migration-action"
             ]
           },
           {

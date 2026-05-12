@@ -60,6 +60,31 @@ sequenceDiagram
   After switching, the user has **two active entitlements** temporarily — the existing StoreKit subscription (running out its paid period) and the new web checkout subscription. This overlap is intentional: the user already paid Apple for the current period and shouldn't lose access early. The StoreKit entitlement expires naturally.
 </Note>
 
+## Play Store
+
+Switch & Save also works for **Google Play Billing** subscribers on Android. The user flow mirrors the StoreKit flow — the subscriber switches to discounted web billing, keeps Play access until their current period ends, and the old Play subscription is cancelled — with one key difference: after the web checkout succeeds, **ZeroSettle's backend cancels the Play subscription programmatically** via the Play Developer API (StoreKit can't be cancelled server-side, so Apple users have to do it themselves in iOS Settings).
+
+<Steps>
+  <Step title="Enable Google Pay in Stripe">
+    Play → web migrations charge through Stripe, so your connected Stripe account must have **Google Pay** enabled. Turn it on under **Settings → Payment methods → Wallets** in your Stripe Dashboard. Without it, the payment sheet falls back to card entry on Android.
+  </Step>
+  <Step title="Configure Real-time Developer Notifications (RTDN)">
+    RTDN must be wired up for your Play app (this is the same prerequisite as the [Play Billing integration](/iap/play-billing-integration)). The backend uses the `SUBSCRIPTION_CANCELED` RTDN to reconcile the post-migration cancellation, and a periodic sweep as a backstop if an RTDN is missed.
+  </Step>
+  <Step title="The backend cancels the Play subscription (best-effort)">
+    On `payment_intent.succeeded`, ZeroSettle calls `subscriptionsv2.cancel` for the user's old Play subscription, with retries. If the cancellation can't be completed (e.g., Play returns a permanent error, or it keeps failing), the transaction is flagged for **manual intervention** instead of silently failing.
+  </Step>
+  <Step title="The SDK surfaces a fallback banner when needed">
+    When the backend couldn't cancel the Play subscription, [`GET /iap/entitlements/`](/api-reference/endpoint/get-entitlements) returns a `manual_play_cancel` entry in `pending_actions[]`. The SDK renders a banner with a deep link to the Play Store subscriptions screen so the user can cancel it themselves. The user keeps their new web subscription regardless. The SDK dismisses the banner via [`POST /iap/migration-actions/{transaction_id}/dismiss/`](/api-reference/endpoint/dismiss-migration-action) once the user acts on it.
+  </Step>
+</Steps>
+
+<Note>
+  Just like the Apple flow, the user keeps their **Play Store access until the current billing period ends** — the old Play subscription isn't revoked early. After it expires, the web subscription is the only active one. Right after migration the SDK also surfaces a one-time `migration_completed_info` banner explaining this.
+</Note>
+
+The discount, copy, tenure, and rollout for the Play campaign are configured in the [dashboard Switch & Save campaign](/iap/dashboard#migration-campaigns), the same as the Apple campaign — campaigns carry a platform (Apple, Google, or both).
+
 ## Usage
 
 <CodeGroup>

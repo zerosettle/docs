@@ -714,13 +714,21 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "entitlements"
+                    "entitlements",
+                    "pending_actions"
                   ],
                   "properties": {
                     "entitlements": {
                       "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/Entitlement"
+                      }
+                    },
+                    "pending_actions": {
+                      "type": "array",
+                      "description": "Additive (introduced 2026-05-11). One-time action prompts for this user \u2014 currently only emitted after a Play Store Switch & Save migration. Always present; usually `[]`. SDK clients that don't read it are unaffected.",
+                      "items": {
+                        "$ref": "#/components/schemas/PendingAction"
                       }
                     }
                   }
@@ -852,6 +860,15 @@
                   "variant_id": {
                     "type": "integer",
                     "description": "The experiment variant ID, if the migration campaign is part of an A/B test."
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "store_kit",
+                      "play_store"
+                    ],
+                    "default": "store_kit",
+                    "description": "Additive (introduced 2026-05-11). The storefront the user migrated *from*. Defaults to `store_kit`; pass `play_store` for a Play Store \u2192 web migration. Behavior is unchanged when omitted."
                   }
                 }
               }
@@ -1620,6 +1637,194 @@
           }
         }
       }
+    },
+    "/iap/checkout-configs": {
+      "post": {
+        "operationId": "createCheckoutConfig",
+        "summary": "Create Checkout Config",
+        "description": "Deferred-mode checkout warmup. Returns a checkout configuration the SDK uses to present the payment sheet without making Stripe API calls until the buyer taps to pay. For a Play Store \u2192 web Switch & Save migration, pass the user's existing Play `purchase_token` so the backend can pre-flight the Play subscription, align the new web subscription's free trial to the remaining Play period, and stash the token for the post-migration Play cancellation.",
+        "tags": [
+          "Checkout"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "product_id"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The user's external ID."
+                  },
+                  "product_id": {
+                    "type": "string",
+                    "description": "Reference ID of the product being purchased."
+                  },
+                  "stripe_customer_id": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Optional existing Stripe Customer ID (`cus_...`) to attach the checkout to."
+                  },
+                  "play_purchase_token": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Additive (introduced 2026-05-11). The Play purchase token of the user's current subscription, for a Play \u2192 web Switch & Save migration. When provided, the backend pre-flights the Play subscription via the Play Developer API; transient Play API failures return `503` (see responses)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, or the Play package / credentials are misconfigured. For Play pre-flight failures the body includes an `error_code`: `PLAY_PACKAGE_NOT_FOUND` (Play returned 404) or `PLAY_CREDENTIAL_UNAUTHORIZED` (Play returned 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "description": "Additive (introduced 2026-05-11). The Play Developer API was transiently unreachable during the migration pre-flight check. Retry after `retry_after_seconds`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "error_code"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "service_temporarily_unavailable"
+                    },
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "PLAY_API_UNREACHABLE"
+                      ]
+                    },
+                    "retry_after_seconds": {
+                      "type": "integer",
+                      "example": 60
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/migration-actions/{transaction_id}/dismiss": {
+      "post": {
+        "operationId": "dismissMigrationAction",
+        "summary": "Dismiss Migration Action",
+        "description": "Dismisses a one-time `pending_action` banner (see `GET /iap/entitlements/`) so it doesn't re-surface. The SDK calls this when the user dismisses a `migration_completed_info` banner or completes a `manual_play_cancel`. Introduced 2026-05-11 with Play Store Switch & Save support.",
+        "tags": [
+          "Migration"
+        ],
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "description": "The migration transaction ID from the `pending_action` (`zs_txn_...`).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "action_type"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The user's external ID. Must match the transaction's identity."
+                  },
+                  "action_type": {
+                    "type": "string",
+                    "enum": [
+                      "info_banner_dismissed",
+                      "manual_play_cancel_completed"
+                    ],
+                    "description": "Which pending action is being dismissed. `info_banner_dismissed` for a `migration_completed_info` banner; `manual_play_cancel_completed` once the user has cancelled their Play subscription."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Action dismissed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "The `user_id` does not match the transaction's identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2365,11 +2570,24 @@
       "Offer": {
         "type": "object",
         "description": "Unified offer payload for migration and upgrade flows.",
-        "required": ["flow_type", "product_id", "eligible_product_ids", "savings_percent", "display", "free_trial_days", "min_subscription_days", "max_subscription_days", "rollout_percent"],
+        "required": [
+          "flow_type",
+          "product_id",
+          "eligible_product_ids",
+          "savings_percent",
+          "display",
+          "free_trial_days",
+          "min_subscription_days",
+          "max_subscription_days",
+          "rollout_percent"
+        ],
         "properties": {
           "flow_type": {
             "type": "string",
-            "enum": ["migration", "upgrade"],
+            "enum": [
+              "migration",
+              "upgrade"
+            ],
             "description": "The type of offer flow."
           },
           "product_id": {
@@ -2378,7 +2596,9 @@
           },
           "eligible_product_ids": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Product IDs the user might currently have."
           },
           "savings_percent": {
@@ -2407,7 +2627,10 @@
           },
           "upgrade_type": {
             "type": "string",
-            "enum": ["storekit_to_web", "web_to_web"],
+            "enum": [
+              "storekit_to_web",
+              "web_to_web"
+            ],
             "nullable": true,
             "description": "Upgrade subtype. Only present when flow_type is upgrade."
           },
@@ -2433,16 +2656,37 @@
           },
           "checkout_presentation": {
             "type": "string",
-            "enum": ["inline", "sheet"],
+            "enum": [
+              "inline",
+              "sheet"
+            ],
             "nullable": true,
             "description": "How the SDK presents checkout: inline within tip card or overlay sheet."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "play_store",
+              "store_kit"
+            ],
+            "nullable": true,
+            "description": "Additive (introduced 2026-05-11). The storefront the user's *current* subscription lives on, when an offer is present. `play_store` for a Play \u2192 web Switch & Save offer, `store_kit` for an Apple \u2192 web offer. Absent when there is no offer. Clients that don't read it are unaffected."
           }
         }
       },
       "OfferDisplay": {
         "type": "object",
         "description": "Server-configurable copy for every tip card state. Empty strings mean the SDK should use its hardcoded defaults.",
-        "required": ["offer_title", "offer_message", "offer_cta", "accepted_title", "accepted_message", "accepted_cta", "completed_title", "completed_message"],
+        "required": [
+          "offer_title",
+          "offer_message",
+          "offer_cta",
+          "accepted_title",
+          "accepted_message",
+          "accepted_cta",
+          "completed_title",
+          "completed_message"
+        ],
         "properties": {
           "offer_title": {
             "type": "string",
@@ -2493,6 +2737,101 @@
         },
         "required": [
           "error"
+        ]
+      },
+      "PendingAction": {
+        "description": "A one-time, app-surfaced action prompt returned by `GET /iap/entitlements/`. Currently emitted only after a Play Store \u2192 web checkout Switch & Save migration. The SDK renders these as banners and dismisses them via `POST /iap/migration-actions/{transaction_id}/dismiss/`.",
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "Migration completed info",
+            "description": "One-time info banner shown after a successful Play \u2192 web migration. Tells the user their Play Store access continues until the previous billing period ends.",
+            "required": [
+              "type",
+              "transaction_id"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "migration_completed_info"
+                ]
+              },
+              "transaction_id": {
+                "type": "string",
+                "description": "The web checkout transaction created by the migration (`zs_txn_...`)."
+              },
+              "play_access_ends_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true,
+                "description": "When the user's existing Play Store subscription period ends. Null if not yet known."
+              },
+              "new_subscription_price": {
+                "type": "object",
+                "description": "The price of the new web subscription the user switched to.",
+                "properties": {
+                  "amount_cents": {
+                    "type": "integer"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "example": "USD"
+                  },
+                  "billing_interval": {
+                    "type": "string",
+                    "example": "month"
+                  }
+                }
+              },
+              "user_message": {
+                "type": "string",
+                "description": "Server-provided copy the SDK displays in the banner."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "Manual Play cancel",
+            "description": "Shown when the backend could not programmatically cancel the user's previous Play Store subscription after migration. `deep_link` opens the Play Store subscriptions screen so the user can cancel it themselves. The user keeps their new web subscription regardless.",
+            "required": [
+              "type",
+              "transaction_id",
+              "deep_link"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "manual_play_cancel"
+                ]
+              },
+              "transaction_id": {
+                "type": "string",
+                "description": "The web checkout transaction created by the migration (`zs_txn_...`)."
+              },
+              "original_play_purchase_token": {
+                "type": "string",
+                "description": "The Play purchase token of the subscription the user should cancel."
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true,
+                "description": "When the existing Play subscription period ends. Null if not yet known."
+              },
+              "deep_link": {
+                "type": "string",
+                "format": "uri",
+                "description": "URL that opens the Google Play subscriptions screen for this package.",
+                "example": "https://play.google.com/store/account/subscriptions?package=com.example.app"
+              },
+              "user_message": {
+                "type": "string",
+                "description": "Server-provided copy the SDK displays in the banner."
+              }
+            }
+          }
         ]
       }
     },

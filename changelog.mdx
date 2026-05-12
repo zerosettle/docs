@@ -15,6 +15,24 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ---
 
+## May 2026
+
+<Update label="API" description="2026-05-11">
+### Switch & Save: Play Store support
+
+Switch & Save now works for **Google Play Billing** subscribers, not just Apple StoreKit. The user flow is the same — switch to discounted web billing, keep store access until the current period ends, old subscription gets cancelled — but the backend cancels the Play subscription programmatically via the Play Developer API (with a manual-cancel fallback the SDK surfaces as a banner). Developers need **Google Pay enabled** in their Stripe Dashboard and **RTDN configured** (the same prerequisite as the [Play Billing integration](/iap/play-billing-integration)). See [Switch & Save → Play Store](/iap/switch-and-save#play-store).
+
+All `/iap/*` changes are additive — existing iOS, Android, and Flutter SDK clients are unaffected.
+
+- **New endpoint**: [`POST /iap/migration-actions/{transaction_id}/dismiss/`](/api-reference/endpoint/dismiss-migration-action) — dismisses a one-time `pending_action` banner so it doesn't re-surface. Body: `{ "user_id", "action_type" }` where `action_type` is `info_banner_dismissed` or `manual_play_cancel_completed`. Auth via `X-ZeroSettle-Key`. Returns `{ "ok": true }`.
+- **`GET /iap/entitlements/`** now returns an additive `pending_actions: PendingAction[]` array (always present, usually `[]`). After a Play → web migration it may carry a `migration_completed_info` info banner and/or — if the backend couldn't cancel the Play subscription — a `manual_play_cancel` banner with a deep link to the Play subscriptions screen.
+- **`GET /iap/user-offer/`** now includes an optional `source` field (`"play_store"` or `"store_kit"`) on the offer when one is present, indicating which storefront the user's current subscription lives on. Absent when there's no offer.
+- [**`POST /iap/checkout-configs/`**](/api-reference/endpoint/create-checkout-config) accepts an optional `play_purchase_token` in the request body for a Play → web migration. When the Play Developer API is transiently unreachable during the pre-flight check it returns `503` with `{ "error": "service_temporarily_unavailable", "error_code": "PLAY_API_UNREACHABLE", "retry_after_seconds": 60 }`. A `404` from Play maps to `PLAY_PACKAGE_NOT_FOUND` (400) and `403` to `PLAY_CREDENTIAL_UNAUTHORIZED` (400).
+- **`POST /iap/migration-converted/`** accepts an optional `source` body param (`"store_kit"` default, or `"play_store"`). Behavior is unchanged when omitted.
+</Update>
+
+---
+
 ## April 2026
 
 <Update label="iOS SDK 1.2.4" description="2026-04-28">
