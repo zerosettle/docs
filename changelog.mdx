@@ -17,6 +17,14 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## May 2026
 
+<Update label="API" description="2026-05-13">
+### `project_id` field added to `/iap/*` responses
+
+`/iap/*` responses now include a `project_id` field alongside the long-existing `app_id`. Both fields carry the same value; SDK clients can adopt `project_id` at their convenience. `app_id` is retained for backward compatibility — nothing breaks if you keep using it.
+
+This is the SDK-visible surface of a backend refactor: the dashboard `App` model has been renamed to `Project`, with per-platform registration sub-records (`AppleAppRegistration`, `GooglePlayAppRegistration`) to support apps that ship on both iOS and Android under a single project. The rename is dashboard-internal — there is no wire-contract or endpoint-path change beyond the additive `project_id` field.
+</Update>
+
 <Update label="Android" description="2026-05-11">
 ### Android SDK v1.0.0 — ground-up rebuild
 
