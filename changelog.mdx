@@ -17,6 +17,22 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## May 2026
 
+<Update label="API" description="2026-05-14">
+### Migration eligibility webhooks
+
+Real-time webhooks for Switch & Save migration eligibility:
+
+- **`migration.eligible`** — user just became eligible (crossed tenure threshold, in rollout bucket)
+- **`migration.ineligible`** — user is no longer eligible (sub expired, cancelled, fell out of rollout)
+- **`migration.completed`** — user successfully completed Switch & Save
+
+Configure endpoints in the new **Webhooks** tab under Campaigns. HMAC-SHA256 signing with `X-ZeroSettle-Signature`, automatic exponential-backoff retries (seven attempts spanning ~31h), delivery history with one-click replay. See [Migration Eligibility Webhooks](/iap/migration-webhooks).
+
+Settings changes (rollout %, eligible products, etc.) do **not** fire fan-out events. Use `GET /v1/iap/migration-cohort/` to reconcile your audience after toggling targeting.
+
+Apple StoreKit only in v1; Google Play coverage to follow.
+</Update>
+
 <Update label="API" description="2026-05-13">
 ### `project_id` field added to `/iap/*` responses
 

@@ -1,0 +1,149 @@
+---
+title: 'Payload Reference'
+description: 'Full JSON schema for migration.eligible, migration.ineligible, and migration.completed events'
+icon: 'code'
+---
+
+Every migration eligibility webhook is an HTTP POST to your endpoint with a JSON body and a set of standard headers.
+
+## HTTP headers
+
+Every delivery includes these headers:
+
+| Header | Example value | Description |
+|--------|--------------|-------------|
+| `Content-Type` | `application/json` | Always `application/json`. |
+| `User-Agent` | `ZeroSettle-Webhooks/1.0` | Identifies the sender. |
+| `X-ZeroSettle-Event-Id` | `a3f2c1d4e5b6...` | UUID4 hex, unique per delivery attempt. Use this for endpoint-level deduplication. |
+| `X-ZeroSettle-Event-Type` | `migration.eligible` | The event type — mirrors `event_type` in the body. |
+| `X-ZeroSettle-Idempotency-Key` | `proj_123:eligible:u_abc:com.example.pro:1747230720` | Stable key across retry attempts for the same logical event. |
+| `X-ZeroSettle-Signature` | `t=1747230720,v1=3d4f...` | HMAC-SHA256 signature. See [Signature Verification](/iap/migration-webhooks-signing). |
+
+## `migration.eligible`
+
+Fires when a user transitions from ineligible (or unknown) to eligible for Switch & Save.
+
+### Example payload
+
+```json
+{
+  "event_type": "migration.eligible",
+  "project_id": 123,
+  "is_sandbox": false,
+  "fired_at": "2026-05-14T14:32:00+00:00",
+  "source": "storekit_sync",
+  "data": {
+    "external_user_id": "u_abc123",
+    "product_id": "com.example.pro",
+    "is_eligible": true,
+    "reason": null,
+    "days_subscribed": 60,
+    "rollout_bucket": 42,
+    "eligible_at": null
+  }
+}
+```
+
+### Top-level fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `event_type` | string | Always `"migration.eligible"`. |
+| `project_id` | integer | Your ZeroSettle project ID. |
+| `is_sandbox` | boolean | `true` if the event originated from a sandbox (test) publishable key. |
+| `fired_at` | string (ISO 8601) | Timestamp when the event was generated. |
+| `source` | string | What triggered the evaluation. One of: `storekit_sync`, `assn_did_renew`, `assn_expired`, `assn_revoke`, `daily_cron`. |
+| `data` | object | Event-specific payload (see below). |
+
+### `data` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `external_user_id` | string | The user ID your app passed to the SDK. |
+| `product_id` | string | The StoreKit product ID of the user's active subscription. |
+| `is_eligible` | boolean | Always `true` for this event type. |
+| `reason` | string \| null | `null` for eligible events. |
+| `days_subscribed` | integer | Number of days since the user's first subscription (across all periods). |
+| `rollout_bucket` | integer | The user's deterministic rollout bucket (0–99). |
+| `eligible_at` | string (ISO 8601) \| null | When the eligibility record was first created, if available. |
+
+## `migration.ineligible`
+
+Fires when a user transitions from eligible to ineligible — their subscription expired, was cancelled, or they fell outside the rollout window.
+
+### Example payload
+
+```json
+{
+  "event_type": "migration.ineligible",
+  "project_id": 123,
+  "is_sandbox": false,
+  "fired_at": "2026-05-14T14:32:00+00:00",
+  "source": "assn_expired",
+  "data": {
+    "external_user_id": "u_abc123",
+    "product_id": "com.example.pro",
+    "is_eligible": false,
+    "reason": "subscription_expired",
+    "days_subscribed": 62,
+    "rollout_bucket": 42,
+    "eligible_at": "2026-05-12T08:00:00+00:00"
+  }
+}
+```
+
+### `data` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `external_user_id` | string | The user ID your app passed to the SDK. |
+| `product_id` | string | The StoreKit product ID that was evaluated. |
+| `is_eligible` | boolean | Always `false` for this event type. |
+| `reason` | string | Why eligibility was lost. One of: `subscription_expired`, `subscription_cancelled`, `subscription_revoked`, `rolled_out_of_cohort`. |
+| `days_subscribed` | integer | Days subscribed at the time eligibility was lost. |
+| `rollout_bucket` | integer | The user's deterministic rollout bucket (0–99). |
+| `eligible_at` | string (ISO 8601) \| null | When the user first became eligible (if known). |
+
+## `migration.completed`
+
+Fires immediately after a user completes a Switch & Save migration via web checkout.
+
+### Example payload
+
+```json
+{
+  "event_type": "migration.completed",
+  "project_id": 123,
+  "is_sandbox": false,
+  "fired_at": "2026-05-14T14:32:00+00:00",
+  "data": {
+    "external_user_id": "u_abc123",
+    "storekit_product_id": "com.example.pro",
+    "web_product_id": "com.example.pro",
+    "web_transaction_id": 999
+  }
+}
+```
+
+### Top-level fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `event_type` | string | Always `"migration.completed"`. |
+| `project_id` | integer | Your ZeroSettle project ID. |
+| `is_sandbox` | boolean | `true` if the checkout was in sandbox mode. |
+| `fired_at` | string (ISO 8601) | Timestamp when the event was generated. |
+| `data` | object | Event-specific payload (see below). |
+
+<Note>
+  `migration.completed` does not include a `source` field — there is only one trigger for this event (Switch & Save web checkout success).
+</Note>
+
+### `data` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `external_user_id` | string | The user ID passed to the checkout. |
+| `storekit_product_id` | string | The product ID of the StoreKit subscription the user is switching away from. |
+| `web_product_id` | string | The product ID of the new web checkout subscription. Usually matches `storekit_product_id` but may differ if the campaign targets a different web product. |
+| `web_transaction_id` | integer | The ZeroSettle transaction ID for the new web checkout subscription. Use this to look up the transaction via the Transactions API. |

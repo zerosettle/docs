@@ -1,0 +1,90 @@
+---
+title: 'Delivery & Retries'
+description: 'Retry schedule, idempotency keys, and replaying failed deliveries'
+icon: 'rotate'
+---
+
+## Retry schedule
+
+ZeroSettle retries failed deliveries automatically on transient errors. A delivery is retried when:
+
+- Your server returns `5xx`, `408` (Request Timeout), or `429` (Too Many Requests)
+- The connection times out (10 seconds per attempt)
+
+A `4xx` response other than `408` and `429` is treated as a permanent failure — the event is marked `failed` with no further retries.
+
+| Attempt | Delay since previous attempt | Total elapsed |
+|---------|------------------------------|---------------|
+| 1 (initial) | — | 0s |
+| 2 | 30 seconds | ~30s |
+| 3 | 2 minutes | ~2m 30s |
+| 4 | 10 minutes | ~12m 30s |
+| 5 | 1 hour | ~1h 12m |
+| 6 | 6 hours | ~7h 12m |
+| 7 | 24 hours | ~31h 12m |
+
+After 7 attempts (1 initial + 6 retries), the delivery status flips to `failed` and no further automatic retries occur. The delivery remains in your history for inspection and manual replay.
+
+<Note>
+  The 10-second timeout applies per attempt. Long-running handlers should acknowledge immediately (return `200`) and process the event asynchronously.
+</Note>
+
+## Idempotency
+
+Idempotency is keyed on the logical event tuple:
+
+```
+(project_id, event_type, external_user_id, product_id, transition_at)
+```
+
+The `X-ZeroSettle-Idempotency-Key` header carries a stable string representation of this key. **All retry attempts for the same event carry the same idempotency key.** This lets you deduplicate on your side without relying on the database-level event ID.
+
+The `X-ZeroSettle-Event-Id` header is a unique UUID per delivery attempt — it changes on each retry. Use it for delivery-level logging. Use `X-ZeroSettle-Idempotency-Key` for deduplication.
+
+### Recommended deduplication pattern
+
+```python
+def handle_webhook(payload, idempotency_key):
+    if DeliveryLog.objects.filter(idempotency_key=idempotency_key).exists():
+        return  # already processed — safe to return 200
+
+    with transaction.atomic():
+        DeliveryLog.objects.create(idempotency_key=idempotency_key)
+        process(payload)
+```
+
+## Viewing delivery history
+
+In the ZeroSettle dashboard:
+
+1. Navigate to **Campaigns** → **Webhooks**.
+2. Select your endpoint.
+3. The **Delivery history** table lists every delivery attempt with:
+   - Event type
+   - `fired_at` timestamp
+   - HTTP status code your server returned
+   - Response body (truncated to 1 KB)
+   - Attempt number
+
+Click any row to expand the full request headers and body that were sent.
+
+## Replaying a failed delivery
+
+To resend a specific delivery:
+
+1. Open the delivery detail view (click the row in delivery history).
+2. Click **Replay**.
+
+The replayed request is sent immediately with the same body, headers, and idempotency key as the original. The `X-ZeroSettle-Event-Id` header gets a new UUID to distinguish the replay from the original attempts.
+
+<Note>
+  Replays count against the endpoint's delivery history but do not reset the automatic retry schedule for still-pending deliveries. If a delivery is already `pending` in the retry queue, replaying it sends an additional attempt in parallel.
+</Note>
+
+## Delivery status reference
+
+| Status | Meaning |
+|--------|---------|
+| `delivered` | Your server returned `2xx`. No further action needed. |
+| `pending` | A retry is scheduled. The event has not been permanently failed. |
+| `failed` | All 7 attempts exhausted (or a permanent `4xx` was returned). Use the replay button to retry manually. |

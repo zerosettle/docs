@@ -93,7 +93,18 @@
                 "icon": "server",
                 "pages": [
                   "iap/webhooks",
-                  "iap/stripe-integration"
+                  "iap/stripe-integration",
+                  {
+                    "group": "Migration Eligibility Webhooks",
+                    "icon": "bell",
+                    "pages": [
+                      "iap/migration-webhooks",
+                      "iap/migration-webhooks-setup",
+                      "iap/migration-webhooks-payload",
+                      "iap/migration-webhooks-signing",
+                      "iap/migration-webhooks-delivery"
+                    ]
+                  }
                 ]
               },
               {

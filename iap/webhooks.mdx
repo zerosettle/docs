@@ -4,6 +4,10 @@ description: 'How ZeroSettle processes purchase events and how to verify purchas
 icon: 'webhook'
 ---
 
+<Note>
+  For migration-eligibility-specific webhooks, see [Migration Eligibility Webhooks](/iap/migration-webhooks).
+</Note>
+
 ZeroSettle acts as your Merchant of Record, which means **you never need to set up your own Stripe webhook endpoints** or handle raw payment events. ZeroSettle receives all payment lifecycle events from Stripe (and Apple), processes them automatically, and keeps your Transactions and Entitlements up to date.
 
 Your app interacts with this system in two ways:

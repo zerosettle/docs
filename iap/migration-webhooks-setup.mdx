@@ -1,0 +1,88 @@
+---
+title: 'Webhook Setup'
+description: 'Add a migration eligibility webhook endpoint in the ZeroSettle dashboard'
+icon: 'gear'
+---
+
+<Steps>
+  <Step title="Enable your migration campaign">
+    Webhooks only fire when your Switch & Save campaign is active. If you have not set one up yet, see [Campaigns](/iap/campaigns) to configure your eligible products, discount, rollout percentage, and minimum subscription age.
+  </Step>
+
+  <Step title="Open the Webhooks tab">
+    In the ZeroSettle dashboard, navigate to **Campaigns** in the sidebar, then select the **Webhooks** tab at the top of the page.
+  </Step>
+
+  <Step title="Add an endpoint">
+    Click **Add endpoint**. Enter:
+
+    - **URL** — the HTTPS URL on your server that will receive POST requests (e.g., `https://api.yourapp.com/webhooks/zerosettle`)
+    - **Description** — an optional label for your own reference (e.g., "Production migration events")
+
+    Click **Save**.
+  </Step>
+
+  <Step title="Copy and store the signing secret">
+    <Warning>
+      The signing secret (`whsec_...`) is shown **only once**, immediately after you save the endpoint. Copy it now and store it in your secrets manager or environment variables. You cannot retrieve it again — if lost, you must rotate it from the endpoint settings.
+    </Warning>
+
+    Store the secret as an environment variable, for example:
+
+    ```bash
+    ZEROSETTLE_WEBHOOK_SECRET=whsec_your_secret_here
+    ```
+
+    Use this secret to verify the `X-ZeroSettle-Signature` header on every incoming request. See [Signature Verification](/iap/migration-webhooks-signing) for implementation examples.
+  </Step>
+
+  <Step title="Verify delivery">
+    After saving, the dashboard shows a **Send test event** button that fires a `migration.eligible` test payload to your URL. Check your server logs to confirm the request arrived and your signature verification accepted it.
+
+    If the test delivery fails, the dashboard shows the HTTP status code and response body your server returned.
+
+    You can also wait for a real user transition — the first time an eligible user's StoreKit subscription is synced, an ASSN notification arrives, or the daily cron runs, a live event will be delivered.
+  </Step>
+</Steps>
+
+## First-enable backfill behavior
+
+<Note>
+  When you create your **first** webhook endpoint, ZeroSettle immediately populates the eligibility snapshot table with all currently-eligible users under your campaign settings. However, **no webhooks are fired for these users**. The snapshot ensures that future state transitions (eligible → ineligible and vice versa) are tracked correctly from this baseline.
+</Note>
+
+If you need to reach users who are already eligible at the time you add the endpoint — for example, to send an introductory outreach email — query the migration cohort endpoint:
+
+```bash
+curl --request GET \
+  --url 'https://api.zerosettle.io/v1/iap/migration-cohort/' \
+  --header 'X-ZeroSettle-Key: zs_pk_live_...'
+```
+
+This returns every currently-eligible user. Use this list for your initial outreach. Going forward, `migration.eligible` webhooks will fire in real time as new users become eligible.
+
+## Managing endpoints
+
+From the **Webhooks** tab you can:
+
+- **View delivery history** — see every delivery attempt, its status code, and the response body
+- **Replay a failed delivery** — resend any individual delivery attempt with one click
+- **Rotate the signing secret** — generates a new secret immediately; the old secret stops working
+- **Delete an endpoint** — stops all future deliveries to that URL
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Payload Reference" icon="code" href="/iap/migration-webhooks-payload">
+    Full JSON schema for every event type
+  </Card>
+  <Card title="Signature Verification" icon="lock" href="/iap/migration-webhooks-signing">
+    Verify the HMAC-SHA256 signature on incoming requests
+  </Card>
+  <Card title="Delivery & Retries" icon="rotate" href="/iap/migration-webhooks-delivery">
+    Retry schedule, idempotency, and replay
+  </Card>
+  <Card title="Campaigns" icon="chart-line" href="/iap/campaigns">
+    Configure eligible products, discount, and rollout
+  </Card>
+</CardGroup>

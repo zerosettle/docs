@@ -1,0 +1,246 @@
+---
+title: 'Signature Verification'
+description: 'Verify HMAC-SHA256 signatures on incoming migration eligibility webhooks'
+icon: 'lock'
+---
+
+Every webhook delivery includes an `X-ZeroSettle-Signature` header. Verifying this signature confirms that the request came from ZeroSettle and was not tampered with in transit.
+
+## Signature format
+
+```
+X-ZeroSettle-Signature: t=1747230720,v1=3d4fa2c1b8e5...
+```
+
+- `t` — Unix timestamp (seconds) when the signature was computed.
+- `v1` — Lowercase hex HMAC-SHA256 of the signed string (see below).
+
+## How the signature is computed
+
+1. The payload is serialized as compact JSON with sorted keys:
+   ```
+   json.dumps(payload, sort_keys=True, separators=(',', ':'))
+   ```
+2. The signed string is `"{t}.{body}"` where `t` is the Unix timestamp from the header and `body` is the serialized payload bytes.
+3. HMAC-SHA256 is computed over the signed string using your endpoint's signing secret (`whsec_...`) as the key.
+
+## Critical: verify against the raw request body
+
+<Warning>
+  Compute the HMAC over the **raw bytes** of the request body — exactly as received from the network. Do not re-parse the JSON and re-serialize it before computing the HMAC. If your framework's body parser re-encodes the JSON (reorders keys, changes whitespace), the computed HMAC will not match, and every verification attempt will fail.
+</Warning>
+
+The examples below show how to access the raw body in each framework.
+
+## Implementation examples
+
+<CodeGroup>
+
+```python Python (Flask)
+import hmac
+import hashlib
+import json
+import time
+from flask import Flask, request, abort
+
+app = Flask(__name__)
+
+WEBHOOK_SECRET = os.environ["ZEROSETTLE_WEBHOOK_SECRET"]  # whsec_...
+TIMESTAMP_TOLERANCE_SECONDS = 300  # reject requests older than 5 minutes
+
+
+def verify_signature(raw_body: bytes, signature_header: str) -> None:
+    """
+    Verify the X-ZeroSettle-Signature header.
+    Raises ValueError if the signature is invalid or the timestamp is stale.
+    """
+    parts = dict(item.split("=", 1) for item in signature_header.split(","))
+    ts = parts.get("t")
+    v1 = parts.get("v1")
+
+    if not ts or not v1:
+        raise ValueError("Malformed signature header")
+
+    # Reject stale timestamps to prevent replay attacks
+    if abs(time.time() - int(ts)) > TIMESTAMP_TOLERANCE_SECONDS:
+        raise ValueError("Timestamp out of tolerance window")
+
+    # Compute HMAC over raw bytes — do NOT re-serialize the JSON
+    signed_string = f"{ts}.{raw_body.decode('utf-8')}"
+    expected = hmac.new(
+        WEBHOOK_SECRET.encode("utf-8"),
+        signed_string.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, v1):
+        raise ValueError("Signature mismatch")
+
+
+@app.route("/webhooks/zerosettle", methods=["POST"])
+def handle_webhook():
+    raw_body = request.get_data()  # raw bytes, before any parsing
+    sig_header = request.headers.get("X-ZeroSettle-Signature", "")
+
+    try:
+        verify_signature(raw_body, sig_header)
+    except ValueError as e:
+        abort(400, str(e))
+
+    payload = json.loads(raw_body)
+    event_type = payload.get("event_type")
+
+    if event_type == "migration.eligible":
+        handle_eligible(payload)
+    elif event_type == "migration.ineligible":
+        handle_ineligible(payload)
+    elif event_type == "migration.completed":
+        handle_completed(payload)
+
+    return "", 200
+```
+
+```javascript Node.js (Express)
+import express from 'express';
+import crypto from 'crypto';
+
+const app = express();
+
+const WEBHOOK_SECRET = process.env.ZEROSETTLE_WEBHOOK_SECRET; // whsec_...
+const TIMESTAMP_TOLERANCE_SECONDS = 300; // reject requests older than 5 minutes
+
+// IMPORTANT: use express.raw() so the body is not parsed by Express.
+// If you use express.json() globally, exclude this route from that middleware.
+app.post(
+  '/webhooks/zerosettle',
+  express.raw({ type: '*/*' }),
+  (req, res) => {
+    const sigHeader = req.headers['x-zerosettle-signature'] ?? '';
+    const rawBody = req.body; // Buffer
+
+    // Parse t= and v1= from the header
+    const parts = Object.fromEntries(
+      sigHeader.split(',').map((p) => p.split('='))
+    );
+    const ts = parts['t'];
+    const v1 = parts['v1'];
+
+    if (!ts || !v1) {
+      return res.status(400).send('Malformed signature header');
+    }
+
+    // Reject stale timestamps
+    if (Math.abs(Date.now() / 1000 - parseInt(ts, 10)) > TIMESTAMP_TOLERANCE_SECONDS) {
+      return res.status(400).send('Timestamp out of tolerance window');
+    }
+
+    // Compute HMAC over raw body bytes
+    const signedString = `${ts}.${rawBody.toString('utf-8')}`;
+    const expected = crypto
+      .createHmac('sha256', WEBHOOK_SECRET)
+      .update(signedString)
+      .digest('hex');
+
+    // Constant-time comparison to prevent timing attacks
+    const expectedBuf = Buffer.from(expected, 'hex');
+    const receivedBuf = Buffer.from(v1, 'hex');
+
+    if (
+      expectedBuf.length !== receivedBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, receivedBuf)
+    ) {
+      return res.status(400).send('Signature mismatch');
+    }
+
+    const payload = JSON.parse(rawBody.toString('utf-8'));
+    const { event_type } = payload;
+
+    if (event_type === 'migration.eligible') {
+      handleEligible(payload);
+    } else if (event_type === 'migration.ineligible') {
+      handleIneligible(payload);
+    } else if (event_type === 'migration.completed') {
+      handleCompleted(payload);
+    }
+
+    res.status(200).send('');
+  }
+);
+```
+
+```ruby Ruby (Rails)
+# config/routes.rb
+# post '/webhooks/zerosettle', to: 'webhooks#zerosettle'
+
+# app/controllers/webhooks_controller.rb
+require 'openssl'
+
+class WebhooksController < ApplicationController
+  skip_before_action :verify_authenticity_token, only: :zerosettle
+
+  WEBHOOK_SECRET = ENV.fetch('ZEROSETTLE_WEBHOOK_SECRET') # whsec_...
+  TIMESTAMP_TOLERANCE_SECONDS = 300
+
+  def zerosettle
+    sig_header = request.headers['HTTP_X_ZEROSETTLE_SIGNATURE'] || ''
+    raw_body = request.raw_post # raw bytes — do NOT use request.body.read after params are parsed
+
+    parts = sig_header.split(',').each_with_object({}) do |part, h|
+      k, v = part.split('=', 2)
+      h[k] = v
+    end
+
+    ts = parts['t']
+    v1 = parts['v1']
+
+    unless ts && v1
+      return head :bad_request
+    end
+
+    if (Time.now.to_i - ts.to_i).abs > TIMESTAMP_TOLERANCE_SECONDS
+      return head :bad_request
+    end
+
+    # Compute HMAC over raw body string
+    signed_string = "#{ts}.#{raw_body}"
+    expected = OpenSSL::HMAC.hexdigest('SHA256', WEBHOOK_SECRET, signed_string)
+
+    unless ActiveSupport::SecurityUtils.secure_compare(expected, v1)
+      return head :bad_request
+    end
+
+    payload = JSON.parse(raw_body)
+
+    case payload['event_type']
+    when 'migration.eligible'
+      handle_eligible(payload)
+    when 'migration.ineligible'
+      handle_ineligible(payload)
+    when 'migration.completed'
+      handle_completed(payload)
+    end
+
+    head :ok
+  end
+
+  private
+
+  def handle_eligible(payload) = nil   # implement me
+  def handle_ineligible(payload) = nil # implement me
+  def handle_completed(payload) = nil  # implement me
+end
+```
+
+</CodeGroup>
+
+## Returning the right status code
+
+Return `2xx` to acknowledge receipt. ZeroSettle considers any `2xx` response a successful delivery. Returning `4xx` signals a permanent failure (no retry). Returning `5xx` or timing out triggers the [automatic retry schedule](/iap/migration-webhooks-delivery).
+
+<Tip>
+  Acknowledge quickly (return `200` before processing) and handle the payload asynchronously. ZeroSettle enforces a 10-second timeout per delivery attempt. If your handler does slow database work synchronously, you risk spurious retries.
+</Tip>
+
+## Rotating the signing secret
+
+If your secret is compromised, rotate it from the **Webhooks** tab in the dashboard. The old secret stops working immediately. Update your environment variable with the new `whsec_...` value and redeploy.

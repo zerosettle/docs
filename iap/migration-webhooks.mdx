@@ -1,0 +1,72 @@
+---
+title: 'Migration Eligibility Webhooks'
+description: 'Real-time per-user transition events for Switch & Save eligibility'
+icon: 'bell'
+---
+
+Migration eligibility webhooks deliver real-time events to your server whenever a user's Switch & Save eligibility status changes or a migration completes. Instead of polling the [migration cohort endpoint](/api-reference/endpoint/migration-cohort), your backend receives a push notification the moment a transition happens.
+
+<Note>
+  Migration eligibility webhooks cover **Apple StoreKit subscriptions only** in v1. Google Play subscription evaluation is not included. Events will begin firing for Play subscribers in a future release.
+</Note>
+
+## The three event types
+
+| Event | Trigger | Key payload field |
+|-------|---------|-------------------|
+| `migration.eligible` | User just crossed the eligibility threshold (tenure met, rollout bucket matched, active StoreKit sub) | `data.is_eligible: true` |
+| `migration.ineligible` | User lost eligibility (subscription expired, cancelled, revoked, or fell outside rollout) | `data.is_eligible: false` |
+| `migration.completed` | User successfully completed a Switch & Save migration via web checkout | `data.web_transaction_id` |
+
+## When events fire
+
+**`migration.eligible` and `migration.ineligible`** are evaluated at five hook points:
+
+- **StoreKit sync** — when the iOS SDK syncs a StoreKit transaction to `POST /v1/iap/storekit-transactions/`
+- **ASSN `DID_RENEW`** — when Apple confirms a successful subscription renewal
+- **ASSN `EXPIRED`** — when a StoreKit subscription period ends and access lapses
+- **ASSN `REVOKE` / cancellation** — when a subscription is revoked (family sharing) or auto-renew is turned off and the period ends
+- **Daily cron** — runs once per day to catch users who crossed the minimum-subscription-days threshold overnight
+
+**`migration.completed`** fires once, immediately after a Switch & Save web checkout succeeds.
+
+## When events do NOT fire
+
+- **Settings changes** — enabling/disabling the campaign, adjusting rollout percentage, changing `min_subscription_days`, or modifying the eligible products list do **not** trigger fan-out. Your existing eligible-user snapshot is not re-evaluated. See [Reconciling after settings changes](#reconciling-after-settings-changes) below.
+- **Repeated identical state** — if a user is already marked eligible and a hook point re-evaluates them as still eligible, no event fires (state machine deduplication).
+- **Synthetic Apple users** — users whose `external_user_id` begins with `apple_otid:` are excluded from webhook fan-out.
+- **Campaign disabled** — no events fire while the campaign is paused, regardless of underlying eligibility.
+- **Google Play subscriptions** — Play subscribers are not evaluated in v1.
+
+## Reconciling after settings changes
+
+When you change campaign settings (rollout %, eligible products, tenure threshold), the snapshot table is **not** automatically updated and no webhooks are sent. To reconcile your audience after a settings change, query the cohort endpoint:
+
+```bash
+curl --request GET \
+  --url 'https://api.zerosettle.io/v1/iap/migration-cohort/' \
+  --header 'X-ZeroSettle-Key: zs_pk_live_...'
+```
+
+This returns all currently-eligible users under your current settings. You can use this list for one-shot outreach campaigns, email automation triggers, or to seed your own data store.
+
+<Warning>
+  If you need to contact users who were eligible before a settings change but are no longer eligible after it (or vice versa), you must diff your own records against the cohort response. ZeroSettle does not issue retroactive `migration.ineligible` events for users affected by settings changes.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Setup Guide" icon="gear" href="/iap/migration-webhooks-setup">
+    Add your first endpoint in the dashboard
+  </Card>
+  <Card title="Payload Reference" icon="code" href="/iap/migration-webhooks-payload">
+    Full JSON schema for every event type
+  </Card>
+  <Card title="Signature Verification" icon="lock" href="/iap/migration-webhooks-signing">
+    Verify HMAC-SHA256 signatures in Python, Node, and Ruby
+  </Card>
+  <Card title="Delivery & Retries" icon="rotate" href="/iap/migration-webhooks-delivery">
+    Retry schedule, idempotency keys, and replay
+  </Card>
+</CardGroup>
