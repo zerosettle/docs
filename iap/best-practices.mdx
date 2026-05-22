@@ -10,7 +10,7 @@ Follow these recommendations to build a robust in-app purchase experience with Z
 
 ### Configure Early
 
-Initialize the SDK as early as possible in your app's lifecycle. On iOS, call `configure()` early, then `bootstrap()` to fetch products and restore entitlements. On Android, `configure()` is synchronous and should be called in `Application.onCreate()`, then call `bootstrap()` to fetch products and restore entitlements:
+Initialize the SDK as early as possible in your app's lifecycle. iOS, Android, and Flutter are all identify-first: call `configure()` early, then `identify(...)` with an `Identity` value (`.user(id:)`, `.anonymous`, or `.deferred`) to declare the active user, fetch products, and restore entitlements. On Android, `configure()` is synchronous and should be called in `Application.onCreate()`:
 
 <CodeGroup>
 ```swift Swift
@@ -23,7 +23,7 @@ struct YourApp: App {
                     ZeroSettle.shared.configure(.init(
                         publishableKey: "your_live_key"
                     ))
-                    try? await ZeroSettle.shared.bootstrap(userId: Auth.currentUser.id)
+                    try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                 }
                 .zeroSettleHandler()
         }
@@ -35,7 +35,7 @@ struct YourApp: App {
 class MyApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        ZeroSettle.configure(this, ZeroSettle.Configuration(
+        ZeroSettle.configure(this, ZeroSettleConfig(
             publishableKey = "your_live_key"
         ))
     }
@@ -43,20 +43,20 @@ class MyApp : Application() {
 
 // Then in your main Activity or Composable:
 LaunchedEffect(Unit) {
-    ZeroSettle.bootstrap(userId = auth.currentUser.id)
+    ZeroSettle.identify(Identity.User(id = auth.currentUser.id))
 }
 ```
 
 ```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
+import { ZeroSettleKit } from 'react-native-zerosettle';
 
 // Configure as early as possible (e.g., in App.tsx)
-await ZeroSettle.configure({
+await ZeroSettleKit.configure({
   publishableKey: 'your_live_key',
 });
 
 // Then fetch products and entitlements
-const catalog = await ZeroSettle.fetchProducts(auth.currentUser.id);
+const catalog = await ZeroSettleKit.fetchProducts(auth.currentUser.id);
 ```
 
 ```dart Flutter
@@ -71,7 +71,8 @@ void main() async {
 }
 
 // Then in your home screen:
-final catalog = await ZeroSettle.instance.bootstrap(userId: auth.currentUser.id);
+await ZeroSettle.instance.identify(Identity.user(id: auth.currentUser.id));
+final catalog = await ZeroSettle.instance.fetchProducts();
 ```
 </CodeGroup>
 
@@ -97,7 +98,7 @@ val publishableKey = if (BuildConfig.DEBUG) {
     "your_live_key"  // Live
 }
 
-ZeroSettle.configure(context, ZeroSettle.Configuration(publishableKey = publishableKey))
+ZeroSettle.configure(context, ZeroSettleConfig(publishableKey = publishableKey))
 ```
 
 ```tsx React Native
@@ -105,7 +106,7 @@ const publishableKey = __DEV__
   ? 'your_test_key'   // Sandbox
   : 'your_live_key';  // Live
 
-await ZeroSettle.configure({ publishableKey });
+await ZeroSettleKit.configure({ publishableKey });
 ```
 
 ```dart Flutter
@@ -138,9 +139,7 @@ struct ContentView: View {
             }
         }
         .task {
-            entitlements = (try? await ZeroSettle.shared.restoreEntitlements(
-                userId: Auth.currentUser.id
-            )) ?? []
+            entitlements = (try? await ZeroSettle.shared.restoreEntitlements()) ?? []
             isLoading = false
         }
     }
@@ -154,9 +153,7 @@ fun ContentScreen() {
     var entitlements by remember { mutableStateOf<List<Entitlement>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        entitlements = try {
-            ZeroSettle.restoreEntitlements(userId = auth.currentUser.id)
-        } catch (_: Exception) { emptyList() }
+        entitlements = ZeroSettle.restoreEntitlements().getOrElse { emptyList() }
         isLoading = false
     }
 
@@ -174,7 +171,7 @@ function ContentScreen() {
   const [entitlements, setEntitlements] = useState([]);
 
   useEffect(() => {
-    ZeroSettle.restoreEntitlements(auth.currentUser.id)
+    ZeroSettleKit.restoreEntitlements(auth.currentUser.id)
       .then(setEntitlements)
       .catch(() => setEntitlements([]))
       .finally(() => setIsLoading(false));
@@ -205,9 +202,7 @@ class _ContentScreenState extends State<ContentScreen> {
 
   Future<void> _restore() async {
     try {
-      entitlements = await ZeroSettle.instance.restoreEntitlements(
-        userId: auth.currentUser.id,
-      );
+      entitlements = await ZeroSettle.instance.restoreEntitlements();
     } catch (_) {
       entitlements = [];
     }
@@ -250,7 +245,7 @@ class EntitlementCache {
 let cached = entitlementCache.load()
 updateUI(cached)
 
-let fresh = try await ZeroSettle.shared.restoreEntitlements(userId: userId)
+let fresh = try await ZeroSettle.shared.restoreEntitlements()
 entitlementCache.save(fresh)
 updateUI(fresh)
 ```
@@ -275,7 +270,7 @@ class EntitlementCache(context: Context) {
 val cached = entitlementCache.load()
 updateUI(cached)
 
-val fresh = ZeroSettle.restoreEntitlements(userId = userId)
+val fresh = ZeroSettle.restoreEntitlements().getOrThrow()
 entitlementCache.save(fresh)
 updateUI(fresh)
 ```
@@ -298,7 +293,7 @@ async function loadEntitlements() {
 const cached = await loadEntitlements();
 updateUI(cached);
 
-const fresh = await ZeroSettle.restoreEntitlements(userId);
+const fresh = await ZeroSettleKit.restoreEntitlements(userId);
 await saveEntitlements(fresh);
 updateUI(fresh);
 ```
@@ -333,7 +328,7 @@ class EntitlementCache {
 final cached = await entitlementCache.load();
 updateUI(cached);
 
-final fresh = await ZeroSettle.instance.restoreEntitlements(userId: userId);
+final fresh = await ZeroSettle.instance.restoreEntitlements();
 await entitlementCache.save(fresh);
 updateUI(fresh);
 ```
@@ -419,23 +414,20 @@ On iOS, `checkoutSheet` provides the best conversion rates because the user stay
 <CodeGroup>
 ```swift Swift
 struct PurchaseButton: View {
-    @State private var selectedProduct: Product?
-    let product: Product
+    @State private var selectedProduct: ZSProduct?
+    let product: ZSProduct
 
     var body: some View {
-        Button("Buy \(product.displayName) — \(product.webPrice.formatted)") {
+        Button("Buy \(product.displayName) — \(product.webPrice?.formatted ?? "")") {
             selectedProduct = product
         }
-        .checkoutSheet(
-            item: $selectedProduct,
-            userId: Auth.currentUser.id
-        ) { result in
+        .checkoutSheet(item: $selectedProduct) { result in
             switch result {
             case .success(let transaction):
                 unlockProduct(transaction.productId)
             case .failure(let error):
-                if let sheetError = error as? PaymentSheetError,
-                   sheetError == .cancelled {
+                if let zsError = error as? ZeroSettleError,
+                   zsError == .cancelled {
                     // User cancelled — don't show an error
                     return
                 }
@@ -454,17 +446,16 @@ fun PurchaseButton(product: Product) {
 
     Button(onClick = {
         scope.launch {
-            try {
-                val transaction = ZeroSettle.purchase(
-                    activity = context as Activity,
-                    productId = product.id,
-                    userId = auth.currentUser.id,
-                )
+            ZeroSettle.purchase(
+                activity = context as Activity,
+                productId = product.id,
+            ).onSuccess { transaction ->
                 unlockProduct(transaction.productId)
-            } catch (e: ZeroSettleError.Cancelled) {
-                // User dismissed — don't show error
-            } catch (e: Exception) {
-                showError(e)
+            }.onFailure { e ->
+                when (e) {
+                    is ZeroSettleError.PurchaseCancelled -> { /* user dismissed */ }
+                    else -> showError(e)
+                }
             }
         }
     }) {
@@ -477,7 +468,7 @@ fun PurchaseButton(product: Product) {
 function PurchaseButton({ product }) {
   const handlePurchase = async () => {
     try {
-      const transaction = await ZeroSettle.purchase(
+      const transaction = await ZeroSettleKit.purchase(
         product.id,
         auth.currentUser.id,
       );
@@ -501,9 +492,8 @@ function PurchaseButton({ product }) {
 ElevatedButton(
   onPressed: () async {
     try {
-      final transaction = await ZeroSettle.instance.presentPaymentSheet(
+      final transaction = await ZeroSettle.instance.purchase(
         productId: product.id,
-        userId: auth.currentUser.id,
       );
       unlockProduct(transaction.productId);
     } on ZSCancelledException {
@@ -520,7 +510,7 @@ ElevatedButton(
 ### Preloading & Caching
 
 <Note>
-  Preloading and `warmUp()` are iOS-specific APIs. On Android, products are cached in the `ZeroSettle.products` StateFlow after calling `bootstrap()` or `fetchProducts()`. No additional preloading step is needed.
+  Preloading and `warmUp()` are iOS-specific APIs. On iOS, products are cached after calling `identify(_:)`. On Android, products are cached in the `ZeroSettle.products` StateFlow after calling `identify()` or `fetchProducts()`. No additional preloading step is needed.
 </Note>
 
 The `.checkoutSheet()` modifier automatically preloads the `PaymentIntent` and `WKWebView` before presenting the sheet, so the checkout is fully rendered the moment it slides up.
@@ -536,13 +526,13 @@ For the fastest first open, call `warmUp()` right after fetching products:
 
     // Pre-cache the PaymentIntent while the user browses
     if let first = catalog.products.first {
-        await CheckoutSheet.warmUp(productId: first.id, userId: currentUser.id)
+        await CheckoutSheet.warmUp(productId: first.id)
     }
 }
 ```
 
 ```kotlin Kotlin
-// On Android, products are cached automatically after bootstrap() or
+// On Android, products are cached automatically after identify() or
 // fetchProducts(). No additional warm-up step is needed.
 ```
 
@@ -553,12 +543,11 @@ For the fastest first open, call `warmUp()` right after fetching products:
 
 ```dart Flutter
 // Preload the payment sheet while the user browses
-final catalog = await ZeroSettle.instance.fetchProducts(userId: currentUser.id);
+final catalog = await ZeroSettle.instance.fetchProducts();
 
 if (catalog.products.isNotEmpty) {
   await ZeroSettle.instance.warmUpPaymentSheet(
     productId: catalog.products.first.id,
-    userId: currentUser.id,
   );
 }
 ```
@@ -569,16 +558,13 @@ For the standalone `CheckoutSheet` init or UIKit's `present` method, you can pre
 <CodeGroup>
 ```swift Swift
 .task {
-    preloaded = await CheckoutSheet.preload(
-        productId: product.id,
-        userId: currentUser.id
-    )
+    preloaded = await CheckoutSheet.preload(productId: product.id)
 }
 ```
 
 ```kotlin Kotlin
 // On Android, preloading is not needed. Products and checkout state
-// are managed automatically by the SDK after bootstrap().
+// are managed automatically by the SDK after identify().
 ```
 
 ```tsx React Native
@@ -590,7 +576,6 @@ For the standalone `CheckoutSheet` init or UIKit's `present` method, you can pre
 // Warm up the payment sheet ahead of time
 await ZeroSettle.instance.warmUpPaymentSheet(
   productId: product.id,
-  userId: currentUser.id,
 );
 ```
 </CodeGroup>
@@ -603,8 +588,8 @@ Show feedback immediately when a checkout is in progress:
 ```swift Swift
 struct PurchaseButton: View {
     @ObservedObject var iap = ZeroSettle.shared
-    @State private var selectedProduct: Product?
-    let product: Product
+    @State private var selectedProduct: ZSProduct?
+    let product: ZSProduct
 
     var body: some View {
         Button {
@@ -617,16 +602,13 @@ struct PurchaseButton: View {
             }
         }
         .disabled(iap.pendingCheckout)
-        .checkoutSheet(
-            item: $selectedProduct,
-            userId: Auth.currentUser.id
-        ) { result in
+        .checkoutSheet(item: $selectedProduct) { result in
             switch result {
             case .success(let transaction):
                 unlockProduct(transaction.productId)
             case .failure(let error):
-                if let sheetError = error as? PaymentSheetError,
-                   sheetError == .cancelled { return }
+                if let zsError = error as? ZeroSettleError,
+                   zsError == .cancelled { return }
                 showError(error)
             }
         }
@@ -637,13 +619,24 @@ struct PurchaseButton: View {
 ```kotlin Kotlin
 @Composable
 fun PurchaseButton(product: Product) {
-    val pendingCheckout by ZeroSettle.pendingCheckout.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isPending by remember { mutableStateOf(false) }
 
     Button(
-        onClick = { /* launch purchase */ },
-        enabled = !pendingCheckout,
+        onClick = {
+            scope.launch {
+                isPending = true
+                ZeroSettle.purchase(
+                    activity = context as Activity,
+                    productId = product.id,
+                )
+                isPending = false
+            }
+        },
+        enabled = !isPending,
     ) {
-        if (pendingCheckout) {
+        if (isPending) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp))
         } else {
             Text("Buy ${product.displayName}")
@@ -659,7 +652,7 @@ function PurchaseButton({ product }) {
   const handlePurchase = async () => {
     setIsPending(true);
     try {
-      await ZeroSettle.purchase(product.id, auth.currentUser.id);
+      await ZeroSettleKit.purchase(product.id, auth.currentUser.id);
     } catch (e) {
       if (e.code !== 'cancelled') showError(e.message);
     } finally {
@@ -692,9 +685,8 @@ class _PurchaseButtonState extends State<PurchaseButton> {
   Future<void> _purchase() async {
     setState(() => _isPending = true);
     try {
-      await ZeroSettle.instance.presentPaymentSheet(
+      await ZeroSettle.instance.purchase(
         productId: widget.product.id,
-        userId: auth.currentUser.id,
       );
     } on ZSCancelledException {
       // User dismissed
@@ -721,9 +713,9 @@ class _PurchaseButtonState extends State<PurchaseButton> {
 ```
 </CodeGroup>
 
-### Handle All Delegate Callbacks
+### Handle All Purchase Outcomes
 
-Implement all delegate methods to handle every outcome:
+On iOS, implement all `ZeroSettleDelegate` methods to handle every outcome. On Android, there is no delegate protocol — collect the reactive `ZeroSettle.events` and `ZeroSettle.entitlements` flows instead:
 
 <CodeGroup>
 ```swift Swift
@@ -773,65 +765,58 @@ class PurchaseManager: ZeroSettleDelegate {
 ```
 
 ```kotlin Kotlin
-class PurchaseManager : ZeroSettleDelegate {
-    override fun zeroSettleCheckoutDidBegin(productId: String) {
-        Analytics.track("checkout_started", productId)
-    }
+// Android has no delegate — collect the reactive flows from a coroutine scope.
+class PurchaseManager(private val scope: CoroutineScope) {
+    fun observe() {
+        // Structured analytics events — a SharedFlow<ZeroSettleEvent>
+        scope.launch {
+            ZeroSettle.events.collect { event ->
+                when (event) {
+                    is ZeroSettleEvent.PurchaseSucceeded -> {
+                        unlockProduct(event.productId)
+                        showToast("Purchase complete!")
+                        Analytics.track("purchase_completed", event.transactionId)
+                    }
+                    is ZeroSettleEvent.PurchaseFailed ->
+                        Analytics.track("checkout_failed", event.reason)
+                    else -> Unit
+                }
+            }
+        }
 
-    override fun zeroSettleCheckoutDidComplete(transaction: CheckoutTransaction) {
-        unlockProduct(transaction.productId)
-        showToast("Purchase complete!")
-        Analytics.track("purchase_completed", transaction)
-    }
-
-    override fun zeroSettleCheckoutDidCancel(productId: String) {
-        Analytics.track("checkout_cancelled", productId)
-    }
-
-    override fun zeroSettleCheckoutDidFail(productId: String, error: Throwable) {
-        showError("Purchase failed. Please try again.")
-        Analytics.track("checkout_failed", error)
-    }
-
-    override fun zeroSettleEntitlementsDidUpdate(entitlements: List<Entitlement>) {
-        updatePremiumUI(entitlements)
-    }
-
-    override fun zeroSettleDidSyncPlayStoreTransaction(productId: String, purchaseToken: String) {
-        Analytics.track("play_store_synced", productId)
-    }
-
-    override fun zeroSettlePlayStoreSyncFailed(error: Throwable) {
-        println("Play Store sync failed: $error")
+        // Entitlements — a StateFlow<List<Entitlement>>
+        scope.launch {
+            ZeroSettle.entitlements.collect { entitlements ->
+                updatePremiumUI(entitlements)
+            }
+        }
     }
 }
 ```
 
 ```tsx React Native
-// Listen for checkout events
-ZeroSettle.onCheckoutEvent((event) => {
-  switch (event.type) {
-    case 'began':
-      Analytics.track('checkout_started', { productId: event.productId });
-      break;
-    case 'completed':
-      unlockProduct(event.transaction.productId);
-      showToast('Purchase complete!');
-      Analytics.track('purchase_completed', { transaction: event.transaction });
-      break;
-    case 'cancelled':
-      Analytics.track('checkout_cancelled', { productId: event.productId });
-      break;
-    case 'failed':
-      showError('Purchase failed. Please try again.');
-      Analytics.track('checkout_failed', { error: event.error });
-      break;
-  }
-});
+import { useZeroSettleEvents } from 'react-native-zerosettle';
 
-// Listen for entitlement updates
-ZeroSettle.onEntitlementUpdate((entitlements) => {
-  updatePremiumUI(entitlements);
+// Inside a component — subscribe to checkout and entitlement events
+useZeroSettleEvents({
+  onCheckoutDidBegin: ({ productId }) => {
+    Analytics.track('checkout_started', { productId });
+  },
+  onCheckoutDidComplete: ({ transaction }) => {
+    unlockProduct(transaction.productId);
+    showToast('Purchase complete!');
+    Analytics.track('purchase_completed', { transaction });
+  },
+  onCheckoutDidCancel: ({ productId }) => {
+    Analytics.track('checkout_cancelled', { productId });
+  },
+  onCheckoutDidFail: ({ error }) => {
+    showError('Purchase failed. Please try again.');
+    Analytics.track('checkout_failed', { error });
+  },
+  onEntitlementsDidUpdate: (entitlements) => {
+    updatePremiumUI(entitlements);
+  },
 });
 ```
 
@@ -873,9 +858,7 @@ Apple and Google require a way for users to restore purchases. Add a visible res
 Button("Restore Purchases") {
     Task {
         do {
-            let entitlements = try await ZeroSettle.shared.restoreEntitlements(
-                userId: Auth.currentUser.id
-            )
+            let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 
             if entitlements.isEmpty {
                 showMessage("No purchases found")
@@ -892,18 +875,17 @@ Button("Restore Purchases") {
 ```kotlin Kotlin
 Button(onClick = {
     scope.launch {
-        try {
-            val entitlements = ZeroSettle.restoreEntitlements(
-                userId = auth.currentUser.id
-            )
-            if (entitlements.isEmpty()) {
-                showMessage("No purchases found")
-            } else {
-                showMessage("Purchases restored!")
+        ZeroSettle.restoreEntitlements()
+            .onSuccess { entitlements ->
+                if (entitlements.isEmpty()) {
+                    showMessage("No purchases found")
+                } else {
+                    showMessage("Purchases restored!")
+                }
             }
-        } catch (e: Exception) {
-            showError("Restore failed: ${e.message}")
-        }
+            .onFailure { e ->
+                showError("Restore failed: ${e.message}")
+            }
     }
 }) {
     Text("Restore Purchases")
@@ -913,7 +895,7 @@ Button(onClick = {
 ```tsx React Native
 const handleRestore = async () => {
   try {
-    const entitlements = await ZeroSettle.restoreEntitlements(
+    const entitlements = await ZeroSettleKit.restoreEntitlements(
       auth.currentUser.id,
     );
 
@@ -934,9 +916,7 @@ const handleRestore = async () => {
 ElevatedButton(
   onPressed: () async {
     try {
-      final entitlements = await ZeroSettle.instance.restoreEntitlements(
-        userId: auth.currentUser.id,
-      );
+      final entitlements = await ZeroSettle.instance.restoreEntitlements();
 
       if (entitlements.isEmpty) {
         showMessage('No purchases found');
@@ -1023,8 +1003,8 @@ If your app supports logged-out usage, decide how to handle purchases:
 <CodeGroup>
 ```swift Swift
 struct PurchaseView: View {
-    @State private var selectedProduct: Product?
-    let product: Product
+    @State private var selectedProduct: ZSProduct?
+    let product: ZSProduct
 
     var body: some View {
         Button("Buy") {
@@ -1035,10 +1015,7 @@ struct PurchaseView: View {
             }
             selectedProduct = product
         }
-        .checkoutSheet(
-            item: $selectedProduct,
-            userId: Auth.currentUser?.id ?? ""
-        ) { result in
+        .checkoutSheet(item: $selectedProduct) { result in
             switch result {
             case .success(let transaction):
                 unlockProduct(transaction.productId)
@@ -1062,7 +1039,6 @@ suspend fun purchase(product: Product) {
     ZeroSettle.purchase(
         activity = activity,
         productId = product.id,
-        userId = user.id,
     )
 }
 ```
@@ -1076,7 +1052,7 @@ async function purchase(product) {
     return;
   }
 
-  await ZeroSettle.purchase(product.id, user.id);
+  await ZeroSettleKit.purchase(product.id, user.id);
 }
 ```
 
@@ -1089,9 +1065,8 @@ Future<void> purchase(Product product) async {
     return;
   }
 
-  await ZeroSettle.instance.presentPaymentSheet(
+  await ZeroSettle.instance.purchase(
     productId: product.id,
-    userId: user.id,
   );
 }
 ```
@@ -1105,26 +1080,33 @@ ZeroSettle uses specific error types for different scenarios:
 
 **iOS:**
 
-| Error Type | When It's Thrown |
+All SDK errors are `ZeroSettleError` cases:
+
+| Error Case | When It's Thrown |
 |---|---|
-| `ZeroSettleError` | SDK configuration and general errors |
-| `PaymentSheetError` | Payment sheet presentation and payment errors |
-| `StoreKitPurchaseError` | StoreKit purchase errors |
-| `CheckoutError` | Legacy checkout view errors (deprecated) |
+| `.notConfigured` | SDK not configured before use |
+| `.productNotFound` | Product ID not found in catalog |
+| `.cancelled` | User dismissed the checkout |
+| `.networkError` | Network request failed |
+| `.purchasePending` | Purchase awaiting external approval |
+| `.storeKitVerificationFailed` | StoreKit transaction verification failed |
+| `.userNotIdentified` | `identify(_:)` not called before this API |
 
 **Android:**
 
-| Error Type | When It's Thrown |
+All SDK failures carry a `ZeroSettleError` (a sealed class), delivered via `Result.onFailure`:
+
+| Error Case | When It's Returned |
 |---|---|
 | `ZeroSettleError.NotConfigured` | SDK not configured before use |
 | `ZeroSettleError.ProductNotFound` | Product ID not found in catalog |
-| `ZeroSettleError.Cancelled` | User dismissed the checkout |
-| `ZeroSettleError.CheckoutFailed` | Payment failed (with `CheckoutFailure` reason) |
+| `ZeroSettleError.PurchaseCancelled` | User dismissed the checkout |
+| `ZeroSettleError.CheckoutFailed` | Payment failed |
 
 <CodeGroup>
 ```swift Swift
 // checkoutSheet handles errors via its completion handler
-.checkoutSheet(item: $selectedProduct, userId: userId) { result in
+.checkoutSheet(item: $selectedProduct) { result in
     switch result {
     case .success(let transaction):
         unlockProduct(transaction.productId)
@@ -1137,12 +1119,12 @@ ZeroSettle uses specific error types for different scenarios:
                 print("Product \(id) not found")
             case .networkError(let underlying):
                 showRetry("Network error: \(underlying.localizedDescription)")
+            case .cancelled:
+                // User cancelled — don't show an error
+                break
             default:
                 showError(error.localizedDescription)
             }
-        } else if let sheetError = error as? PaymentSheetError,
-                  sheetError == .cancelled {
-            // User cancelled — don't show an error
         } else {
             showError(error.localizedDescription)
         }
@@ -1151,19 +1133,12 @@ ZeroSettle uses specific error types for different scenarios:
 ```
 
 ```kotlin Kotlin
-try {
-    ZeroSettle.purchase(activity, productId, userId)
-} catch (e: ZeroSettleError) {
+ZeroSettle.purchase(activity, productId).onFailure { e ->
     when (e) {
         is ZeroSettleError.NotConfigured -> error("SDK not configured")
         is ZeroSettleError.ProductNotFound -> println("Product ${e.productId} not found")
-        is ZeroSettleError.CheckoutFailed -> {
-            when (e.reason) {
-                is CheckoutFailure.NetworkUnavailable ->
-                    showRetry("Network error")
-                else -> showError(e.message)
-            }
-        }
+        is ZeroSettleError.NetworkError -> showRetry("Network error")
+        is ZeroSettleError.CheckoutFailed -> showError(e.message)
         else -> showError(e.message)
     }
 }
@@ -1171,7 +1146,7 @@ try {
 
 ```tsx React Native
 try {
-  await ZeroSettle.purchase(productId, userId);
+  await ZeroSettleKit.purchase(productId, userId);
 } catch (e) {
   switch (e.code) {
     case 'not_configured':
@@ -1191,8 +1166,8 @@ try {
 
 ```dart Flutter
 try {
-  await ZeroSettle.instance.presentPaymentSheet(
-    productId: productId, userId: userId,
+  await ZeroSettle.instance.purchase(
+    productId: productId,
   );
 } on ZSNotConfiguredException {
   // SDK not configured
@@ -1233,9 +1208,7 @@ struct PaywallView: View {
     func loadProducts() {
         Task {
             do {
-                products = try await ZeroSettle.shared.fetchProducts(
-                    userId: Auth.currentUser.id
-                ).products
+                products = try await ZeroSettle.shared.fetchProducts().products
                 loadError = nil
             } catch {
                 loadError = error
@@ -1249,7 +1222,7 @@ struct PaywallView: View {
 @Composable
 fun PaywallScreen() {
     var products by remember { mutableStateOf<List<Product>>(emptyList()) }
-    var loadError by remember { mutableStateOf<Exception?>(null) }
+    var loadError by remember { mutableStateOf<Throwable?>(null) }
 
     LaunchedEffect(Unit) { loadProducts() }
 
@@ -1273,7 +1246,7 @@ function PaywallScreen() {
 
   const loadProducts = async () => {
     try {
-      const catalog = await ZeroSettle.fetchProducts(auth.currentUser.id);
+      const catalog = await ZeroSettleKit.fetchProducts(auth.currentUser.id);
       setProducts(catalog.products);
       setLoadError(null);
     } catch (e) {
@@ -1317,9 +1290,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   Future<void> _loadProducts() async {
     try {
-      final catalog = await ZeroSettle.instance.fetchProducts(
-        userId: auth.currentUser.id,
-      );
+      final catalog = await ZeroSettle.instance.fetchProducts();
       setState(() {
         products = catalog.products;
         loadError = null;
@@ -1363,7 +1334,7 @@ Before releasing, test these scenarios on a physical device:
 | Complete purchase (Custom Tab) | Android | Transaction returned, entitlements update |
 | Cancel checkoutSheet | iOS | `.cancelled` error, no entitlement change |
 | Cancel Safari fallback | iOS | No entitlement change, no error shown |
-| Cancel Custom Tab checkout | Android | `ZeroSettleError.Cancelled`, no entitlement change |
+| Cancel Custom Tab checkout | Android | `ZeroSettleError.PurchaseCancelled`, no entitlement change |
 | Restore purchases | Both | All previous purchases recovered |
 | App killed during checkout | Both | Entitlements sync on next launch |
 | Network offline | Both | Cached entitlements still work |
@@ -1381,11 +1352,11 @@ ZeroSettle.shared.configure(.init(publishableKey: "your_test_key"))
 ```
 
 ```kotlin Kotlin
-ZeroSettle.configure(context, ZeroSettle.Configuration(publishableKey = "your_test_key"))
+ZeroSettle.configure(context, ZeroSettleConfig(publishableKey = "your_test_key"))
 ```
 
 ```tsx React Native
-await ZeroSettle.configure({ publishableKey: 'your_test_key' });
+await ZeroSettleKit.configure({ publishableKey: 'your_test_key' });
 ```
 
 ```dart Flutter
@@ -1397,11 +1368,11 @@ await ZeroSettle.instance.configure(publishableKey: 'your_test_key');
 
 ### Fetch Products Once
 
-On iOS, call `bootstrap()` after `configure()` to fetch products and cache them in `ZeroSettle.shared.products`. On Android, call `bootstrap()` after `configure()` to fetch and cache products in the `ZeroSettle.products` StateFlow. There's no need for a separate fetch call or custom caching on either platform. Use `fetchProducts()` only for manual refresh (e.g., pull-to-refresh).
+Call `identify(...)` after `configure()` — on iOS, Android, and Flutter — to fetch products and cache them. On iOS they land in `ZeroSettle.shared.products`; on Android in the `ZeroSettle.products` StateFlow. There's no need for a separate fetch call or custom caching. Use `fetchProducts()` only for manual refresh (e.g., pull-to-refresh).
 
 <CodeGroup>
 ```swift Swift
-// Products already fetched by bootstrap() — just use them
+// Products already fetched by identify() — just use them
 let products = ZeroSettle.shared.products
 ```
 
@@ -1410,20 +1381,20 @@ let products = ZeroSettle.shared.products
 fun HomeScreen() {
     val products by ZeroSettle.products.collectAsState()
 
-    // Products already fetched by bootstrap() — just use them
+    // Products already fetched by identify() — just use them
     ProductList(products)
 }
 ```
 
 ```tsx React Native
 // Products already fetched by fetchProducts() — store and reuse them
-const catalog = await ZeroSettle.fetchProducts(auth.currentUser.id);
+const catalog = await ZeroSettleKit.fetchProducts(auth.currentUser.id);
 const products = catalog.products;
 ```
 
 ```dart Flutter
-// Products already fetched by bootstrap() — just use them
-final catalog = await ZeroSettle.instance.bootstrap(userId: auth.currentUser.id);
+// Products already fetched by identify() — re-fetch for the latest catalog
+final catalog = await ZeroSettle.instance.fetchProducts();
 final products = catalog.products;
 ```
 </CodeGroup>
@@ -1431,10 +1402,10 @@ final products = catalog.products;
 ### Prefetch Products & Warm Up
 
 <Note>
-  `warmUp()` and `PaymentIntent` preloading are iOS-specific APIs. On Android, products are cached in the `ZeroSettle.products` StateFlow after `bootstrap()` or `fetchProducts()` --- no additional warm-up step is needed.
+  `warmUp()` and `PaymentIntent` preloading are iOS-specific APIs. On Android, products are cached in the `ZeroSettle.products` StateFlow after `identify()` or `fetchProducts()` --- no additional warm-up step is needed.
 </Note>
 
-When you call `bootstrap()`, products are fetched and the first product's `PaymentIntent` is warmed up automatically. No separate calls are needed.
+When you call `identify(_:)`, products are fetched and the first product's `PaymentIntent` is warmed up automatically. No separate calls are needed.
 
 For manual control (e.g., warming up additional products or refreshing later), `fetchProducts()` and `warmUp()` are still available:
 
@@ -1446,13 +1417,10 @@ struct HomeView: View {
             // ...
         }
         .task {
-            // Products already fetched by bootstrap() — warm up additional products
+            // Products already fetched by identify() — warm up additional products
             let products = ZeroSettle.shared.products
             for product in products.prefix(3) {
-                await CheckoutSheet.warmUp(
-                    productId: product.id,
-                    userId: Auth.currentUser.id
-                )
+                await CheckoutSheet.warmUp(productId: product.id)
             }
         }
     }
@@ -1461,7 +1429,7 @@ struct HomeView: View {
 
 ```kotlin Kotlin
 // On Android, products are cached in the ZeroSettle.products StateFlow
-// after bootstrap() or fetchProducts(). No additional warm-up step is
+// after identify() or fetchProducts(). No additional warm-up step is
 // needed — the SDK handles caching automatically.
 ```
 
@@ -1472,12 +1440,11 @@ struct HomeView: View {
 ```
 
 ```dart Flutter
-// Products already fetched by bootstrap() — warm up additional products
+// Products already fetched by identify() — warm up additional products
 final products = catalog.products;
 for (final product in products.take(3)) {
   await ZeroSettle.instance.warmUpPaymentSheet(
     productId: product.id,
-    userId: auth.currentUser.id,
   );
 }
 ```

@@ -18,7 +18,7 @@ https://github.com/zerosettle/ZeroSettleKit
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/zerosettle/ZeroSettleKit", from: "1.1.5")
+    .package(url: "https://github.com/zerosettle/ZeroSettleKit", from: "1.4.0")
 ]
 ```
 
@@ -50,7 +50,7 @@ Add the ZeroSettle SDK from [Maven Central](https://central.sonatype.com/artifac
 ```kotlin
 // build.gradle.kts (app module)
 dependencies {
-    implementation("io.zerosettle:zerosettle-android:0.15.0")
+    implementation("io.zerosettle:zerosettle-android:1.0.0")
 }
 ```
 
@@ -59,7 +59,7 @@ dependencies {
 ```toml
 # gradle/libs.versions.toml
 [versions]
-zerosettle = "0.15.0"
+zerosettle = "1.0.0"
 
 [libraries]
 zerosettle = { module = "io.zerosettle:zerosettle-android", version.ref = "zerosettle" }
@@ -106,7 +106,7 @@ flutter pub add zerosettle
 
 ```yaml
 dependencies:
-  zerosettle: ^1.1.0
+  zerosettle: ^1.4.0
 ```
 
 Then run `flutter pub get`.
@@ -152,8 +152,13 @@ Then run `cd ios && pod install`.
 ```typescript
 import { ZeroSettleKit } from 'react-native-zerosettle';
 
+// `ZeroSettleKit` is the singleton instance — call methods on it directly.
 ZeroSettleKit.configure({ publishableKey: 'zs_pk_live_...' });
 ```
+
+<Note>
+  The React Native package wraps **ZeroSettleKit 1.3.x** and is currently iOS-only — it is one minor version behind the native iOS, Flutter, and Android SDKs (1.4.0). The `bootstrap(userId:)` identity model documented for React Native reflects what this version supports.
+</Note>
 
 **Resources:**
 - [npm: react-native-zerosettle](https://www.npmjs.com/package/react-native-zerosettle)

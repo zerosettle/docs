@@ -4,7 +4,7 @@ description: 'Display promotional pricing and free trial eligibility in your pay
 icon: 'tag'
 ---
 
-If a product has an active promotion, the checkout sheet automatically shows the promotional price. Read promotion metadata from the `Product` object to update your paywall copy before presenting checkout.
+If a product has an active promotion, the checkout sheet automatically shows the promotional price. Read promotion metadata from the `ZSProduct` object to update your paywall copy before presenting checkout.
 
 ## Reading Promotion Data
 
@@ -16,30 +16,30 @@ if let promo = product.promotion {
 }
 ```
 
-Promotion types:
-- **Percent off** — e.g., 50% off the regular price
-- **Fixed amount** — e.g., $5 off
-- **Free trial** — e.g., 7 days free
+`promotion` is a `Promotion?` on `ZSProduct`. Its `type` is a `Promotion.Kind`:
+- **`.percentOff`** — e.g., 50% off the regular price
+- **`.fixedAmount`** — e.g., $5 off
+- **`.freeTrial`** — e.g., 7 days free
 
 ## Free Trials
 
 Free trial configuration is **server-side** — configure trial length per product in the [ZeroSettle dashboard](https://dashboard.zerosettle.io). The SDK reads trial data from your product catalog automatically.
 
-Two fields on `Product` reflect trial status:
+Two fields on `ZSProduct` reflect trial status:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `isTrialEligible` | `Bool` | Whether this user is eligible for a trial on this product (server-determined based on prior trial history) |
-| `freeTrialDuration` | `String?` | Human-readable trial length (e.g., `"7 days"`) when configured |
+| `isTrialEligible` | `Bool?` | Whether this user is eligible for a trial on this product (server-determined based on prior trial history). `nil` when no `userId` was provided to `fetchProducts()` or the product has no trial |
+| `freeTrialDuration` | `String?` | Raw trial-length string (e.g., `"1_week"`, `"30"`) when configured |
 
-Use these to update your paywall CTA copy:
+`ZSProduct` also exposes the convenience accessor `freeTrialLabel` (`String?`), a human-readable label (e.g., `"7-day free trial"`) that is `nil` unless the user is trial-eligible. Use these to update your paywall CTA copy:
 
 ```swift
 // Framework-neutral — identical in SwiftUI and UIKit
-if product.isTrialEligible, let duration = product.freeTrialDuration {
-    buyButtonTitle = "Start \(duration) Free Trial"
+if let label = product.freeTrialLabel {
+    buyButtonTitle = "Start \(label)"
 } else {
-    buyButtonTitle = "Subscribe — \(product.webPrice.formatted)"
+    buyButtonTitle = "Subscribe — \(product.webPrice?.formatted ?? "")"
 }
 ```
 
@@ -51,37 +51,25 @@ No trial parameter is needed when presenting the checkout sheet — the server a
 
 ## Stripe Customer Attachment
 
-To attach a checkout to an existing Stripe customer (for unified billing portal use cases), pass `stripeCustomerId`:
+To attach a checkout to an existing Stripe customer (for unified billing portal use cases), pass `stripeCustomerId`. This parameter is **not** available on `.checkoutSheet` / `CheckoutSheet.present` — it is accepted by the offer/migration surfaces:
 
-<Tabs>
-  <Tab title="SwiftUI">
-    ```swift
-    .checkoutSheet(
-        item: $selectedProduct,
-        userId: currentUser.id,
-        stripeCustomerId: "cus_abc123"
-    ) { result in
-        handleResult(result)
-    }
-    ```
-  </Tab>
-  <Tab title="UIKit">
-    ```swift
-    CheckoutSheet.present(
-        from: self,
-        product: product,
-        userId: currentUser.id,
-        stripeCustomerId: "cus_abc123"
-    ) { result in
-        handleResult(result)
-    }
-    ```
-  </Tab>
-</Tabs>
+* `OfferTipView(stripeCustomerId:)` and `MigrationTipView(stripeCustomerId:)` — the drop-in views.
+* `ZeroSettle.shared.offerManager(stripeCustomerId:)` and `ZeroSettle.shared.migrationManager(stripeCustomerId:)` — when driving the flow yourself.
+* `ZSMigrationManager.startCheckout(stripeCustomerId:)` — per-checkout override on the migration manager.
+
+```swift
+// SwiftUI — attach the offer tip's checkout to an existing Stripe customer
+OfferTipView(stripeCustomerId: "cus_abc123")
+```
+
+```swift
+// Headless — drive checkout yourself with the offer manager
+let manager = ZeroSettle.shared.offerManager(stripeCustomerId: "cus_abc123")
+```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `stripeCustomerId` | `String?` | `nil` | Existing Stripe Customer ID (`cus_xxx`). Attaches the checkout to this customer for a consolidated [Stripe Billing Portal](https://docs.stripe.com/customer-management/integrate-customer-portal) view. |
+| `stripeCustomerId` | `String?` | `nil` | Existing Stripe Customer ID (`cus_xxx`). Attaches the checkout to this customer for a consolidated [Stripe Billing Portal](https://docs.stripe.com/customer-management/integrate-customer-portal) view. When `nil`, the backend creates a new customer. |
 
 ## Testing Promotions
 

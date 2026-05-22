@@ -4,25 +4,25 @@ description: 'How ZeroSettle identifies users across purchases and devices'
 icon: 'user'
 ---
 
-ZeroSettle supports three integration patterns for user identity. Choose based on your app's auth system.
+ZeroSettle establishes user identity **once per session** with `identify(...)`, which you call after `configure()` and before any purchase, product-fetch, or entitlement call. Identity is then implicit — you do not pass a `userId` to individual methods.
 
-## Integration Patterns
+<Note>
+  **Identify-first is required.** On iOS, Android, and Flutter, calling a user-scoped method (`purchase`, `restoreEntitlements`, etc.) before `identify()` throws a "user not identified" error. The React Native SDK (currently one version behind) still uses the older `bootstrap(userId)` model — see the React Native tabs below.
+</Note>
 
-<CardGroup cols={3}>
-  <Card title="RevenueCat" icon="puzzle-piece">
-    Already use RevenueCat? Pass your existing `appUserID`.
-  </Card>
-  <Card title="Custom Auth" icon="key">
-    Have your own auth? Pass your user ID.
-  </Card>
-  <Card title="Anonymous" icon="user-secret">
-    No auth system? Email from checkout is used.
-  </Card>
-</CardGroup>
+## The `Identity` Type
+
+`identify()` takes an `Identity` value. Pick exactly one mode per session — never mix `user` and `anonymous` for the same person.
+
+| Mode | When to use |
+|------|-------------|
+| `Identity.user(id:)` | You have your own auth system. Pass a stable user ID. |
+| `Identity.anonymous()` | No auth system. The SDK generates and persists a stable session UUID. |
+| `Identity.deferred()` | Auth comes on a later screen. Suppresses the "no user identified" warning until you provide a real identity. |
 
 ## Option 1: RevenueCat Users
 
-If you use RevenueCat for subscription management, pass the same user ID:
+If you use RevenueCat for subscription management, pass the same user ID to `identify()`:
 
 <CodeGroup>
 
@@ -33,52 +33,53 @@ import RevenueCat
 
 // Configure - disable StoreKit sync since RevenueCat handles it
 ZeroSettle.shared.configure(.init(
-    publishableKey: "pk_live_...",
+    publishableKey: "zs_pk_live_...",
     syncStoreKitTransactions: false
 ))
 
-// Purchase - use your RC user ID
-@State private var selectedProduct: Product?
+// Identify once, using your RC user ID
+let catalog = try await ZeroSettle.shared.identify(
+    .user(id: Purchases.shared.appUserID)
+)
 
-Button("Buy") { selectedProduct = product }
-    .checkoutSheet(item: $selectedProduct, userId: Purchases.shared.appUserID) { result in
-        switch result {
-        case .success(let transaction):
-            print("Purchased: \(transaction.productId)")
-        case .failure(let error):
-            print("Error: \(error)")
-        }
-    }
+// Purchase - identity is implicit, no userId needed
+let transaction = try await ZeroSettle.shared.purchase(productId: "premium_monthly")
 ```
 
 ```kotlin Kotlin
 import com.zerosettle.sdk.ZeroSettle
+import com.zerosettle.sdk.ZeroSettleConfig
+import com.zerosettle.sdk.Identity
 
-// Configure - disable Play Store sync since RevenueCat handles it
-ZeroSettle.configure(context, ZeroSettle.Configuration(
-    publishableKey = "pk_live_...",
-    syncPlayStoreTransactions = false,
+// Configure - disable Play Billing purchase sync since RevenueCat handles it
+ZeroSettle.configure(context, ZeroSettleConfig(
+    publishableKey = "zs_pk_live_...",
+    syncPlayPurchases = false,
 ))
 
-// Purchase - use your RC user ID
+// Identify once, using your RC user ID
+ZeroSettle.identify(Identity.User(id = Purchases.sharedInstance.appUserID))
+
+// Purchase - identity is implicit, no userId needed
 val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = "premium_monthly",
-    userId = Purchases.sharedInstance.appUserID,
-)
+    activity = this, productId = "premium_monthly",
+).getOrThrow()
 ```
 
 ```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
+import { ZeroSettleKit } from 'react-native-zerosettle';
 
 // Configure with StoreKit sync disabled
-await ZeroSettle.configure({
-  publishableKey: 'pk_live_...',
+ZeroSettleKit.configure({
+  publishableKey: 'zs_pk_live_...',
   syncStoreKitTransactions: false,
 });
 
+// React Native (1.3.x) uses the bootstrap(userId) model
+await ZeroSettleKit.bootstrap(Purchases.getAppUserID());
+
 // Purchase using RC user ID
-const transaction = await ZeroSettle.purchase(
+const transaction = await ZeroSettleKit.purchase(
   'premium_monthly',
   Purchases.getAppUserID(),
 );
@@ -89,14 +90,18 @@ import 'package:zerosettle/zerosettle.dart';
 
 // Configure with StoreKit sync disabled
 await ZeroSettle.instance.configure(
-  publishableKey: 'pk_live_...',
+  publishableKey: 'zs_pk_live_...',
   syncStoreKitTransactions: false,
 );
 
-// Purchase using RC user ID
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
+// Identify once, using your RC user ID
+await ZeroSettle.instance.identify(
+  Identity.user(id: Purchases.appUserID),
+);
+
+// Purchase - identity is implicit, no userId needed
+final transaction = await ZeroSettle.instance.purchase(
   productId: 'premium_monthly',
-  userId: Purchases.appUserID,
 );
 ```
 
@@ -107,7 +112,7 @@ final transaction = await ZeroSettle.instance.presentPaymentSheet(
 **Restoration**: RevenueCat handles it. Call `Purchases.shared.restorePurchases()`.
 
 <Note>
-  Set `syncStoreKitTransactions: false` when using RevenueCat. This prevents duplicate transaction reporting since RevenueCat already handles StoreKit.
+  Set `syncStoreKitTransactions: false` (iOS / Flutter) or `syncPlayPurchases = false` (Android) when using RevenueCat. This prevents duplicate transaction reporting since RevenueCat already handles the native store.
 </Note>
 
 ## Option 2: Custom Auth (Recommended)
@@ -121,77 +126,80 @@ import SwiftUI
 import ZeroSettleKit
 
 // Configure
-ZeroSettle.shared.configure(.init(publishableKey: "pk_live_..."))
+ZeroSettle.shared.configure(.init(publishableKey: "zs_pk_live_..."))
 
-// Purchase - use your user ID
-@State private var selectedProduct: Product?
-
-Button("Buy") { selectedProduct = product }
-    .checkoutSheet(item: $selectedProduct, userId: Auth.currentUser.id) { result in
-        switch result {
-        case .success(let transaction):
-            print("Purchased: \(transaction.productId)")
-        case .failure(let error):
-            print("Error: \(error)")
-        }
-    }
-
-// Later: restore entitlements
-let entitlements = try await ZeroSettle.shared.restoreEntitlements(
-    userId: Auth.currentUser.id
+// Identify once, after login
+let catalog = try await ZeroSettle.shared.identify(
+    .user(id: Auth.currentUser.id)
 )
+
+// Purchase - identity is implicit
+let transaction = try await ZeroSettle.shared.purchase(productId: "premium_monthly")
+
+// Later: restore entitlements (no userId — identity is implicit)
+let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 ```
 
 ```kotlin Kotlin
 import com.zerosettle.sdk.ZeroSettle
+import com.zerosettle.sdk.ZeroSettleConfig
+import com.zerosettle.sdk.Identity
 
 // Configure
-ZeroSettle.configure(context, ZeroSettle.Configuration(
-    publishableKey = "pk_live_..."
+ZeroSettle.configure(context, ZeroSettleConfig(
+    publishableKey = "zs_pk_live_..."
 ))
 
-// Purchase - use your user ID
-val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = "premium_monthly",
-    userId = auth.currentUser.id,
-)
+// Identify once, after login
+ZeroSettle.identify(Identity.User(id = auth.currentUser.id))
 
-// Later: restore entitlements
-val entitlements = ZeroSettle.restoreEntitlements(
-    userId = auth.currentUser.id
-)
+// Purchase - identity is implicit (purchase() returns Result<CheckoutTransaction>)
+val transaction = ZeroSettle.purchase(activity = this, productId = "premium_monthly").getOrThrow()
+
+// Later: restore entitlements (no userId — identity is implicit)
+val entitlements = ZeroSettle.restoreEntitlements().getOrThrow()
 ```
 
 ```tsx React Native
-await ZeroSettle.configure({ publishableKey: 'pk_live_...' });
+import { ZeroSettleKit } from 'react-native-zerosettle';
 
-const transaction = await ZeroSettle.purchase(
+ZeroSettleKit.configure({ publishableKey: 'zs_pk_live_...' });
+
+// React Native (1.3.x): bootstrap with your user ID
+await ZeroSettleKit.bootstrap(auth.currentUser.id);
+
+const transaction = await ZeroSettleKit.purchase(
   'premium_monthly',
   auth.currentUser.id,
 );
 
-const entitlements = await ZeroSettle.restoreEntitlements(auth.currentUser.id);
+const entitlements = await ZeroSettleKit.restoreEntitlements(auth.currentUser.id);
 ```
 
 ```dart Flutter
-await ZeroSettle.instance.configure(publishableKey: 'pk_live_...');
+import 'package:zerosettle/zerosettle.dart';
 
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
+await ZeroSettle.instance.configure(publishableKey: 'zs_pk_live_...');
+
+// Identify once, after login
+await ZeroSettle.instance.identify(
+  Identity.user(id: auth.currentUser.id),
+);
+
+// Purchase - identity is implicit
+final transaction = await ZeroSettle.instance.purchase(
   productId: 'premium_monthly',
-  userId: auth.currentUser.id,
 );
 
-final entitlements = await ZeroSettle.instance.restoreEntitlements(
-  userId: auth.currentUser.id,
-);
+// Later: restore entitlements (no userId — identity is implicit)
+final entitlements = await ZeroSettle.instance.restoreEntitlements();
 ```
 
 </CodeGroup>
 
-**How it works**: ZeroSettle links purchases to your user ID and tracks entitlements. The `restoreEntitlements(userId:)` method fetches all active entitlements from both web checkout and StoreKit sources.
+**How it works**: ZeroSettle links purchases to the identity from your most recent `identify()` call and tracks entitlements. `restoreEntitlements()` fetches all active entitlements from both web checkout and native store sources.
 
-**Restoration**: Call `restoreEntitlements(userId:)` after login or on app launch. Works across devices.
+**Restoration**: Call `identify()` after login (or on app launch), then `restoreEntitlements()`. Works across devices.
 
 <Info>
   StoreKit purchases are tied to the account that was logged in when the purchase was made. If multiple accounts share the same Apple ID, each only sees its own purchases. See [Entitlement Ownership](/iap/entitlement-ownership).
@@ -199,7 +207,7 @@ final entitlements = await ZeroSettle.instance.restoreEntitlements(
 
 ## Option 3: Anonymous Users
 
-No user system? Users are identified by their email from checkout:
+No user system yet? Use `Identity.anonymous()`. The SDK generates and persists a stable per-install UUID, so entitlements remain restorable for the lifetime of the install — no email lookup required.
 
 <CodeGroup>
 
@@ -208,59 +216,66 @@ import SwiftUI
 import ZeroSettleKit
 
 // Configure
-ZeroSettle.shared.configure(.init(publishableKey: "pk_live_..."))
+ZeroSettle.shared.configure(.init(publishableKey: "zs_pk_live_..."))
 
-// Purchase - pass empty string for userId
-@State private var selectedProduct: Product?
+// Identify anonymously — the SDK persists a stable session UUID
+let catalog = try await ZeroSettle.shared.identify(.anonymous)
 
-Button("Buy") { selectedProduct = product }
-    .checkoutSheet(item: $selectedProduct, userId: "") { result in
-        switch result {
-        case .success(let transaction):
-            print("Purchased: \(transaction.productId)")
-        case .failure(let error):
-            print("Error: \(error)")
-        }
-    }
+// Purchase — identity is implicit
+let transaction = try await ZeroSettle.shared.purchase(productId: "premium_lifetime")
 ```
 
 ```kotlin Kotlin
 import com.zerosettle.sdk.ZeroSettle
+import com.zerosettle.sdk.ZeroSettleConfig
+import com.zerosettle.sdk.Identity
 
 // Configure
-ZeroSettle.configure(context, ZeroSettle.Configuration(publishableKey = "pk_live_..."))
+ZeroSettle.configure(context, ZeroSettleConfig(publishableKey = "zs_pk_live_..."))
 
-// Purchase — pass empty string for userId
+// Identify anonymously — the SDK persists a stable per-install UUID
+ZeroSettle.identify(Identity.Anonymous)
+
+// Purchase — identity is implicit
 val transaction = ZeroSettle.purchase(
-    activity = this,
-    productId = "premium_lifetime",
-    userId = "",
-)
+    activity = this, productId = "premium_lifetime",
+).getOrThrow()
 ```
 
 ```tsx React Native
-await ZeroSettle.configure({ publishableKey: 'pk_live_...' });
+// React Native (1.3.x) does not yet expose the Identity model.
+// Pass an empty string to bootstrap for an anonymous session.
+import { ZeroSettleKit } from 'react-native-zerosettle';
 
-const transaction = await ZeroSettle.purchase('premium_lifetime', '');
+ZeroSettleKit.configure({ publishableKey: 'zs_pk_live_...' });
+
+await ZeroSettleKit.bootstrap('');
+
+const transaction = await ZeroSettleKit.purchase('premium_lifetime', '');
 ```
 
 ```dart Flutter
-await ZeroSettle.instance.configure(publishableKey: 'pk_live_...');
+import 'package:zerosettle/zerosettle.dart';
 
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
+await ZeroSettle.instance.configure(publishableKey: 'zs_pk_live_...');
+
+// Identify anonymously — the SDK persists a stable session UUID
+await ZeroSettle.instance.identify(Identity.anonymous());
+
+// Purchase — identity is implicit
+final transaction = await ZeroSettle.instance.purchase(
   productId: 'premium_lifetime',
-  userId: '',
 );
 ```
 
 </CodeGroup>
 
-**How it works**: When `userId` is empty, the user enters their email during Stripe checkout. ZeroSettle links the purchase to that email address.
+**How it works**: `Identity.anonymous()` persists a stable UUID in on-device storage. The same identity is reused across app launches until you call `logout()` or the user clears app data.
 
-**Restoration**: The user's entitlements are tied to their email. If you later add user accounts, you can query entitlements using the email they provided at checkout.
+**Restoration**: `restoreEntitlements()` works for anonymous users — entitlements are tied to the persisted UUID. The identity does not survive a reinstall or app-data clear, so promote anonymous users to `Identity.user(id:)` once your app has an auth system for true cross-device restoration.
 
 <Warning>
-  Anonymous users cannot use `restoreEntitlements()` without an account system. Consider prompting users to create an account after purchase for better cross-device support.
+  Anonymous identities are install-scoped. They are lost on reinstall or app-data clear. Prompt users to create an account for cross-device and reinstall-safe entitlement restoration.
 </Warning>
 
 ## Checking Entitlements
@@ -270,9 +285,8 @@ After restoring entitlements, check if a user has access:
 <CodeGroup>
 
 ```swift Swift
-let entitlements = try await ZeroSettle.shared.restoreEntitlements(
-    userId: currentUser.id
-)
+// Identity is implicit — call identify() once first, no userId here
+let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 
 // Check for a specific product
 let hasPremium = entitlements.contains {
@@ -284,7 +298,8 @@ let hasAnyAccess = entitlements.contains { $0.isActive }
 ```
 
 ```kotlin Kotlin
-val entitlements = ZeroSettle.restoreEntitlements(userId = currentUser.id)
+// Identity is implicit — call identify() once first, no userId here
+val entitlements = ZeroSettle.restoreEntitlements().getOrThrow()
 
 // Check for a specific product
 val hasPremium = entitlements.any {
@@ -296,7 +311,8 @@ val hasAnyAccess = entitlements.any { it.isActive }
 ```
 
 ```tsx React Native
-const entitlements = await ZeroSettle.restoreEntitlements(currentUser.id);
+// React Native (1.3.x) still takes the userId argument
+const entitlements = await ZeroSettleKit.restoreEntitlements(currentUser.id);
 
 const hasPremium = entitlements.some(
   e => e.productId === 'premium_monthly' && e.isActive
@@ -306,9 +322,8 @@ const hasAnyAccess = entitlements.some(e => e.isActive);
 ```
 
 ```dart Flutter
-final entitlements = await ZeroSettle.instance.restoreEntitlements(
-  userId: currentUser.id,
-);
+// Identity is implicit — call identify() once first, no userId here
+final entitlements = await ZeroSettle.instance.restoreEntitlements();
 
 final hasPremium = entitlements.any(
   (e) => e.productId == 'premium_monthly' && e.isActive,
@@ -336,31 +351,35 @@ Entitlements can come from three sources:
 
 - **`.webCheckout`**: Purchases made through ZeroSettle's Stripe checkout
 - **`.storeKit`**: Purchases made through Apple's native StoreKit (if `syncStoreKitTransactions: true`)
-- **`.playStore`**: Purchases made through Google Play Billing (if `syncPlayStoreTransactions: true`)
+- **`.playStore`**: Purchases made through Google Play Billing (if `syncPlayPurchases = true`)
 
 The SDK merges entitlements from all sources when you call `restoreEntitlements()`.
 
 ## Best Practices
 
 <AccordionGroup>
-  <Accordion title="Always pass the same userId">
-    Use a stable identifier that doesn't change. UUIDs work well. Avoid using email addresses directly as they can change.
+  <Accordion title="Call identify() once per session">
+    Call `identify()` after `configure()` and after login — before any product-fetch, purchase, or entitlement call. You do not pass a `userId` to individual methods; identity is implicit from the most recent `identify()`.
+  </Accordion>
+  <Accordion title="Use a stable identity ID">
+    Pass a stable identifier to `Identity.user(id:)` that doesn't change. UUIDs work well. Avoid using email addresses directly as they can change.
   </Accordion>
   <Accordion title="Call restoreEntitlements on app launch">
-    This ensures entitlements are synced even if the app was deleted and reinstalled, or if a purchase was made on another device.
+    After `identify()`, call `restoreEntitlements()` so entitlements are synced even if the app was reinstalled, or a purchase was made on another device.
   </Accordion>
   <Accordion title="Handle the checkout callback">
     Implement the universal link handler to capture successful purchases. See the [Quickstart](/iap/quickstart) for setup.
   </Accordion>
 </AccordionGroup>
 
-## User ID Guidelines
+## Identity ID Guidelines
 
 | Do | Don't |
 |----|-------|
-| Use your backend's user ID | Use device identifiers (they change) |
+| Use your backend's user ID for `Identity.user(id:)` | Use device identifiers (they change) |
 | Use a UUID you generate | Use email (users change emails) |
 | Keep it consistent across platforms | Use different IDs per platform |
+| Use `Identity.anonymous()` when you have no auth system | Mix `Identity.user` and `Identity.anonymous` for the same person |
 
 <Card title="Quickstart" icon="rocket" href="/iap/quickstart">
   Get started with the full SDK setup

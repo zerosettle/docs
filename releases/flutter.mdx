@@ -4,7 +4,7 @@ description: 'Release notes for the ZeroSettle Flutter plugin'
 icon: 'mobile'
 ---
 
-**Current version:** `1.1.0`
+**Current version:** `1.4.0`
 **Package:** pub.dev (`zerosettle`)
 **Minimum requirements:** Flutter 3.3.0+, Dart 3.10+
 
@@ -12,36 +12,38 @@ icon: 'mobile'
   Add to your `pubspec.yaml`:
   ```yaml
   dependencies:
-    zerosettle: ^1.1.0
+    zerosettle: ^1.4.0
   ```
 </Tip>
 
 ---
 
-## April 2026
+## 1.x
 
-<Update label="1.1.0" description="2026-04-07">
-### Aligned with ZeroSettleKit 1.1.x
+<Update label="1.4.0" description="Current">
+### Android-parity sweep & SDK event stream
 
-Bumped to 1.1.0 to align with the ZeroSettleKit 1.1.x release line. The plugin now pins ZeroSettleKit `>= 1.1.0` and inherits everything that shipped in ZeroSettleKit 1.1.0.
+- **Android parity**: Closes the remaining native bridge gaps — `getSdkVersion()`, User Choice Billing state (`getIsUcbEnabled()` / `isUcbEnabledUpdates`), `releasePendingCheckout()`, and the pending-actions APIs (`getPendingActions()`, `pendingActionsUpdates`, `dismissPendingAction()`).
+- **SDK event stream**: New `ZeroSettle.instance.events` — a `Stream<ZeroSettleEvent>` of analytics and lifecycle events with typed variants.
+- **User offers**: `fetchUserOffer()` returns a typed `UserOfferResponse` — the server-canonical migration / upgrade decision.
+- **New widgets**: `ZeroSettlePendingActionBanner` and `ZeroSettleOfferTip` (both Android-rendered; iOS renders nothing).
+- All changes are additive — no public API was renamed or removed.
 
-- **Unified offer system** — Inherits `OfferTipView` and `ZSOfferManager` for migration + upgrade offers in a single component (iOS canonical; Flutter still ships `MigrationTipView` for now)
-- **Checkout hardening** — Sheet waits for payment buttons before presenting; JS handler safety prevents false "Payment failed" errors
+For the full, authoritative changelog see `CHANGELOG.md` in the [ZeroSettle-Flutter repository](https://github.com/zerosettle/ZeroSettle-Flutter).
 </Update>
 
-<Update label="1.0.0 — 1.0.3" description="2026-04-01 — 2026-04-07">
-### Initial 1.x stable releases
+<Update label="1.0.0 — 1.3.x" description="Identity-first API">
+### Identity-first API and unified purchase
 
-Initial 1.x stable releases for the Flutter plugin. Bridges ZeroSettleKit 1.0.32–1.0.34 native APIs and aligns the public Dart API with the iOS 1.x surface.
-
-- Stable 1.0 baseline for production deployments
-- Native iOS dependency pinned to ZeroSettleKit 1.0.x
-- Internal cleanup and minor bug fixes
+- **`identify()`**: User identity is now established once via `ZeroSettle.instance.identify(Identity.user(id: ...))` instead of passing `userId` to every call. The per-call `userId` parameter and `bootstrap()` are deprecated and removed in 2.0.
+- **Unified `purchase()`**: A single `purchase(productId:)` entry point routes to web checkout or native StoreKit / Play Billing automatically.
+- **Pending claims & ownership transfer**: `getPendingClaims()`, `transferStoreKitOwnershipToCurrentUser()` (iOS), and `transferPlayOwnershipToCurrentUser()` (Android).
+- **Apple Pay**: `presentApplePaySetup()`, `getApplePayState()`, and the `applePayStateUpdates` stream.
 </Update>
 
 ---
 
-## February 2026
+## February 2026 (0.x — pre-release)
 
 <Update label="0.11.0 — 0.12.0" description="2026-02-26 — 2026-02-27">
 ### iOS dependency updates

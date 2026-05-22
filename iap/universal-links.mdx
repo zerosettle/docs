@@ -188,21 +188,24 @@ For Android and cross-platform frameworks:
 class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.data?.let { ZeroSettle.handleDeepLink(it) }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        ZeroSettle.onResume()
+        intent.data?.let { uri ->
+            // completeWebCheckout parses and verifies the callback URL
+            lifecycleScope.launch {
+                ZeroSettle.completeWebCheckout(uri.toString())
+            }
+        }
     }
 }
 ```
 
 ```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
+import { ZeroSettleKit } from 'react-native-zerosettle';
 import { Linking } from 'react-native';
 
-Linking.addEventListener('url', ({ url }) => ZeroSettle.handleUniversalLink(url));
+// Handle deep links
+Linking.addEventListener('url', ({ url }) => {
+  ZeroSettleKit.handleUniversalLink(url);
+});
 ```
 
 ```dart Flutter
@@ -212,7 +215,97 @@ await ZeroSettle.instance.handleUniversalLink(url);
 
 ## Step 4: Handle Checkout Results
 
-Checkout results — successful purchases, cancellations, and errors — are handled via the `CheckoutSheet` result callback, not universal links. See [Checkout Errors](/iap/checkout-errors) for the complete result handling API and error reference.
+On iOS, respond to checkout completion with the `ZeroSettleDelegate`. On Android, the `purchase()` call returns the result directly and entitlement changes flow through the `entitlements` StateFlow. For the embedded `checkoutSheet`, results are also delivered via its result callback — see [Checkout Errors](/iap/checkout-errors) for the complete error reference.
+
+<CodeGroup>
+```swift Swift
+class PurchaseManager: ZeroSettleDelegate {
+    init() {
+        ZeroSettle.shared.delegate = self
+    }
+
+    func zeroSettleCheckoutDidComplete(transaction: CheckoutTransaction) {
+        // Purchase successful - unlock content
+        unlockProduct(transaction.productId)
+        showSuccessMessage()
+    }
+
+    func zeroSettleCheckoutDidCancel(productId: String) {
+        // User cancelled - no action needed, or show a prompt
+    }
+
+    func zeroSettleCheckoutDidFail(productId: String, error: Error) {
+        // Something went wrong
+        showError(error.localizedDescription)
+    }
+}
+```
+
+```kotlin Kotlin
+// Android has no delegate — the purchase() call returns the result directly,
+// and entitlement changes flow through the entitlements StateFlow.
+lifecycleScope.launch {
+    ZeroSettle.purchase(activity = this@MainActivity, productId = productId)
+        .onSuccess { transaction ->
+            unlockProduct(transaction.productId)
+            showSuccessMessage()
+        }
+        .onFailure { error ->
+            // ZeroSettleError.UserCancelled when the user backs out
+            showError(error.message ?: "Checkout failed")
+        }
+}
+
+// Observe entitlement changes reactively
+ZeroSettle.entitlements
+    .onEach { updatePremiumUI(it) }
+    .launchIn(lifecycleScope)
+```
+
+```tsx React Native
+import { useZeroSettleEvents } from 'react-native-zerosettle';
+
+useZeroSettleEvents({
+  onEntitlementsDidUpdate: (entitlements) => {
+    // Purchase successful - unlock content
+    updatePremiumUI(entitlements);
+  },
+});
+
+// React Native (1.3.x): purchases are handled via try/catch
+try {
+  const transaction = await ZeroSettleKit.purchase(productId, userId);
+  unlockProduct(transaction.productId);
+  showSuccessMessage();
+} catch (error) {
+  if (error.code === 'cancelled') {
+    // User cancelled - no action needed
+  } else {
+    showError(error.message);
+  }
+}
+```
+
+```dart Flutter
+ZeroSettle.instance.entitlementUpdates.listen((entitlements) {
+  // Purchase successful - unlock content
+  updatePremiumUI(entitlements);
+});
+
+// Purchases are handled via try/catch — identity is implicit
+try {
+  final transaction = await ZeroSettle.instance.purchase(
+    productId: productId,
+  );
+  unlockProduct(transaction.productId);
+  showSuccessMessage();
+} on ZSCancelledException {
+  // User cancelled - no action needed
+} on ZSCheckoutFailedException catch (e) {
+  showError(e.message);
+}
+```
+</CodeGroup>
 
 ## Callback URL Format
 
@@ -272,14 +365,16 @@ ZeroSettle.shared.handleUniversalLink(testURL)
 
 ```kotlin Kotlin
 // In your app, simulate a callback
-ZeroSettle.handleDeepLink(
-    Uri.parse("https://api.zerosettle.io/checkout/callback?transaction_id=test&product_id=test&status=success")
-)
+lifecycleScope.launch {
+    ZeroSettle.completeWebCheckout(
+        "https://api.zerosettle.io/checkout/callback?transaction_id=test&product_id=test&status=success"
+    )
+}
 ```
 
 ```tsx React Native
 // In your app, simulate a callback
-ZeroSettle.handleUniversalLink(
+ZeroSettleKit.handleUniversalLink(
   'https://api.zerosettle.io/checkout/callback?transaction_id=test&product_id=test&status=success'
 );
 ```
@@ -299,23 +394,21 @@ If the universal link fails to open your app, users will see the callback page i
 To handle this case, you can also:
 
 1. **Poll for transaction status** - The SDK stores a pending transaction ID that can be verified on next app launch
-2. **Restore entitlements** - Call `restoreEntitlements(userId:)` on app launch to sync any missed purchases
+2. **Restore entitlements** - Call `restoreEntitlements()` after `identify()` on app launch to sync any missed purchases
 
 <CodeGroup>
 ```swift Swift
-// On app launch, restore entitlements to catch missed callbacks
+// On app launch, after identify(), restore entitlements to catch missed callbacks
 Task {
-    let entitlements = try? await ZeroSettle.shared.restoreEntitlements(
-        userId: currentUser.id
-    )
+    let entitlements = try? await ZeroSettle.shared.restoreEntitlements()
     updateUI(entitlements)
 }
 ```
 
 ```kotlin Kotlin
-// On app launch, restore entitlements to catch missed callbacks
+// On app launch, after identify(), restore entitlements to catch missed callbacks
 lifecycleScope.launch {
-    val entitlements = ZeroSettle.restoreEntitlements(userId = currentUser.id)
+    val entitlements = ZeroSettle.restoreEntitlements().getOrNull().orEmpty()
     val hasPremium = entitlements.any { it.isActive }
     updateUI(entitlements)
 }
@@ -323,15 +416,13 @@ lifecycleScope.launch {
 
 ```tsx React Native
 // On app launch, restore entitlements to catch missed callbacks
-const entitlements = await ZeroSettle.restoreEntitlements(currentUser.id);
+const entitlements = await ZeroSettleKit.restoreEntitlements(currentUser.id);
 updateUI(entitlements);
 ```
 
 ```dart Flutter
-// On app launch, restore entitlements to catch missed callbacks
-final entitlements = await ZeroSettle.instance.restoreEntitlements(
-  userId: currentUser.id,
-);
+// On app launch, after identify(), restore entitlements to catch missed callbacks
+final entitlements = await ZeroSettle.instance.restoreEntitlements();
 updateUI(entitlements);
 ```
 </CodeGroup>
@@ -388,19 +479,23 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.data?.let { uri ->
-            ZeroSettle.handleDeepLink(uri)
+            // completeWebCheckout parses and verifies the callback URL,
+            // refreshes entitlements, and resolves any in-flight purchase()
+            lifecycleScope.launch {
+                ZeroSettle.completeWebCheckout(uri.toString())
+            }
         }
     }
 }
 ```
 
 ```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
+import { ZeroSettleKit } from 'react-native-zerosettle';
 import { Linking } from 'react-native';
 
 // Handle deep links
 Linking.addEventListener('url', ({ url }) => {
-  ZeroSettle.handleUniversalLink(url);
+  ZeroSettleKit.handleUniversalLink(url);
 });
 ```
 
@@ -411,30 +506,9 @@ await ZeroSettle.instance.handleUniversalLink(url);
 ```
 </CodeGroup>
 
-### Step 3: Call onResume
-
-On Android, Custom Tabs have no dismiss callback, so the SDK detects the user's return via `onResume`. Call `ZeroSettle.onResume()` from your Activity:
-
-<CodeGroup>
-```kotlin Kotlin
-override fun onResume() {
-    super.onResume()
-    ZeroSettle.onResume()
-}
-```
-
-```tsx React Native
-// React Native: onResume is handled automatically by the native module.
-// No additional code is needed.
-```
-
-```dart Flutter
-// Flutter: onResume is handled automatically by the native plugin.
-// No additional code is needed.
-```
-</CodeGroup>
-
-This allows the SDK to poll for transaction status when the user returns from the browser.
+<Note>
+  The Android SDK exposes a single entry point — `completeWebCheckout(callbackUrl)`. There is no separate `ZeroSettle.onResume()` SDK call. For external-browser checkout (where Custom Tabs have no dismiss callback), the in-flight `purchase()` call resolves once `completeWebCheckout` is invoked with the callback URL — wire it from `onNewIntent` as shown above.
+</Note>
 
 ---
 

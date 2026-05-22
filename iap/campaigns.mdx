@@ -37,7 +37,7 @@ The SDK returns campaign data in `ProductCatalog.config.migration` (legacy) and 
 
 <CodeGroup>
 ```swift Swift (Unified Offer)
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 // Preferred: unified offer field (handles migration + upgrades)
 if let offer = catalog.config?.offer {
@@ -47,7 +47,7 @@ if let offer = catalog.config?.offer {
 ```
 
 ```swift Swift (Legacy Migration)
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 if let migration = catalog.config?.migration {
     // Show migration prompt to eligible users
@@ -56,7 +56,7 @@ if let migration = catalog.config?.migration {
 ```
 
 ```kotlin Kotlin
-val catalog = ZeroSettle.fetchProducts(userId = user.id)
+val catalog = ZeroSettle.fetchProducts().getOrThrow()
 
 catalog.config?.migration?.let { migration ->
     // Show migration prompt to eligible users
@@ -65,7 +65,7 @@ catalog.config?.migration?.let { migration ->
 ```
 
 ```tsx React Native
-const catalog = await ZeroSettle.fetchProducts(user.id);
+const catalog = await ZeroSettleKit.fetchProducts(user.id);
 
 if (catalog.config?.migration) {
     const migration = catalog.config.migration;
@@ -74,7 +74,7 @@ if (catalog.config?.migration) {
 ```
 
 ```dart Flutter
-final catalog = await ZeroSettle.instance.fetchProducts(userId: user.id);
+final catalog = await ZeroSettle.instance.fetchProducts();
 
 final migration = catalog.config?.migration;
 if (migration != null) {
@@ -91,15 +91,18 @@ try await ZeroSettle.shared.trackMigrationConversion(userId: user.id)
 ```
 
 ```kotlin Kotlin
-ZeroSettle.trackMigrationConversion(userId = user.id)
+import com.zerosettle.sdk.models.UserOffer
+
+// Pass the storefront the original subscription came from.
+ZeroSettle.trackMigrationConversion(source = UserOffer.SourceStorefront.PLAY_STORE)
 ```
 
 ```tsx React Native
-await ZeroSettle.trackMigrationConversion(user.id);
+await ZeroSettleKit.trackMigrationConversion(user.id);
 ```
 
 ```dart Flutter
-await ZeroSettle.instance.trackMigrationConversion(userId: user.id);
+await ZeroSettle.instance.trackMigrationConversion();
 ```
 </CodeGroup>
 
@@ -145,48 +148,42 @@ Enable upgrade offers on the dashboard and configure:
 
 ### SDK Integration
 
-Present the upgrade offer using a SwiftUI modifier or the programmatic API:
+Present the upgrade offer with the programmatic API. Call `identify()` once at
+startup — these calls take no `userId`.
 
 <CodeGroup>
 ```swift Swift
-@State private var showUpgradeOffer = false
-
 Button("See Upgrade Options") {
-    showUpgradeOffer = true
-}
-.upgradeOffer(
-    isPresented: $showUpgradeOffer,
-    productId: "premium_monthly",
-    userId: currentUser.id
-) { result in
-    switch result {
-    case .upgraded:
-        showConfirmation("You've been upgraded!")
-    case .declined, .dismissed:
-        break
+    Task {
+        let result = await ZeroSettle.shared.presentUpgradeOffer(
+            productId: "premium_monthly"
+        )
+        switch result {
+        case .upgraded:
+            showConfirmation("You've been upgraded!")
+        case .declined, .dismissed:
+            break
+        }
     }
 }
 ```
 
 ```kotlin Kotlin
+// Android renders the upgrade offer with the ZeroSettleUpgradeOffer Composable
+// from the :ui module. Fetch the config, render it, then execute on accept.
 scope.launch {
-    val result = ZeroSettle.presentUpgradeOffer(
-        activity = context as Activity,
+    val config = ZeroSettle.fetchUpgradeOfferConfig(
         productId = "premium_monthly",
-        userId = currentUser.id,
-    )
-    when (result) {
-        UpgradeOfferResult.Upgraded -> showConfirmation("You've been upgraded!")
-        UpgradeOfferResult.Declined -> { /* No action */ }
-        UpgradeOfferResult.Dismissed -> { /* No action */ }
-    }
+    ).getOrNull() ?: return@launch
+    // Render ZeroSettleUpgradeOffer(config = config) { result -> ... }
+    // On UpgradeOffer.Result.Accepted, apply the upgrade:
+    // ZeroSettle.executeUpgradeOffer(fromProductId = ..., toProductId = ...)
 }
 ```
 
 ```dart Flutter
 final result = await ZeroSettle.instance.presentUpgradeOffer(
   productId: 'premium_monthly',
-  userId: currentUser.id,
 );
 switch (result) {
   case UpgradeOfferUpgraded():

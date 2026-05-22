@@ -19,7 +19,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await ZeroSettle.instance.configure(
-    publishableKey: 'your_live_key',  // From your ZeroSettle dashboard
+    publishableKey: 'zs_pk_live_...',  // From your ZeroSettle dashboard
   );
 
   runApp(const MyApp());
@@ -31,7 +31,11 @@ void main() async {
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `publishableKey` | Required | Your publishable key from the dashboard |
-| `syncStoreKitTransactions` | `true` | Set to `false` if using RevenueCat |
+| `syncStoreKitTransactions` | `true` | Set to `false` if using RevenueCat (iOS) |
+| `appleMerchantId` | `null` | Apple Pay merchant identifier (iOS, native pay) |
+| `preloadCheckout` | `false` | Preload checkout sessions after `identify()` |
+| `syncPlayPurchases` | `true` | Forward Play Billing purchases to the backend (Android) |
+| `playLicenseKey` | `null` | PEM-encoded Play Console public key for local signature verification (Android) |
 
 ### Sandbox vs Live Mode
 
@@ -40,33 +44,49 @@ Your publishable key prefix determines the mode:
 - **Sandbox** (`zs_pk_test_`): Use for development. No real charges.
 - **Live** (`zs_pk_live_`): Real payments processed.
 
-## Fetch Products
+## Identify the User
 
-Fetch your product catalog from ZeroSettle. This also loads remote configuration (checkout type, jurisdiction settings, migration campaigns).
+After `configure()`, identify the current session **before** fetching products or making a purchase. This is required — purchase and entitlement APIs throw `ZSUserNotIdentifiedException` if `identify()` has not been called.
+
+`identify()` returns the product catalog for `Identity.user` / `Identity.anonymous`, or `null` for `Identity.deferred`.
 
 ```dart
-final catalog = await ZeroSettle.instance.fetchProducts(userId: currentUser.id);
+// Authenticated user
+final catalog = await ZeroSettle.instance.identify(
+  Identity.user(id: currentUser.id, name: currentUser.name, email: currentUser.email),
+);
+
+// Or, if you have no auth system yet — the SDK generates a stable session UUID
+final catalog = await ZeroSettle.instance.identify(Identity.anonymous());
+
+// Or, if auth comes on a later screen — suppresses the "no user" warning
+await ZeroSettle.instance.identify(Identity.deferred());
+```
+
+See [User Identity](/iap/user-identity) for choosing between these modes.
+
+## Fetch Products
+
+`identify()` already returns the catalog. To re-fetch later (for example after a remote config change), call `fetchProducts()`:
+
+```dart
+final catalog = await ZeroSettle.instance.fetchProducts();
 
 for (final product in catalog.products) {
-  print('${product.displayName}: ${product.webPrice.formatted}');
+  print('${product.displayName}: ${product.webPrice?.formatted}');
 }
 ```
 
-You can also use `bootstrap()` as a convenience — it fetches products, warms up the payment sheet, and restores entitlements in one call:
-
-```dart
-final catalog = await ZeroSettle.instance.bootstrap(userId: currentUser.id);
-```
+You can also react to catalog changes via the `productsUpdates` stream.
 
 ## Make a Purchase
 
-Present the payment sheet for a product. The user pays with Apple Pay or a card without leaving your app.
+Use the unified `purchase()` method. It routes automatically to web checkout (Stripe) or the native store (StoreKit on iOS, Play Billing on Android) depending on jurisdiction and remote config. Identity comes from the prior `identify()` call — no `userId` parameter.
 
 ```dart
 try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
+  final transaction = await ZeroSettle.instance.purchase(
     productId: product.id,
-    userId: currentUser.id,
   );
   print('Purchased: ${transaction.productId}');
   // Unlock content
@@ -77,22 +97,20 @@ try {
 }
 ```
 
-### Preloading
+<Note>
+  `presentPaymentSheet()` is **iOS-only** — it presents ZeroSettle's web payment sheet directly. On Android, payment routing goes through Google Play's User Choice Billing, so the app must not present its own sheet. Prefer the unified `purchase()` method, which works on both platforms.
+</Note>
 
-For the fastest checkout experience, preload the payment sheet before the user taps "Buy":
+### Preloading (iOS)
+
+For the fastest checkout experience on iOS, preload the payment sheet before the user taps "Buy". On Android these calls are no-ops:
 
 ```dart
 // Call this when the paywall screen appears
-await ZeroSettle.instance.warmUpPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
+await ZeroSettle.instance.warmUpPaymentSheet(productId: product.id);
 
-// Later, when user taps "Buy" — opens instantly
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
-  productId: product.id,
-  userId: currentUser.id,
-);
+// Later, when the user taps "Buy" — opens instantly
+final transaction = await ZeroSettle.instance.purchase(productId: product.id);
 ```
 
 ## Handle Universal Link Callback
@@ -103,6 +121,8 @@ For Safari-based checkout modes, the result returns via universal link. Handle i
 // In your app's universal link handler
 final handled = await ZeroSettle.instance.handleUniversalLink(url);
 ```
+
+See [Universal Links & Deep Links](/iap/universal-links) for the required native configuration.
 
 ## Listen for Events
 
@@ -125,15 +145,21 @@ ZeroSettle.instance.entitlementUpdates.listen((entitlements) {
 
 ## Check Entitlements
 
-Restore and check entitlements on app launch:
+Restore and check entitlements on app launch. After `identify()`, call `restoreEntitlements()` with no arguments:
 
 ```dart
-final entitlements = await ZeroSettle.instance.restoreEntitlements(
-  userId: currentUser.id,
-);
+final entitlements = await ZeroSettle.instance.restoreEntitlements();
 
 final hasPremium = entitlements.any(
   (e) => e.productId == 'premium_monthly' && e.isActive,
+);
+```
+
+For a quick single-product check, use `hasActiveEntitlement()`:
+
+```dart
+final isPremium = await ZeroSettle.instance.hasActiveEntitlement(
+  productId: 'premium_monthly',
 );
 ```
 
@@ -147,7 +173,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await ZeroSettle.instance.configure(
-    publishableKey: 'your_live_key',
+    publishableKey: 'zs_pk_live_...',
   );
 
   runApp(const MyApp());
@@ -170,7 +196,7 @@ class StoreScreen extends StatefulWidget {
 }
 
 class _StoreScreenState extends State<StoreScreen> {
-  List<ZSProduct> _products = [];
+  List<Product> _products = [];
 
   @override
   void initState() {
@@ -179,17 +205,17 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   Future<void> _loadProducts() async {
-    final catalog = await ZeroSettle.instance.bootstrap(
-      userId: 'current_user_id',
+    // identify() must run before any purchase / entitlement call
+    final catalog = await ZeroSettle.instance.identify(
+      Identity.user(id: 'current_user_id'),
     );
-    setState(() => _products = catalog.products);
+    setState(() => _products = catalog?.products ?? []);
   }
 
-  Future<void> _purchase(ZSProduct product) async {
+  Future<void> _purchase(Product product) async {
     try {
-      final transaction = await ZeroSettle.instance.presentPaymentSheet(
+      final transaction = await ZeroSettle.instance.purchase(
         productId: product.id,
-        userId: 'current_user_id',
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -217,7 +243,7 @@ class _StoreScreenState extends State<StoreScreen> {
           final product = _products[index];
           return ListTile(
             title: Text(product.displayName),
-            subtitle: Text(product.webPrice.formatted),
+            subtitle: Text(product.webPrice?.formatted ?? ''),
             trailing: ElevatedButton(
               onPressed: () => _purchase(product),
               child: const Text('Buy'),
@@ -232,25 +258,39 @@ class _StoreScreenState extends State<StoreScreen> {
 
 ## Error Handling
 
-The Flutter SDK uses typed exceptions:
+The Flutter SDK uses typed exceptions (all extend the sealed `ZeroSettleException`):
 
 | Exception | When |
 |-----------|------|
 | `ZSNotConfiguredException` | SDK not configured yet |
+| `ZSUserNotIdentifiedException` | A user-scoped method was called before `identify()` |
 | `ZSCancelledException` | User cancelled checkout |
 | `ZSProductNotFoundException` | Product ID not found in catalog |
 | `ZSCheckoutFailedException` | Payment failed |
 | `ZSWebCheckoutDisabledException` | Web checkout disabled for this jurisdiction |
-| `ZSUserIdRequiredException` | Method requires a userId |
+| `ZSInvalidPublishableKeyException` | The publishable key format is invalid |
+| `ZSPurchasePendingException` | Purchase is pending approval (e.g. StoreKit Ask to Buy) |
+| `ZSApplePayUnavailableException` | Apple-Pay-only merchant; device cannot do Apple Pay (iOS) |
+| `ZSApplePaySetupRequiredException` | Apple-Pay-only merchant; Wallet has no card (iOS) |
 | `ZSApiException` | Network or API error |
 
-## Cancel Flow UI
+## Manage Subscriptions
 
-Let users manage their subscriptions:
+Let users cancel or pause their subscriptions with the built-in cancel flow:
 
 ```dart
-await ZeroSettle.instance.openCustomerPortal(userId: currentUser.id);
+final result = await ZeroSettle.instance.presentCancelFlow(
+  productId: 'premium_monthly',
+);
 ```
+
+<Note>
+  `presentCancelFlow()` presents the native cancel-flow sheet and is currently
+  implemented on **iOS only** — on Android it returns `not_implemented`. For
+  Android, build the cancellation UI with the headless primitives.
+</Note>
+
+For a fully custom cancellation UI, use the headless primitives — see [Cancel Flow API](/iap/custom-cancel-flow).
 
 ## Next Steps
 

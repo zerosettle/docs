@@ -15,7 +15,7 @@ icon: 'mobile'
 | Feature | File | What to look at |
 |---------|------|-----------------|
 | SDK configuration | `JustOneApp.swift` | `ZeroSettle.shared.configure()` with preloading enabled |
-| Bootstrap & catalog | `JustOneApp.swift` | Single `bootstrap()` call on authentication |
+| Identify & catalog | `JustOneApp.swift` | Single `identify(_:)` call on authentication |
 | Real-time entitlements | `JustOneApp.swift` | `entitlementUpdates` async stream |
 | Product models | `ZeroSettleProduct.swift` | Subscription tiers, consumables, pricing with fallbacks |
 | Purchase manager | `PurchaseManager.swift` | State resolution, billing source preference, consumable crediting |
@@ -40,15 +40,15 @@ ZeroSettle.shared.configure(.init(
 ZeroSettle.shared.delegate = purchaseManager
 ```
 
-### Single Bootstrap Call
+### Single Identify Call
 
-Instead of calling `fetchProducts()` and `restoreEntitlements()` separately, JustOne uses the single `bootstrap()` call:
+Instead of calling `fetchProducts()` and `restoreEntitlements()` separately, JustOne uses the single `identify(_:)` call:
 
 ```swift
 // JustOneApp.swift
 .task(id: authViewModel.isAuthenticated) {
     if authViewModel.isAuthenticated, let userId = authViewModel.appleUserID {
-        let catalog = try await ZeroSettle.shared.bootstrap(userId: userId)
+        let catalog = try await ZeroSettle.shared.identify(.user(id: userId))
     }
 }
 ```
@@ -87,7 +87,6 @@ JustOne's paywall shows a branded header above the payment sheet:
 // PremiumUpsellView.swift
 .checkoutSheet(
     item: $webCheckoutProduct,
-    userId: authViewModel.appleUserID ?? "",
     preload: .all
 ) {
     CheckoutSheetHeader(product: product)

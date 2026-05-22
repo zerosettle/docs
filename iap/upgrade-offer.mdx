@@ -6,6 +6,10 @@ icon: 'arrow-up-right'
 
 Upgrade offers prompt eligible subscribers to switch from shorter billing cycles (e.g., monthly) to longer ones (e.g., annual) at a savings. The SDK handles proration for existing web checkout subscribers and shows Apple cancel instructions for StoreKit-to-web migrations.
 
+<Note>
+  These APIs require an identified user. Call `ZeroSettle.shared.identify(_:)` (Swift) or `ZeroSettle.identify(...)` (Android) once at app launch — see the [Quickstart](/iap/quickstart). The Swift snippets below use the `userId`-less APIs that read the active user from `identify(_:)`.
+</Note>
+
 <Tip>
   [OfferTipView](/iap/offer-tip-view) can now present upgrade offers as inline tip cards — no modal needed.
   The server determines whether to show a migration or upgrade offer automatically.
@@ -125,7 +129,7 @@ if config.available, let target = config.targetProduct {
     print("Save \(config.savingsPercent ?? 0)% by switching to \(target.name)")
 } else {
     // User is not eligible — config.reason explains why
-    print("Not eligible: \(config.reason?.description ?? "unknown")")
+    print("Not eligible: \(config.reason?.rawString ?? "unknown")")
 }
 ```
 

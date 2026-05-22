@@ -13,36 +13,32 @@ The `entitlements` property contains all of the purchase and subscription data a
 <CodeGroup>
 
 ```swift Swift
-// Restore and get current entitlements
-let entitlements = try await ZeroSettle.shared.restoreEntitlements(
-    userId: currentUser.id
-)
+// Identity is implicit — call identify() once first
+let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 
 // Or access cached entitlements
 let cached = ZeroSettle.shared.entitlements
 ```
 
 ```kotlin Kotlin
-// Restore and get current entitlements
-val entitlements = ZeroSettle.restoreEntitlements(userId = currentUser.id)
+// Identity is implicit — call identify() once first
+val entitlements = ZeroSettle.restoreEntitlements().getOrThrow()
 
-// Or access cached entitlements
+// Or access cached entitlements (StateFlow)
 val cached = ZeroSettle.entitlements.value
 ```
 
 ```tsx React Native
-// Restore and get current entitlements
-const entitlements = await ZeroSettle.restoreEntitlements(currentUser.id);
+// React Native (1.3.x) still takes the userId argument
+const entitlements = await ZeroSettleKit.restoreEntitlements(currentUser.id);
 
 // Or access cached
-const cached = ZeroSettle.getEntitlements();
+const cached = await ZeroSettleKit.getEntitlements();
 ```
 
 ```dart Flutter
-// Restore and get current entitlements
-final entitlements = await ZeroSettle.instance.restoreEntitlements(
-  userId: currentUser.id,
-);
+// Identity is implicit — call identify() once first
+final entitlements = await ZeroSettle.instance.restoreEntitlements();
 
 // Or access cached entitlements
 final cached = await ZeroSettle.instance.getEntitlements();
@@ -146,9 +142,8 @@ It is recommended that all apps have a way for users to trigger restore, even if
 
 ```swift Swift
 do {
-    let entitlements = try await ZeroSettle.shared.restoreEntitlements(
-        userId: currentUser.id
-    )
+    // identify() must run before restoreEntitlements()
+    let entitlements = try await ZeroSettle.shared.restoreEntitlements()
     // Update UI based on entitlements
     updatePremiumAccess(entitlements)
 } catch {
@@ -157,18 +152,16 @@ do {
 ```
 
 ```kotlin Kotlin
-try {
-    val entitlements = ZeroSettle.restoreEntitlements(userId = currentUser.id)
-    // Update UI based on entitlements
-    updatePremiumAccess(entitlements)
-} catch (e: Exception) {
-    // handle error
-}
+// identify() must run before restoreEntitlements()
+ZeroSettle.restoreEntitlements()
+    .onSuccess { entitlements -> updatePremiumAccess(entitlements) }
+    .onFailure { error -> /* handle error */ }
 ```
 
 ```tsx React Native
 try {
-  const entitlements = await ZeroSettle.restoreEntitlements(currentUser.id);
+  // React Native (1.3.x) still takes the userId argument
+  const entitlements = await ZeroSettleKit.restoreEntitlements(currentUser.id);
   // Update UI based on entitlements
   updatePremiumAccess(entitlements);
 } catch (error) {
@@ -178,9 +171,8 @@ try {
 
 ```dart Flutter
 try {
-  final entitlements = await ZeroSettle.instance.restoreEntitlements(
-    userId: currentUser.id,
-  );
+  // identify() must run before restoreEntitlements()
+  final entitlements = await ZeroSettle.instance.restoreEntitlements();
   // Update UI based on entitlements
   updatePremiumAccess(entitlements);
 } catch (e) {
@@ -194,16 +186,16 @@ This fetches entitlements from both ZeroSettle's web checkout system and StoreKi
 
 ### Anonymous Users
 
-`restoreEntitlements()` requires a `userId`. If your app doesn't have a user account system (anonymous mode), entitlements are linked to the **email address** the user enters during Stripe checkout — not to a userId.
+If your app has no auth system, identify with `Identity.anonymous()` (`bootstrap('')` on React Native 1.3.x). The SDK persists a stable per-install UUID, so `restoreEntitlements()` works normally — entitlements are tied to that UUID.
 
 This means:
 
-- **During the session**: After a successful purchase, the SDK caches entitlements in memory. The user has access for the remainder of the session without calling `restoreEntitlements()`.
-- **On a new session or device**: `restoreEntitlements()` cannot recover entitlements without a userId. There is no SDK method for email-based restoration.
-- **REST API workaround**: You can query entitlements by email from your backend using the REST API (`?email=user@example.com`).
+- **During the session**: After a successful purchase, the SDK caches entitlements in memory. `restoreEntitlements()` also refreshes them from the server against the persisted anonymous UUID.
+- **Across launches on the same install**: The anonymous UUID is persisted, so `restoreEntitlements()` recovers entitlements after the process restarts.
+- **On reinstall or a new device**: The anonymous UUID is install-scoped — it does not survive an app-data clear or reinstall. Promote the user to `Identity.user(id:)` once you have an auth system for reinstall-safe, cross-device restoration.
 
 <Warning>
-  If your app uses anonymous checkout (empty `userId`), users will lose access to their entitlements when the app is reinstalled or on a new device. Consider prompting users to create an account after purchase, or use the REST API to implement email-based restoration in your backend. See [User Identity — Anonymous Users](/iap/user-identity#option-3-anonymous-users) for details.
+  Anonymous identities are install-scoped. Users lose access to their entitlements on reinstall or a new device. Prompt users to create an account after purchase, or use the REST API to query entitlements by email. See [User Identity — Anonymous Users](/iap/user-identity#option-3-anonymous-users) for details.
 </Warning>
 
 ## Cache
@@ -223,6 +215,7 @@ Entitlements can change from various sources: web checkout completion, StoreKit/
 <CodeGroup>
 
 ```swift Swift
+// Option A: the delegate protocol
 class PurchaseManager: ZeroSettleDelegate {
     init() {
         ZeroSettle.shared.delegate = self
@@ -233,24 +226,27 @@ class PurchaseManager: ZeroSettleDelegate {
         updatePremiumUI(entitlements)
     }
 }
-```
 
-```kotlin Kotlin
-class PurchaseManager : ZeroSettleDelegate {
-    init {
-        ZeroSettle.delegate = this
-    }
-
-    override fun zeroSettleEntitlementsDidUpdate(entitlements: List<Entitlement>) {
-        // Handle any changes to entitlements
-        updatePremiumUI(entitlements)
-    }
+// Option B (preferred for async/await): the entitlementUpdates stream
+for await entitlements in ZeroSettle.shared.entitlementUpdates {
+    updatePremiumUI(entitlements)
 }
 ```
 
+```kotlin Kotlin
+// Android has no delegate — observe the entitlements StateFlow
+ZeroSettle.entitlements
+    .onEach { entitlements -> updatePremiumUI(entitlements) }
+    .launchIn(scope)
+```
+
 ```tsx React Native
-ZeroSettle.onEntitlementUpdate((entitlements) => {
-  updatePremiumUI(entitlements);
+import { useZeroSettleEvents } from 'react-native-zerosettle';
+
+useZeroSettleEvents({
+  onEntitlementsDidUpdate: (entitlements) => {
+    updatePremiumUI(entitlements);
+  },
 });
 ```
 
@@ -294,10 +290,18 @@ fun ContentScreen() {
 ```
 
 ```tsx React Native
-import { useEntitlements } from 'react-native-zerosettle-kit';
+import { useState } from 'react';
+import { ZeroSettleKit, useZeroSettleEvents } from 'react-native-zerosettle';
+import type { Entitlement } from 'react-native-zerosettle';
 
 function ContentScreen() {
-  const entitlements = useEntitlements();
+  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
+
+  // Seed from cache, then keep in sync via the events hook
+  useZeroSettleEvents({
+    onEntitlementsDidUpdate: setEntitlements,
+  });
+
   const hasAccess = entitlements.some(e => e.isActive);
 
   return hasAccess ? <PremiumContent /> : <UpgradePrompt />;

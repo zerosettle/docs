@@ -20,7 +20,7 @@ Work through each section before switching from sandbox to live.
 
 - [ ] Using live publishable key (not `zs_pk_test_`)
 - [ ] Universal link handler configured (required for Safari checkout flow)
-- [ ] `restoreEntitlements()` called on app launch (or via `bootstrap()`)
+- [ ] `restoreEntitlements()` called on app launch (or via `identify(_:)` — iOS, Android, and Flutter are all identify-first)
 - [ ] Purchase error handling implemented in delegate
 - [ ] Entitlement delegate callback updating UI (`zeroSettleEntitlementsDidUpdate`)
 - [ ] Fallback to StoreKit / Play Billing when `isWebCheckoutEnabled` is `false`
@@ -42,7 +42,7 @@ if ZeroSettle.shared.isWebCheckoutEnabled {
 
 ```kotlin Kotlin
 // Verify your live configuration
-ZeroSettle.configure(context, ZeroSettle.Configuration(
+ZeroSettle.configure(context, ZeroSettleConfig(
     publishableKey = "zs_pk_live_..."  // Live key
 ))
 

@@ -59,7 +59,7 @@ sequenceDiagram
     participant Stripe as Stripe
     participant User as User
 
-    App->>SDK: purchase(product, userId)
+    App->>SDK: purchase(product)
     SDK->>API: Create PaymentIntent
     API->>API: Check jurisdiction &amp; compliance
     API->>Stripe: Create PaymentIntent
@@ -117,7 +117,7 @@ There are three checkout modes, controlled server-side via remote config:
 <CodeGroup>
 
 ```swift Swift
-.checkoutSheet(item: $selectedProduct, userId: user.id) { result in
+.checkoutSheet(item: $selectedProduct) { result in
     switch result {
     case .success(let transaction):
         print("Purchased: \(transaction.productId)")
@@ -128,23 +128,22 @@ There are three checkout modes, controlled server-side via remote config:
 ```
 
 ```kotlin Kotlin
-val transaction = ZeroSettle.purchase(
+ZeroSettle.purchase(
     activity = this,
     productId = product.id,
-    userId = user.id,
-)
-println("Purchased: ${transaction.productId}")
+).onSuccess { transaction ->
+    println("Purchased: ${transaction.productId}")
+}
 ```
 
 ```tsx React Native
-const transaction = await ZeroSettle.purchase(product.id, user.id);
+const transaction = await ZeroSettleKit.purchase(product.id, user.id);
 console.log(`Purchased: ${transaction.productId}`);
 ```
 
 ```dart Flutter
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
+final transaction = await ZeroSettle.instance.purchase(
   productId: product.id,
-  userId: user.id,
 );
 print('Purchased: ${transaction.productId}');
 ```

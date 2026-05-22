@@ -47,6 +47,10 @@ ZeroSettle.shared.configure(.init(
 
 Use `purchaseViaStoreKit()` to trigger a native StoreKit 2 purchase:
 
+<Note>
+  `purchaseViaStoreKit()` requires an identified user. Call `ZeroSettle.shared.identify(_:)` once at app launch before purchasing — see the [Quickstart](/iap/quickstart). It throws `ZeroSettleError.userNotIdentified` otherwise.
+</Note>
+
 ```swift
 do {
     let transaction = try await ZeroSettle.shared.purchaseViaStoreKit(
@@ -55,19 +59,21 @@ do {
     )
     // transaction is a StoreKit.Transaction
     print("StoreKit purchase completed: \(transaction.id)")
-} catch let error as StoreKitPurchaseError {
+} catch let error as ZeroSettleError {
     switch error {
-    case .userCancelled:
+    case .cancelled:
         // User tapped Cancel in the StoreKit sheet
         break
-    case .pending:
+    case .purchasePending:
         // Purchase requires approval (e.g., Ask to Buy)
         showMessage("Purchase pending approval")
     case .productNotFound(let id):
         showError("Product \(id) not found in App Store")
-    case .verificationFailed:
+    case .storeKitVerificationFailed:
         showError("Transaction verification failed")
-    case .unknown:
+    case .userNotIdentified:
+        showError("Call identify(_:) before purchasing")
+    default:
         showError("An unexpected error occurred")
     }
 }
@@ -85,12 +91,11 @@ struct ProductView: View {
     var body: some View {
         VStack(spacing: 16) {
             // Primary: Web checkout (lower fees)
-            Button("Buy — \(product.webPrice.formatted)") {
+            Button("Buy — \(product.webPrice?.formatted ?? "")") {
                 selectedProduct = product
             }
             .checkoutSheet(
-                item: $selectedProduct,
-                userId: currentUser.id
+                item: $selectedProduct
             ) { result in
                 handleResult(result)
             }
@@ -112,10 +117,10 @@ struct ProductView: View {
 }
 ```
 
-The `Product` model tells you whether a StoreKit product is available:
-- `product.storeKitAvailable` — `true` if the product is synced to App Store Connect
+The `ZSProduct` model tells you whether a StoreKit product is available:
+- `product.storeKitAvailable` — `true` if the SDK resolved this product against StoreKit on this device
 - `product.storeKitPrice` — the App Store price (may differ from `webPrice`)
-- `product.appStorePrice` — same as `storeKitPrice`
+- `product.appStorePrice` — the backing App Store `Price?` (`storeKitPrice` falls back to it)
 
 ## StoreKit Sync Delegate
 
@@ -151,7 +156,7 @@ class PurchaseManager: ZeroSettleDelegate {
 Entitlements track where each purchase came from:
 
 ```swift
-let entitlements = try await ZeroSettle.shared.restoreEntitlements(userId: currentUser.id)
+let entitlements = try await ZeroSettle.shared.restoreEntitlements()
 
 for entitlement in entitlements {
     switch entitlement.source {
@@ -171,15 +176,18 @@ Both sources are merged into a single entitlements list. Your app doesn't need t
 
 ## Error Types
 
-### StoreKitPurchaseError
+`purchaseViaStoreKit()` throws `ZeroSettleError` — the SDK's unified error type. The StoreKit-specific cases you'll typically match on:
 
 | Error | Description |
 |-------|-------------|
 | `.productNotFound(String)` | Product ID not found in App Store Connect |
-| `.verificationFailed(Error)` | StoreKit transaction verification failed |
-| `.userCancelled` | User tapped Cancel in the StoreKit purchase dialog |
-| `.pending` | Purchase requires approval (Ask to Buy) |
-| `.unknown` | Unexpected error |
+| `.storeKitVerificationFailed(underlyingError:)` | StoreKit transaction verification failed |
+| `.cancelled` | User tapped Cancel in the StoreKit purchase dialog |
+| `.purchasePending` | Purchase requires approval (Ask to Buy) |
+| `.notConfigured` | SDK was not configured before the call |
+| `.userNotIdentified` | `identify(_:)` was not called before purchasing |
+
+Any other failure surfaces as `.checkoutFailed(reason:)`.
 
 ## Requirements
 

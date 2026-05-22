@@ -8,11 +8,15 @@ icon: 'wand-magic-sparkles'
 
 ## Quick Start
 
+<Note>
+  Call `ZeroSettle.shared.identify(_:)` once at app launch before using the manager — see the [Quickstart](/iap/quickstart). The manager reads the active user from that identity. Until `identify(_:)` completes, the manager stays in `.loading`.
+</Note>
+
 <Tabs>
   <Tab title="SwiftUI">
     ```swift
     struct CustomOfferBanner: View {
-        @StateObject private var manager = ZSOfferManager(userId: "user_42")
+        @StateObject private var manager = ZeroSettle.shared.offerManager()
 
         var body: some View {
             switch manager.state {
@@ -22,14 +26,13 @@ icon: 'wand-magic-sparkles'
                         Text(display.offerTitleOrDefault("Save on your subscription"))
                         Text(display.offerMessageOrDefault("Switch to direct billing and save."))
                         Button(display.offerCtaOrDefault("Switch Now")) {
-                            manager.present()
+                            Task { await startCheckout() }
                         }
                     }
                 }
 
             case .presented:
                 ProgressView("Starting checkout...")
-                    .task { await startCheckout() }
 
             case .accepted:
                 VStack {
@@ -48,8 +51,13 @@ icon: 'wand-magic-sparkles'
         }
 
         private func startCheckout() async {
+            // startCheckout() is the raw-URL escape hatch — you own presenting
+            // the URL and reporting completion. present() and
+            // markCheckoutSucceeded() drive the state machine on this path.
+            manager.present()
             if let url = await manager.startCheckout() {
-                // Open url in a WebView or SFSafariViewController
+                // Open url in a WebView or SFSafariViewController, then:
+                // await manager.markCheckoutSucceeded(transactionId: txnId)
             }
             // nil for web-to-web upgrades — completed server-side, no WebView needed
         }
@@ -59,8 +67,7 @@ icon: 'wand-magic-sparkles'
     Pass a `stripeCustomerId` to attach the checkout to an existing Stripe customer:
 
     ```swift
-    @StateObject private var manager = ZSOfferManager(
-        userId: "user_42",
+    @StateObject private var manager = ZeroSettle.shared.offerManager(
         stripeCustomerId: "cus_abc123"
     )
     ```
@@ -76,9 +83,10 @@ icon: 'wand-magic-sparkles'
         private let manager: ZSOfferManager
         private var cancellables = Set<AnyCancellable>()
 
-        // Pass stripeCustomerId to attach the checkout to an existing Stripe customer
-        init(userId: String, stripeCustomerId: String? = nil) {
-            self.manager = ZSOfferManager(userId: userId, stripeCustomerId: stripeCustomerId)
+        // Pass stripeCustomerId to attach the checkout to an existing Stripe customer.
+        // The manager is bound to the user from ZeroSettle.shared.identify(_:).
+        init(stripeCustomerId: String? = nil) {
+            self.manager = ZeroSettle.shared.offerManager(stripeCustomerId: stripeCustomerId)
             super.init(nibName: nil, bundle: nil)
         }
 
@@ -137,6 +145,14 @@ icon: 'wand-magic-sparkles'
   </Tab>
 </Tabs>
 
+<Tip>
+  If you instead drive checkout through a standard entry point — `CheckoutSheet.present(...)`, the `.checkoutSheet(item:)` modifier, or `ZeroSettle.shared.purchase(...)` — the SDK runs the offer state machine for you and you do **not** call `present()` or `markCheckoutSucceeded()`. The manual calls shown here apply only to the raw `startCheckout()` URL escape hatch.
+</Tip>
+
+<Warning>
+  The direct `ZSOfferManager(userId:)` initializer is **deprecated** — it bypasses the SDK's identity tracking. Always obtain the manager through `ZeroSettle.shared.offerManager(stripeCustomerId:)`, which returns the shared instance bound to the user from `identify(_:)`.
+</Warning>
+
 `ZSOfferManager` is an `ObservableObject`. SwiftUI views update automatically; in UIKit, subscribe to `objectWillChange` with Combine to react to state changes.
 
 ## State Machine
@@ -152,7 +168,7 @@ loading → eligible → presented → accepted → completed
 
 | State | Meaning | `offerData` |
 |-------|---------|-------------|
-| `loading` | Waiting for `ZeroSettle.bootstrap()` to finish. | `nil` |
+| `loading` | Waiting for `ZeroSettle.shared.identify(_:)` to finish. | `nil` |
 | `ineligible` | User doesn't qualify (no eligible entitlement, already dismissed, rollout excluded, no campaign configured). | `nil` |
 | `eligible` | User qualifies. Offer data is available — show your UI. | Available |
 | `presented` | Offer is on screen or checkout is in progress. | Available |
@@ -207,17 +223,21 @@ If the server returns a non-empty string, it wins. If the server returns an empt
 
 ## Methods
 
-### `present()`
+<Note>
+  **Bookkeeping is automatic.** When you drive checkout through a standard entry point — `CheckoutSheet.present(...)`, the `.checkoutSheet(item:)` modifier, or `ZeroSettle.shared.purchase(...)` — the SDK advances the offer state machine for you (`.eligible → .presented`, then `.presented → .accepted`/`.completed`). The `present()` and `markCheckoutSucceeded(transactionId:)` methods below are **deprecated** and only needed if you run checkout out-of-band via the raw `startCheckout()` URL escape hatch.
+</Note>
 
-Transitions from `.eligible` to `.presented`. Call this when the user interacts with your offer UI (e.g., taps "Learn More") before starting checkout.
+### `present()` (deprecated)
+
+Transitions from `.eligible` to `.presented`. Deprecated as of SDK 1.3.5 — the SDK does this automatically when you use a standard purchase entry point. Only call it manually if you start checkout from a raw `startCheckout()` URL.
 
 ```swift
 manager.present()
 ```
 
-### `startCheckout(stripeCustomerId:) async -> URL?`
+### `startCheckout(stripeCustomerId:checkoutMode:) async -> URL?`
 
-Creates a payment intent and returns the checkout URL. For web-to-web upgrades, returns `nil` because the upgrade is executed server-side without a WebView.
+The raw-URL escape hatch. Creates a payment intent and returns the checkout URL for you to present yourself. For web-to-web upgrades, returns `nil` because the upgrade is executed server-side without a WebView.
 
 ```swift
 if let url = await manager.startCheckout() {
@@ -225,17 +245,27 @@ if let url = await manager.startCheckout() {
 }
 ```
 
-You can optionally pass a `stripeCustomerId` to override the one provided at init:
+Both parameters are optional:
+
+- `stripeCustomerId` — overrides the one provided at init.
+- `checkoutMode` — pass `.browser` for Safari / SFSafariViewController paths; `nil` defers to the backend default (the WebView-embed template).
 
 ```swift
-let url = await manager.startCheckout(stripeCustomerId: "cus_xyz789")
+let url = await manager.startCheckout(
+    stripeCustomerId: "cus_xyz789",
+    checkoutMode: .browser
+)
 ```
 
 Returns `nil` on failure — check `manager.checkoutError` for details. Also returns `nil` for web-to-web upgrades (not an error).
 
-### `markCheckoutSucceeded(transactionId:) async`
+<Note>
+  When you use `startCheckout()` you own the checkout presentation, so you must call `present()` before and `markCheckoutSucceeded(transactionId:)` after. Auto-bookkeeping only applies to the standard purchase entry points.
+</Note>
 
-Call after a successful web checkout to advance the state. Verifies the transaction, refreshes entitlements, and fires conversion tracking.
+### `markCheckoutSucceeded(transactionId:) async` (deprecated)
+
+Deprecated as of SDK 1.3.5 — when you use a standard purchase entry point the SDK advances the state automatically after checkout success. Only call this manually if you completed checkout out-of-band via the raw `startCheckout()` URL. It verifies the transaction, refreshes entitlements, and fires conversion tracking.
 
 - If `needsAppleCancel` is `true`: transitions to `.accepted` and sets `storekitCancelRequired = true`.
 - If `needsAppleCancel` is `false` (web-to-web): transitions directly to `.completed`.
@@ -306,7 +336,7 @@ For `.webToWeb` upgrades, the flow is different from migrations and StoreKit-to-
   <Tab title="SwiftUI">
     ```swift
     struct OfferView: View {
-        @StateObject private var manager = ZSOfferManager(userId: "user_42")
+        @StateObject private var manager = ZeroSettle.shared.offerManager()
 
         var body: some View {
             switch manager.state {
@@ -380,7 +410,11 @@ For `.webToWeb` upgrades, the flow is different from migrations and StoreKit-to-
 | **Custom UI** | Yes | Yes | No (modal only) |
 | **Server-configurable copy** | Full (8 fields) | Partial (3 fields) | Full |
 
-Choose `ZSOfferManager` when you need a single manager that handles all offer types with full custom UI control. Use `ZSMigrationManager` if you only need migration support with a custom UI. Use `.upgradeOffer()` for a drop-in modal with no custom UI code.
+Choose `ZSOfferManager` when you need a single manager that handles all offer types with full custom UI control. Use `.upgradeOffer()` for a drop-in modal with no custom UI code.
+
+<Note>
+  `ZSMigrationManager` is **deprecated** in favor of `ZSOfferManager`, which is a strict superset. New integrations should use `ZSOfferManager`.
+</Note>
 
 <Tip>
   `ZSOfferManager` is the recommended API for new integrations. It supersedes `ZSMigrationManager` by supporting all three offer types in a single state machine.

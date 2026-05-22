@@ -4,15 +4,31 @@ description: 'How customers can manage their own subscriptions'
 icon: 'user-gear'
 ---
 
-ZeroSettle provides a customer portal powered by Stripe where your customers can manage their subscriptions and payment methods — both in-app and via email links.
+ZeroSettle gives your customers two ways to manage their subscriptions: an
+in-app **cancel flow** (a backend-driven retention sheet) and a Stripe-powered
+billing portal reached through the links in ZeroSettle's transactional emails.
 
-## In-App Portal
+## In-App Subscription Management
 
-### SwiftUI Modifier
+ZeroSettle subscriptions are managed in-app through the **cancel flow** — a
+backend-driven retention sheet that collects feedback, optionally presents a
+save offer, and lets the user cancel or pause. There is no standalone "open
+customer portal" SDK call; the Stripe portal is reachable via the email links
+described below.
 
-The simplest way to add subscription management is the `.retentionSheet(isPresented:onResult:)` modifier:
+<Note>
+  Earlier SDK versions exposed `showManageSubscription()` and
+  `openCustomerPortal()`. These have been removed. Use the cancel flow
+  (`.retentionSheet` / `presentCancelFlow`) for ZeroSettle (web) subscriptions,
+  and the platform's native subscription settings for store-billed
+  subscriptions (see below).
+</Note>
 
-<CodeGroup>
+### SwiftUI Modifier (iOS)
+
+The simplest way to add subscription management on iOS is the
+`.retentionSheet(isPresented:onResult:)` modifier. It presents the cancel flow
+sheet — questionnaire, save offer, and pause options:
 
 ```swift Swift
 @State private var showManageSubscription = false
@@ -25,104 +41,65 @@ Button("Manage Subscription") {
 }
 ```
 
-```kotlin Kotlin
-// Launch from a button click or Composable
-scope.launch {
-    ZeroSettle.showManageSubscription(
-        activity = context as Activity,
-        userId = currentUser.id,
-    )
+### Cancel Flow Across Platforms
+
+On Android, Flutter, and React Native, present subscription management with the
+cancel flow described in the [Cancel Flow](#cancel-flow) section below.
+Identity is implicit on iOS, Android, and Flutter — call `identify()` once at
+startup; React Native (1.3.x) still takes a `userId`.
+
+### Native Store Subscriptions
+
+For subscriptions billed through Apple or Google (StoreKit / Play Store), route
+users to the platform's own subscription settings:
+
+<CodeGroup>
+
+```swift Swift
+// Apple billing — open the system subscription management sheet
+import StoreKit
+
+if let scene = UIApplication.shared.connectedScenes
+    .first(where: { $0 is UIWindowScene }) as? UIWindowScene {
+    try await AppStore.showManageSubscriptions(in: scene)
 }
 ```
 
-```tsx React Native
-// Open subscription management
-await ZeroSettle.showManageSubscription(currentUser.id);
-```
-
-```dart Flutter
-// Open subscription management
-await ZeroSettle.instance.showManageSubscription(userId: currentUser.id);
-```
-
-</CodeGroup>
-
-This automatically routes to the right management UI based on where the user's subscriptions came from.
-
-### Programmatic API
-
-For more control, use the methods directly:
-
-<CodeGroup>
-
-```swift Swift
-// Smart routing — picks the right UI based on entitlement sources
-try await ZeroSettle.shared.showManageSubscription(userId: currentUser.id)
-
-// Always open the Stripe customer portal
-try await ZeroSettle.shared.openCustomerPortal(userId: currentUser.id)
-```
-
 ```kotlin Kotlin
-// Smart routing — picks the right UI based on entitlement sources
-ZeroSettle.showManageSubscription(activity = this, userId = currentUser.id)
-
-// Always open the Stripe customer portal
-ZeroSettle.openCustomerPortal(activity = this, userId = currentUser.id)
-```
-
-```tsx React Native
-// Smart routing
-await ZeroSettle.showManageSubscription(currentUser.id);
-
-// Always open Stripe portal
-await ZeroSettle.openCustomerPortal(currentUser.id);
-```
-
-```dart Flutter
-// Smart routing
-await ZeroSettle.instance.showManageSubscription(userId: currentUser.id);
-
-// Always open Stripe portal
-await ZeroSettle.instance.openCustomerPortal(userId: currentUser.id);
+// Google Play billing — open the Play subscription center
+val intent = Intent(
+    Intent.ACTION_VIEW,
+    Uri.parse("https://play.google.com/store/account/subscriptions"),
+)
+context.startActivity(intent)
 ```
 
 </CodeGroup>
-
-## Dual-Source Handling
-
-`showManageSubscription()` inspects the user's current entitlements and routes accordingly:
-
-| Entitlement Sources | Management UI |
-|---|---|
-| Web checkout only | Stripe customer portal |
-| StoreKit only (iOS) | Apple's native subscription management |
-| Play Store only (Android) | Google Play subscription management |
-| Both web + native store | Stripe customer portal |
-| No entitlements | Stripe customer portal |
-
-If you always want the Stripe portal regardless of source, call `openCustomerPortal(userId:)` directly.
 
 ## Auto-Refresh
 
-Entitlements are automatically refreshed when the management UI is dismissed. Any subscription changes the user makes (cancellation, plan change, re-subscribe) will be reflected in `ZeroSettle.shared.entitlements` and trigger the `zeroSettleEntitlementsDidUpdate(_:)` delegate callback.
+Entitlements are automatically refreshed when the cancel flow is dismissed. Any
+subscription changes the user makes (cancellation, pause, re-subscribe) are
+reflected in `ZeroSettle.shared.entitlements` (iOS) /
+`ZeroSettle.entitlements` (Android) and emitted to the entitlement update
+stream.
 
 <CodeGroup>
 
 ```swift Swift
-// Entitlements stay in sync automatically after portal dismiss
+// Entitlements stay in sync automatically after the cancel flow dismisses
 let entitlements = ZeroSettle.shared.entitlements
 let hasAccess = entitlements.contains { $0.isActive }
 ```
 
 ```kotlin Kotlin
-// Entitlements stay in sync automatically after portal dismiss
+// Entitlements stay in sync automatically after the cancel flow dismisses
 val entitlements by ZeroSettle.entitlements.collectAsState()
 val hasAccess = entitlements.any { it.isActive }
 ```
 
 ```tsx React Native
-const entitlements = ZeroSettle.getEntitlements();
+const entitlements = await ZeroSettleKit.getEntitlements();
 const hasAccess = entitlements.some(e => e.isActive);
 ```
 
@@ -135,37 +112,42 @@ final hasAccess = entitlements.any((e) => e.isActive);
 
 ## Observing Changes
 
-There are no portal-specific delegate callbacks. Instead, use the entitlement update delegate to react when a user modifies their subscription through the portal:
+There are no cancel-flow-specific callbacks. Instead, observe entitlement
+updates to react when a user modifies their subscription:
 
 <CodeGroup>
 
 ```swift Swift
+// iOS uses the ZeroSettleDelegate protocol
 class MyDelegate: ZeroSettleDelegate {
     func zeroSettleEntitlementsDidUpdate(_ entitlements: [Entitlement]) {
-        // Entitlements refreshed after portal interaction
+        // Entitlements refreshed after the cancel flow
         updatePremiumUI(entitlements)
     }
 }
 ```
 
 ```kotlin Kotlin
-class MyDelegate : ZeroSettleDelegate {
-    override fun zeroSettleEntitlementsDidUpdate(entitlements: List<Entitlement>) {
-        // Entitlements refreshed after portal interaction
+// Android exposes entitlements as a StateFlow — collect it
+scope.launch {
+    ZeroSettle.entitlements.collect { entitlements ->
+        // Entitlements refreshed after the cancel flow
         updatePremiumUI(entitlements)
     }
 }
 ```
 
 ```tsx React Native
-// Listen for entitlement changes after portal interaction
-ZeroSettle.onEntitlementUpdate((entitlements) => {
-  updatePremiumUI(entitlements);
+// Subscribe with the useZeroSettleEvents hook
+useZeroSettleEvents({
+  onEntitlementsDidUpdate: (entitlements) => {
+    updatePremiumUI(entitlements);
+  },
 });
 ```
 
 ```dart Flutter
-// Listen for entitlement changes after portal interaction
+// Listen to the entitlement update stream
 ZeroSettle.instance.entitlementUpdates.listen((entitlements) {
   updatePremiumUI(entitlements);
 });
@@ -179,100 +161,69 @@ Present a cancellation questionnaire before a user cancels their subscription. T
 
 The questionnaire and retention offer are configured on the [ZeroSettle dashboard](/iap/cancel-flow) — no code changes needed to update questions or offers.
 
-### SwiftUI Modifier
+### Built-in Cancel Flow
+
+Call `identify()` once at startup — the imperative cancel flow takes no
+`userId` on iOS and Flutter. React Native (1.3.x) still passes a `userId`.
+
+<Note>
+  The imperative `presentCancelFlow` is implemented on **iOS only**. The
+  Flutter and React Native `presentCancelFlow` calls work when the app runs on
+  iOS; on Android they are not available. On Android, render the
+  `ZeroSettleCancelFlow` Composable or use the headless cancel-flow primitives —
+  see the [Cancel Flow API](/iap/custom-cancel-flow).
+</Note>
 
 <CodeGroup>
 
 ```swift Swift
-@State private var showCancelFlow = false
-
 Button("Cancel Subscription") {
-    showCancelFlow = true
-}
-.cancelFlow(
-    isPresented: $showCancelFlow,
-    productId: "premium_monthly",
-    userId: currentUser.id
-) { result in
-    switch result {
-    case .cancelled:
-        // User completed cancellation
-        showConfirmation("Your subscription has been cancelled.")
-    case .retained:
-        // User accepted the save offer
-        showConfirmation("Thanks for staying!")
-    case .paused(let resumesAt):
-        // User chose to pause instead of cancelling
-        showConfirmation("Your subscription is paused.")
-    case .dismissed:
-        // User dismissed without completing
-        break
+    Task {
+        let result = await ZeroSettle.shared.presentCancelFlow(
+            productId: "premium_monthly"
+        )
+        switch result {
+        case .cancelled:
+            showConfirmation("Your subscription has been cancelled.")
+        case .retained:
+            showConfirmation("Thanks for staying!")
+        case .paused(let resumesAt):
+            showConfirmation("Your subscription is paused.")
+        case .dismissed:
+            break
+        }
     }
 }
 ```
 
 ```kotlin Kotlin
+// Android renders the cancel flow with the ZeroSettleCancelFlow Composable
+// from the :ui module. Fetch the config, render it, then act on the result.
 scope.launch {
-    val result = ZeroSettle.presentCancelFlow(
-        activity = context as Activity,
-        productId = "premium_monthly",
-        userId = currentUser.id,
-    )
-    when (result) {
-        CancelFlowResult.CANCELLED -> showConfirmation("Subscription cancelled.")
-        CancelFlowResult.RETAINED -> showConfirmation("Thanks for staying!")
-        is CancelFlowResult.Paused -> showConfirmation("Subscription paused.")
-        CancelFlowResult.DISMISSED -> { /* No action */ }
-    }
+    val config = ZeroSettle.fetchCancelFlowConfig().getOrNull() ?: return@launch
+    // Render ZeroSettleCancelFlow(config = config) { result -> ... }
+    // On a terminal CancelFlow.Result, call the matching headless method:
+    //   CancelFlow.Result.SaveOfferAccepted -> ZeroSettle.acceptSaveOffer(...)
+    //   CancelFlow.Result.Paused            -> ZeroSettle.pauseSubscription(...)
+    //   CancelFlow.Result.Cancelled         -> ZeroSettle.cancelSubscription(...)
 }
 ```
 
 ```dart Flutter
+// iOS only — see the Note above. Identity is implicit; no userId.
 final result = await ZeroSettle.instance.presentCancelFlow(
   productId: 'premium_monthly',
-  userId: currentUser.id,
 );
 switch (result) {
-  case CancelFlowResult.cancelled:
+  case CancelFlowCancelled():
     showConfirmation('Subscription cancelled.');
-  case CancelFlowResult.retained:
+  case CancelFlowRetained():
     showConfirmation('Thanks for staying!');
   case CancelFlowPaused():
     showConfirmation('Subscription paused.');
-  case CancelFlowResult.dismissed:
+  case CancelFlowDismissed():
     break;
 }
-```
-
-</CodeGroup>
-
-### Programmatic API
-
-<CodeGroup>
-
-```swift Swift
-let result = await ZeroSettle.shared.presentCancelFlow(
-    productId: "premium_monthly",
-    userId: currentUser.id
-)
-// result is CancelFlow.Result: .cancelled, .retained, .paused, or .dismissed
-```
-
-```kotlin Kotlin
-val result = ZeroSettle.presentCancelFlow(
-    activity = this,
-    productId = "premium_monthly",
-    userId = currentUser.id,
-)
-// result is CancelFlowResult: CANCELLED, RETAINED, PAUSED, or DISMISSED
-```
-
-```dart Flutter
-final result = await ZeroSettle.instance.presentCancelFlow(
-  productId: 'premium_monthly',
-  userId: currentUser.id,
-);
-// result is CancelFlowResult: cancelled, retained, paused, or dismissed
 ```
 
 </CodeGroup>
@@ -281,10 +232,14 @@ final result = await ZeroSettle.instance.presentCancelFlow(
 
 | Result | Description |
 |--------|-------------|
-| `cancelled` / `CANCELLED` | User completed the flow and cancelled their subscription |
-| `retained` / `RETAINED` | User accepted the retention offer and kept their subscription |
-| `paused` / `Paused` | User chose to pause their subscription instead of cancelling |
-| `dismissed` / `DISMISSED` | User dismissed the flow without completing it |
+| `cancelled` | User completed the flow and cancelled their subscription |
+| `retained` | User accepted the retention offer and kept their subscription |
+| `paused` | User chose to pause their subscription instead of cancelling |
+| `dismissed` | User dismissed the flow without completing it |
+
+On Android, the `ZeroSettleCancelFlow` Composable emits `CancelFlow.Result`
+values — `Cancelled`, `Paused(resumesAt)`, `SaveOfferAccepted(productId)`, and
+`Dismissed`. `SaveOfferAccepted` is the Android equivalent of `retained`.
 
 <Tip>
   Configure the cancellation questionnaire and retention offers from the ZeroSettle dashboard. You can update questions and offers without an app update.

@@ -19,11 +19,11 @@ The headless cancel flow is a set of flat, standalone methods. There's no sessio
        │
        ▼
 ┌──────────────────────────────────────────────────┐
-│  cancelFlowConfig         → Read questionnaire   │
-│  acceptSaveOffer()        → Apply Stripe coupon   │
-│  pauseSubscription()      → Pause via Stripe      │
-│  cancelSubscription()     → Cancel via Stripe     │
-│  openCustomerPortal()     → Stripe billing portal │
+│  cancelFlowConfig           → Read questionnaire  │
+│  acceptSaveOffer()          → Apply Stripe coupon │
+│  pauseSubscription()        → Pause via Stripe    │
+│  resumeSubscription()       → Resume early        │
+│  cancelSubscription()       → Cancel via Stripe   │
 │  submitCancelFlowResponse() → Analytics tracking  │
 └──────────────────────────────────────────────────┘
 ```
@@ -33,7 +33,7 @@ The headless cancel flow is a set of flat, standalone methods. There's no sessio
 <CodeGroup>
 
 ```swift Swift
-// 1. Config is already loaded — read it directly
+// 1. Read the cached cancel flow config (call identify() first)
 guard let config = ZeroSettle.shared.cancelFlowConfig, config.enabled else {
     return // Cancel flow not configured
 }
@@ -47,7 +47,7 @@ if selectedOption?.triggersOffer == true, let offer = config.offer, offer.enable
     // Show your save offer UI using offer.title, offer.body, offer.ctaText
 }
 
-// 4. If user accepts the offer, apply it
+// 4. If user accepts the offer, apply it — identity is implicit
 let result = try await ZeroSettle.shared.acceptSaveOffer(
     productId: "premium_monthly",
     userId: currentUser.id
@@ -66,8 +66,8 @@ await ZeroSettle.shared.submitCancelFlowResponse(CancelFlow.Response(
 ```
 
 ```kotlin Kotlin
-// 1. Config is already loaded — read it directly
-val config = ZeroSettle.cancelFlowConfig.value ?: return
+// 1. Fetch the cancel flow config (call identify() first)
+val config = ZeroSettle.fetchCancelFlowConfig().getOrNull() ?: return
 if (!config.enabled) return
 
 // 2. Show your questionnaire UI using config.questions
@@ -79,26 +79,16 @@ if (selectedOption?.triggersOffer == true && config.offer?.enabled == true) {
     // Show your save offer UI using offer.title, offer.body, offer.ctaText
 }
 
-// 4. If user accepts the offer, apply it
-val result = ZeroSettle.acceptSaveOffer(
-    productId = "premium_monthly",
-    userId = currentUser.id,
-)
-// result.message = "40% off for 3 months"
+// 4. If user accepts the offer, apply it — identity is implicit
+val result = ZeroSettle.acceptSaveOffer(productId = "premium_monthly").getOrThrow()
+// result.savingsPercent = 40
 
-// 5. Submit analytics
-ZeroSettle.submitCancelFlowResponse(CancelFlowResponse(
-    productId = "premium_monthly",
-    userId = currentUser.id,
-    outcome = CancelFlowOutcome.RETAINED,
-    answers = listOf(CancelFlowAnswer(questionId = 1, selectedOptionId = 3)),
-    offerShown = true,
-    offerAccepted = true,
-))
+// Note: the Android SDK does not currently expose submitCancelFlowResponse.
+// To record questionnaire analytics from Android, call the REST API directly.
 ```
 
 ```dart Flutter
-// 1. Config is already loaded — read it directly
+// 1. Read the cancel flow config (call identify() first)
 final config = await ZeroSettle.instance.getCancelFlowConfig();
 if (config == null || !config.enabled) return;
 
@@ -111,10 +101,9 @@ if (selectedOption.triggersOffer && config.offer != null && config.offer!.enable
     // Show your save offer UI using offer.title, offer.body, offer.ctaText
 }
 
-// 4. If user accepts the offer, apply it
+// 4. If user accepts the offer, apply it — identity is implicit
 final result = await ZeroSettle.instance.acceptSaveOffer(
   productId: 'premium_monthly',
-  userId: currentUser.id,
 );
 // result.message = "40% off for 3 months"
 
@@ -126,18 +115,16 @@ await ZeroSettle.instance.submitCancelFlowResponse(CancelFlowResponse(
   answers: [CancelFlowAnswer(questionId: 1, selectedOptionId: 3)],
   offerShown: true,
   offerAccepted: true,
+  pauseShown: false,
+  pauseAccepted: false,
 ));
 ```
 
 ```tsx React Native
-import {
-  getCancelFlowConfig,
-  acceptSaveOffer,
-  submitCancelFlowResponse,
-} from 'react-native-zerosettle-kit';
+import { ZeroSettleKit } from 'react-native-zerosettle';
 
-// 1. Config is already loaded — read it directly
-const config = await getCancelFlowConfig();
+// 1. Fetch the cancel flow config
+const config = await ZeroSettleKit.getCancelFlowConfig();
 if (!config?.enabled) return;
 
 // 2. Show your questionnaire UI using config.questions
@@ -150,11 +137,11 @@ if (selectedOption?.triggersOffer && config.offer?.enabled) {
 }
 
 // 4. If user accepts the offer, apply it
-const result = await acceptSaveOffer('premium_monthly', currentUser.id);
+const result = await ZeroSettleKit.acceptSaveOffer('premium_monthly', currentUser.id);
 // result.message = "40% off for 3 months"
 
 // 5. Submit analytics
-await submitCancelFlowResponse({
+await ZeroSettleKit.submitCancelFlowResponse({
   productId: 'premium_monthly',
   userId: currentUser.id,
   outcome: 'retained',
@@ -170,7 +157,7 @@ await submitCancelFlowResponse({
 
 ## Configuration
 
-The cancel flow config is fetched automatically during `bootstrap()` — no extra network call is needed. Access it directly from the SDK.
+On iOS the cancel flow config is fetched automatically during `identify(_:)` and cached on the `cancelFlowConfig` property. On Flutter the cached config is read with `getCancelFlowConfig()`. On Android and React Native, fetch it explicitly with `fetchCancelFlowConfig()` / `getCancelFlowConfig()`.
 
 <CodeGroup>
 
@@ -179,15 +166,17 @@ let config = ZeroSettle.shared.cancelFlowConfig // CancelFlow.Config?
 ```
 
 ```kotlin Kotlin
-val config = ZeroSettle.cancelFlowConfig.value // CancelFlowConfig?
+// Android — fetch explicitly (suspend, returns Result<CancelFlow.Config>)
+val config = ZeroSettle.fetchCancelFlowConfig().getOrNull()
 ```
 
 ```dart Flutter
+// Reads the cached config; use fetchCancelFlowConfig() to force a refresh
 final config = await ZeroSettle.instance.getCancelFlowConfig();
 ```
 
 ```tsx React Native
-const config = await getCancelFlowConfig();
+const config = await ZeroSettleKit.getCancelFlowConfig();
 ```
 
 </CodeGroup>
@@ -249,11 +238,11 @@ Returns `null` if the cancel flow hasn't been configured on the [dashboard](/iap
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | `Int` | Option identifier (pass to `pauseSubscription`) |
+| `id` | `Int` | Option identifier |
 | `order` | `Int` | Display order |
 | `label` | `String` | Display text (e.g., "1 month", "3 months") |
 | `durationType` | `days` \| `fixed_date` | How the duration is specified |
-| `durationDays` | `Int?` | Number of days (when `durationType` is `days`) |
+| `durationDays` | `Int?` | Number of days — pass this to `pauseSubscription` as `pauseDurationDays` |
 
 ## Save Offer
 
@@ -274,32 +263,27 @@ do {
 ```
 
 ```kotlin Kotlin
-try {
-    val result = ZeroSettle.acceptSaveOffer(
-        productId = "premium_monthly",
-        userId = currentUser.id,
-    )
-    showConfirmation(result.message)
-} catch (e: Exception) {
-    showError(e.message)
-}
+// Identity is implicit — call identify() first
+ZeroSettle.acceptSaveOffer(productId = "premium_monthly")
+    .onSuccess { result -> showConfirmation("${result.savingsPercent}% off applied") }
+    .onFailure { error -> showError(error.message ?: "Failed to apply offer") }
 ```
 
 ```dart Flutter
 try {
+    // Identity is implicit — call identify() first
     final result = await ZeroSettle.instance.acceptSaveOffer(
         productId: 'premium_monthly',
-        userId: currentUser.id,
     );
     showConfirmation(result.message);
-} on ZSException catch (e) {
+} on ZeroSettleException catch (e) {
     showError(e.message);
 }
 ```
 
 ```tsx React Native
 try {
-    const result = await acceptSaveOffer('premium_monthly', currentUser.id);
+    const result = await ZeroSettleKit.acceptSaveOffer('premium_monthly', currentUser.id);
     showConfirmation(result.message);
 } catch (error) {
     showError(error.message);
@@ -317,12 +301,16 @@ try {
 | `durationMonths` | `Int?` | Duration of the discount in months, if applicable |
 
 <Note>
+  On Android, `acceptSaveOffer` returns a `CancelFlow.SaveOfferResult` with a single `savingsPercent` (`Int`) field rather than `message` / `discountPercent` / `durationMonths`.
+</Note>
+
+<Note>
   `acceptSaveOffer` creates a Stripe coupon and applies it to the user's subscription. This is a real billing action — the discount takes effect immediately.
 </Note>
 
 ## Pause Subscription
 
-When a user selects a questionnaire option where `triggersPause` is `true`, show the pause options from `config.pause`. Let the user pick a duration, then call `pauseSubscription` with the selected option ID.
+When a user selects a questionnaire option where `triggersPause` is `true`, show the pause options from `config.pause`. Let the user pick a duration, then call `pauseSubscription` with the selected option's `durationDays`.
 
 <CodeGroup>
 
@@ -330,7 +318,6 @@ When a user selects a questionnaire option where `triggersPause` is `true`, show
 do {
     let resumesAt = try await ZeroSettle.shared.pauseSubscription(
         productId: "premium_monthly",
-        userId: currentUser.id,
         pauseDurationDays: selectedPauseOption.durationDays
     )
     if let resumesAt {
@@ -341,26 +328,36 @@ do {
 }
 ```
 
-{/* Flutter still uses `pauseOptionId`; the iOS rename to `pauseDurationDays` will be mirrored in a future Flutter release. */}
+```kotlin Kotlin
+// Identity is implicit — call identify() first
+ZeroSettle.pauseSubscription(
+    productId = "premium_monthly",
+    pauseDurationDays = selectedPauseOption.durationDays,
+).onSuccess { resumesAt ->
+    if (resumesAt != null) showConfirmation("Paused until $resumesAt")
+}.onFailure { error ->
+    showError(error.message ?: "Failed to pause")
+}
+```
 
 ```dart Flutter
 try {
+    // Identity is implicit — call identify() first
     final resumesAt = await ZeroSettle.instance.pauseSubscription(
         productId: 'premium_monthly',
-        userId: currentUser.id,
-        pauseOptionId: selectedPauseOption.id,
+        pauseDurationDays: selectedPauseOption.durationDays,
     );
     if (resumesAt != null) {
         showConfirmation('Paused until $resumesAt');
     }
-} on ZSException catch (e) {
+} on ZeroSettleException catch (e) {
     showError(e.message);
 }
 ```
 
 ```tsx React Native
 try {
-    const resumesAt = await pauseSubscription(
+    const resumesAt = await ZeroSettleKit.pauseSubscription(
         'premium_monthly',
         currentUser.id,
         selectedPauseOption.durationDays
@@ -390,8 +387,18 @@ try await ZeroSettle.shared.resumeSubscription(
 )
 ```
 
+```kotlin Kotlin
+ZeroSettle.resumeSubscription(productId = "premium_monthly").getOrThrow()
+```
+
+```dart Flutter
+await ZeroSettle.instance.resumeSubscription(
+    productId: 'premium_monthly',
+);
+```
+
 ```tsx React Native
-await resumeSubscription('premium_monthly', currentUser.id);
+await ZeroSettleKit.resumeSubscription('premium_monthly', currentUser.id);
 ```
 
 </CodeGroup>
@@ -411,23 +418,23 @@ try await ZeroSettle.shared.cancelSubscription(
 ```
 
 ```kotlin Kotlin
+// Identity is implicit — call identify() first
 ZeroSettle.cancelSubscription(
     productId = "premium_monthly",
-    userId = currentUser.id,
     immediate = false, // Cancel at period end (default)
-)
+).getOrThrow()
 ```
 
 ```dart Flutter
+// Identity is implicit — call identify() first
 await ZeroSettle.instance.cancelSubscription(
     productId: 'premium_monthly',
-    userId: currentUser.id,
     immediate: false, // Cancel at period end (default)
 );
 ```
 
 ```tsx React Native
-await cancelSubscription('premium_monthly', currentUser.id, false);
+await ZeroSettleKit.cancelSubscription('premium_monthly', currentUser.id, false);
 ```
 
 </CodeGroup>
@@ -435,32 +442,11 @@ await cancelSubscription('premium_monthly', currentUser.id, false);
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `productId` | `String` | — | The product to cancel |
-| `userId` | `String` | — | Your app's user identifier |
 | `immediate` | `Bool` | `false` | If `true`, cancel immediately. If `false`, cancel at the end of the current billing period. |
 
-## Cancel Flow UI
-
-As a fallback or alternative, open the Stripe customer portal where the user can manage billing, update payment methods, and cancel directly:
-
-<CodeGroup>
-
-```swift Swift
-try await ZeroSettle.shared.openCustomerPortal(userId: currentUser.id)
-```
-
-```kotlin Kotlin
-ZeroSettle.openCustomerPortal(activity = this, userId = currentUser.id)
-```
-
-```dart Flutter
-await ZeroSettle.instance.openCustomerPortal(userId: currentUser.id);
-```
-
-```tsx React Native
-await openCustomerPortal(currentUser.id);
-```
-
-</CodeGroup>
+<Note>
+  Identity is implicit on iOS, Android, and Flutter — call `identify()` once first; do not pass a `userId` per call. React Native (1.3.x) still takes a `userId` argument.
+</Note>
 
 ## Analytics
 
@@ -482,20 +468,6 @@ await ZeroSettle.shared.submitCancelFlowResponse(CancelFlow.Response(
 ))
 ```
 
-```kotlin Kotlin
-ZeroSettle.submitCancelFlowResponse(CancelFlowResponse(
-    productId = "premium_monthly",
-    userId = currentUser.id,
-    outcome = CancelFlowOutcome.CANCELLED,
-    answers = listOf(
-        CancelFlowAnswer(questionId = 1, selectedOptionId = 5),
-        CancelFlowAnswer(questionId = 2, freeText = "Too expensive"),
-    ),
-    offerShown = true,
-    offerAccepted = false,
-))
-```
-
 ```dart Flutter
 await ZeroSettle.instance.submitCancelFlowResponse(CancelFlowResponse(
     productId: 'premium_monthly',
@@ -503,15 +475,18 @@ await ZeroSettle.instance.submitCancelFlowResponse(CancelFlowResponse(
     outcome: CancelFlowOutcome.cancelled,
     answers: [
         CancelFlowAnswer(questionId: 1, selectedOptionId: 5),
-        CancelFlowAnswer(questionId: 2, freeText: 'Too expensive'),
+        // free-text answers still require selectedOptionId on Flutter
+        CancelFlowAnswer(questionId: 2, selectedOptionId: 0, freeText: 'Too expensive'),
     ],
     offerShown: true,
     offerAccepted: false,
+    pauseShown: false,
+    pauseAccepted: false,
 ));
 ```
 
 ```tsx React Native
-await submitCancelFlowResponse({
+await ZeroSettleKit.submitCancelFlowResponse({
     productId: 'premium_monthly',
     userId: currentUser.id,
     outcome: 'cancelled',
@@ -529,6 +504,10 @@ await submitCancelFlowResponse({
 </CodeGroup>
 
 This is fire-and-forget — it resolves immediately and never throws. Failed submissions are silently dropped.
+
+<Note>
+  `submitCancelFlowResponse` is available on iOS, Flutter, and React Native. The Android SDK does not currently expose it. To record questionnaire-level cancel-flow analytics from an Android app, call the REST API directly.
+</Note>
 
 ### Response Fields
 
@@ -583,8 +562,8 @@ submitCancelFlowResponse() ← Always call this at the end
 |---|---|---|
 | **Effort** | One method call | You build the entire UI |
 | **Customization** | None — uses the built-in sheet | Full control over layout, animations, and copy |
-| **Platforms** | iOS, Android (built-in UI), Flutter | All platforms |
-| **Analytics** | Automatic | You call `submitCancelFlowResponse` |
+| **Platforms** | iOS native; Flutter & React Native on iOS only. On Android, use the `ZeroSettleCancelFlow` Composable instead | iOS, Android, Flutter, React Native |
+| **Analytics** | Automatic | iOS / Flutter / RN: call `submitCancelFlowResponse`. Android: recorded server-side automatically |
 | **State management** | Handled internally | You manage the flow state |
 
 ## Next Steps

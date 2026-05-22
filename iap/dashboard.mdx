@@ -29,13 +29,13 @@ ZeroSettle.shared.configure(.init(
 ```
 
 ```kotlin Kotlin
-ZeroSettle.configure(context, ZeroSettle.Configuration(
+ZeroSettle.configure(context, ZeroSettleConfig(
     publishableKey = "zs_pk_live_..."
 ))
 ```
 
 ```tsx React Native
-await ZeroSettle.configure({
+await ZeroSettleKit.configure({
     publishableKey: 'zs_pk_live_...',
 });
 ```
@@ -70,7 +70,7 @@ Products are fetched by the SDK via `fetchProducts()` and returned as a `Product
 
 <CodeGroup>
 ```swift Swift
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 for product in catalog.products {
     print("\(product.displayName): \(product.webPrice.formatted)")
@@ -78,7 +78,7 @@ for product in catalog.products {
 ```
 
 ```kotlin Kotlin
-val catalog = ZeroSettle.fetchProducts(userId = user.id)
+val catalog = ZeroSettle.fetchProducts().getOrThrow()
 
 for (product in catalog.products) {
     println("${product.displayName}: ${product.webPrice?.formatted}")
@@ -86,7 +86,7 @@ for (product in catalog.products) {
 ```
 
 ```tsx React Native
-const catalog = await ZeroSettle.fetchProducts(user.id);
+const catalog = await ZeroSettleKit.fetchProducts(user.id);
 
 for (const product of catalog.products) {
     console.log(`${product.displayName}: ${product.webPrice.formatted}`);
@@ -94,7 +94,7 @@ for (const product of catalog.products) {
 ```
 
 ```dart Flutter
-final catalog = await ZeroSettle.instance.fetchProducts(userId: user.id);
+final catalog = await ZeroSettle.instance.fetchProducts();
 
 for (final product in catalog.products) {
     print('${product.displayName}: ${product.webPrice.formatted}');
@@ -269,7 +269,7 @@ The SDK provides built-in views (`OfferTipView` (recommended) or the deprecated 
 
 <CodeGroup>
 ```swift Swift
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 if let migration = catalog.config?.migration {
     // Show migration prompt to eligible users
@@ -278,7 +278,7 @@ if let migration = catalog.config?.migration {
 ```
 
 ```kotlin Kotlin
-val catalog = ZeroSettle.fetchProducts(userId = user.id)
+val catalog = ZeroSettle.fetchProducts().getOrThrow()
 
 catalog.config?.migration?.let { migration ->
     // Show migration prompt to eligible users
@@ -287,7 +287,7 @@ catalog.config?.migration?.let { migration ->
 ```
 
 ```tsx React Native
-const catalog = await ZeroSettle.fetchProducts(user.id);
+const catalog = await ZeroSettleKit.fetchProducts(user.id);
 
 if (catalog.config?.migration) {
     const migration = catalog.config.migration;
@@ -297,7 +297,7 @@ if (catalog.config?.migration) {
 ```
 
 ```dart Flutter
-final catalog = await ZeroSettle.instance.fetchProducts(userId: user.id);
+final catalog = await ZeroSettle.instance.fetchProducts();
 
 final migration = catalog.config?.migration;
 if (migration != null) {

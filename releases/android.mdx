@@ -4,20 +4,41 @@ description: 'Release notes for zerosettle-android — the Kotlin SDK'
 icon: 'android'
 ---
 
-**Current version:** `0.15.0`
-**Package:** Maven Central (`io.zerosettle:zerosettle-android`)
-**Minimum requirements:** Android API 26+, Kotlin 1.9+
+**Current version:** `1.0.0`
+**Package:** Maven Central (`io.zerosettle:zerosettle-android` — headless core; `io.zerosettle:zerosettle-android-ui` — optional Compose components)
+**Minimum requirements:** Android API 23+, Kotlin 2.1+
 
 <Tip>
   Add to your `build.gradle.kts`:
   ```kotlin
-  implementation("io.zerosettle:zerosettle-android:0.15.0")
+  implementation("io.zerosettle:zerosettle-android:1.0.0")
+  implementation("io.zerosettle:zerosettle-android-ui:1.0.0")  // optional Compose UI
   ```
 </Tip>
 
 ---
 
-## February 2026
+## 1.0.0
+
+<Update label="1.0.0">
+### Ground-up rewrite — parity with ZeroSettleKit (iOS)
+
+`1.0.0` is a complete rewrite mirroring the current iOS `ZeroSettleKit` API. The pre-1.0 `0.x` line is yanked from Maven Central; see [Migrating from v0](/sdk/android/migration-from-v0) for the symbol mapping.
+
+- **Identify-first surface**: `ZeroSettle.configure(context, ZeroSettleConfig(...))` then `ZeroSettle.identify(Identity.User / Anonymous / Deferred)`. No `bootstrap()`, no per-`userId` method overloads — every call resolves against the identified user.
+- **Two artifacts**: headless `:core` (pure Kotlin + coroutines) and optional `:ui` (Compose components).
+- **Unified `OfferManager`**: a single state machine for Switch & Save migrations (Play→web, StoreKit→web) and subscription upgrades, replacing the migration-only `ZSMigrationManager`.
+- **Native Play Billing origination**: `purchaseViaPlayBilling()` plus a DataStore-backed persistent `PlaySyncQueue` and a defined [acknowledgement model](/sdk/android/acknowledgement-model).
+- **Switch & Save for Play**: Play→web migration via Google's External Content Link (ECL) billing program (`ZeroSettle.launchSwitchAndSave(activity)`).
+- **Pending actions**: backend-initiated prompts surfaced as a typed `PendingAction` sealed class on `ZeroSettle.pendingActions`, dismissed via `dismissPendingAction()`.
+- **Cross-account claims**: `ZeroSettle.transferPlayOwnershipToCurrentUser(productId)` resolves a `PendingClaim`.
+- **Reactive surface**: `StateFlow` (`entitlements`, `products`, `pendingActions`, `pendingClaims`, `isUcbEnabled`, …) and a `SharedFlow<ZeroSettleEvent>` (`events`) — no delegate interface.
+- **Sandbox vs live** signalled purely by the publishable-key prefix (`zs_pk_test_` / `zs_pk_live_`).
+</Update>
+
+---
+
+## February 2026 (pre-1.0, yanked)
 
 <Update label="0.15.0" description="2026-02-25">
 ### Subscription group support

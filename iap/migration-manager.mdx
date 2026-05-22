@@ -4,22 +4,26 @@ description: 'Build your own switch and save experience with ZSMigrationManager'
 icon: 'wand-magic-sparkles'
 ---
 
-<Note>
-  For new integrations, consider [ZSOfferManager](/iap/offer-manager) — it handles migration,
-  storekit-to-web upgrades, and web-to-web upgrades from a single manager.
-</Note>
+<Warning>
+  **`ZSMigrationManager` is deprecated.** Use [ZSOfferManager](/iap/offer-manager) instead — it is a strict superset that handles migration, StoreKit-to-web upgrades, and web-to-web upgrades from a single manager, with unified demo mode and server-driven checkout presentation. This page is retained for existing integrations; new code should use `ZSOfferManager`.
+</Warning>
 
-`ZSMigrationManager` is the state machine behind `MigrationTipView`. If the built-in view doesn't fit your design, use the manager directly to build a fully custom switch and save experience while reusing all the eligibility logic, checkout orchestration, and state tracking.
+`ZSMigrationManager` is the state machine behind `MigrationTipView` (itself deprecated in favor of `OfferTipView`). If the built-in view doesn't fit your design, use the manager directly to build a fully custom switch and save experience while reusing all the eligibility logic, checkout orchestration, and state tracking.
 
 ## Quick Start
+
+<Note>
+  Call `ZeroSettle.shared.identify(_:)` once at app launch before constructing the manager — see the [Quickstart](/iap/quickstart). `migrationManager()` itself is deprecated; prefer `ZeroSettle.shared.offerManager()`.
+</Note>
 
 <Tabs>
   <Tab title="SwiftUI">
     ```swift
     struct SwitchAndSaveBanner: View {
-        // Pass stripeCustomerId to attach checkouts to an existing Stripe customer
-        @StateObject private var manager = ZSMigrationManager(userId: "user_42")
-        // Or: ZSMigrationManager(userId: "user_42", stripeCustomerId: "cus_abc123")
+        // migrationManager() throws if identify(_:) hasn't been called — that's a programming error.
+        // Pass stripeCustomerId to attach checkouts to an existing Stripe customer.
+        @StateObject private var manager = try! ZeroSettle.shared.migrationManager()
+        // Or: try! ZeroSettle.shared.migrationManager(stripeCustomerId: "cus_abc123")
 
         var body: some View {
             switch manager.state {
@@ -60,9 +64,10 @@ icon: 'wand-magic-sparkles'
         private let manager: ZSMigrationManager
         private var cancellables = Set<AnyCancellable>()
 
-        // Pass stripeCustomerId to attach checkouts to an existing Stripe customer
-        init(userId: String, stripeCustomerId: String? = nil) {
-            self.manager = ZSMigrationManager(userId: userId, stripeCustomerId: stripeCustomerId)
+        // Pass stripeCustomerId to attach checkouts to an existing Stripe customer.
+        // migrationManager() throws if identify(_:) hasn't been called yet.
+        init(stripeCustomerId: String? = nil) throws {
+            self.manager = try ZeroSettle.shared.migrationManager(stripeCustomerId: stripeCustomerId)
             super.init(nibName: nil, bundle: nil)
         }
 
@@ -130,7 +135,7 @@ loading → eligible → presented → accepted → completed
 
 | State | Meaning | `offerData` |
 |-------|---------|-------------|
-| `loading` | Waiting for `ZeroSettle.bootstrap()` to finish. | `nil` |
+| `loading` | Waiting for `ZeroSettle.shared.identify(_:)` to finish. | `nil` |
 | `ineligible` | User doesn't qualify (no StoreKit subscription, already switched, no campaign configured). | `nil` |
 | `eligible` | User qualifies. Offer data is available — show your UI. | Available |
 | `presented` | Offer is on screen or checkout is in progress. | Available |
@@ -230,32 +235,22 @@ Clears the persisted dismissal, allowing the offer to reappear. Useful for debug
 ZSMigrationManager.resetDismissedState()
 ```
 
-### `forceUSARegion()`
+### Forcing a jurisdiction (debug)
 
-Forces the jurisdiction check to `.us` so the migration tip appears regardless of device locale. Debug only — do not ship with this enabled.
-
-```swift
-ZSMigrationManager.forceUSARegion()
-```
-
-### `resetRegionOverride()`
-
-Restores real jurisdiction detection after a `forceUSARegion()` call.
+The `forceUSARegion()`, `resetRegionOverride()`, and `isUSARegionForced` static APIs are **deprecated**. Use the SDK-wide override on `ZeroSettle.shared` instead — it supports all jurisdictions and applies across every jurisdiction-sensitive API:
 
 ```swift
-ZSMigrationManager.resetRegionOverride()
-```
+#if DEBUG
+// Force the jurisdiction so the offer appears regardless of device locale
+ZeroSettle.shared.forcedJurisdiction = .us
 
-### `isUSARegionForced`
-
-Backing `Bool` flag for the region override (default `false`). You can also set this directly:
-
-```swift
-ZSMigrationManager.isUSARegionForced = true
+// Restore real detection
+ZeroSettle.shared.forcedJurisdiction = nil
+#endif
 ```
 
 <Note>
-Unlike `demoMode`, `forceUSARegion()` only bypasses the region check. All other eligibility checks (active StoreKit subscription, rollout, tenure, etc.) still apply.
+Unlike `demoMode`, `forcedJurisdiction` only overrides the jurisdiction check. All other eligibility checks (active StoreKit subscription, rollout, tenure, etc.) still apply. Debug / preview only — gate assignments behind `#if DEBUG`.
 </Note>
 
 ## Full Example
@@ -268,8 +263,9 @@ A complete custom switch and save card with loading, error, checkout, and comple
     struct CustomSwitchAndSaveCard: View {
         @StateObject private var manager: ZSMigrationManager
 
-        init(userId: String) {
-            _manager = StateObject(wrappedValue: ZSMigrationManager(userId: userId))
+        // migrationManager() throws if identify(_:) hasn't been called yet.
+        init() {
+            _manager = StateObject(wrappedValue: try! ZeroSettle.shared.migrationManager())
         }
 
         var body: some View {
@@ -358,8 +354,9 @@ A complete custom switch and save card with loading, error, checkout, and comple
         private let cancelAppleButton = UIButton(type: .system)
         private let completedLabel = UILabel()
 
-        init(userId: String) {
-            self.manager = ZSMigrationManager(userId: userId)
+        // migrationManager() throws if identify(_:) hasn't been called yet.
+        init() throws {
+            self.manager = try ZeroSettle.shared.migrationManager()
             super.init(nibName: nil, bundle: nil)
         }
 

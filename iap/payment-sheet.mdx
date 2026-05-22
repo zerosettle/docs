@@ -24,10 +24,10 @@ This is the recommended way to accept payments on iOS with ZeroSettle.
         let product: Product
 
         var body: some View {
-            Button("Subscribe — \(product.webPrice.formatted)") {
+            Button("Subscribe — \(product.webPrice?.formatted ?? "")") {
                 selectedProduct = product
             }
-            .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+            .checkoutSheet(item: $selectedProduct) { result in
                 switch result {
                 case .success(let transaction):
                     unlockContent(transaction.productId)
@@ -57,8 +57,7 @@ This is the recommended way to accept payments on iOS with ZeroSettle.
         @objc private func handleBuyTap() {
             CheckoutSheet.present(
                 from: self,
-                product: product,
-                userId: currentUser.id
+                product: product
             ) { result in
                 switch result {
                 case .success(let transaction):
@@ -81,7 +80,7 @@ Add a custom header view above the payment sheet to show product details, brandi
 <Tabs>
   <Tab title="SwiftUI">
     ```swift
-    .checkoutSheet(item: $selectedProduct, userId: currentUser.id, header: {
+    .checkoutSheet(item: $selectedProduct, header: {
         VStack(spacing: 8) {
             Image("premium-icon")
                 .resizable()
@@ -103,7 +102,6 @@ Add a custom header view above the payment sheet to show product details, brandi
     CheckoutSheet.present(
         from: self,
         product: product,
-        userId: currentUser.id,
         header: {
             AnyView(
                 VStack(spacing: 8) {
@@ -130,7 +128,7 @@ Pass `dismissible: false` to hide the close button and disable interactive dismi
 <Tabs>
   <Tab title="SwiftUI">
     ```swift
-    .checkoutSheet(item: $selectedProduct, userId: currentUser.id, dismissible: false) { result in
+    .checkoutSheet(item: $selectedProduct, dismissible: false) { result in
         handleResult(result)
     }
     ```
@@ -140,7 +138,6 @@ Pass `dismissible: false` to hide the close button and disable interactive dismi
     CheckoutSheet.present(
         from: self,
         product: product,
-        userId: currentUser.id,
         dismissible: false
     ) { result in
         handleResult(result)
@@ -157,7 +154,6 @@ Use `CheckoutSheet` as a standalone SwiftUI `View` inside a `.sheet()` — usefu
 .sheet(item: $selectedProduct) { product in
     CheckoutSheet(
         product: product,
-        userId: currentUser.id,
         header: { Text("Premium Access").font(.title.bold()).padding() }
     ) { result in
         selectedProduct = nil

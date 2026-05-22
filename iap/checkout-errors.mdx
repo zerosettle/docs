@@ -11,7 +11,7 @@ When a checkout attempt fails, the result handler or `try/catch` block receives 
 <Tabs>
   <Tab title="SwiftUI">
     ```swift
-    .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+    .checkoutSheet(item: $selectedProduct) { result in
         switch result {
         case .success(let transaction):
             unlockContent(transaction.productId)
@@ -24,10 +24,10 @@ When a checkout attempt fails, the result handler or `try/catch` block receives 
                 switch zsError {
                 case .checkoutFailed(let reason):
                     showError("Payment failed: \(reason)")
-                case .userIdRequired:
+                case .userNotIdentified:
                     showError("Please sign in to purchase.")
                 case .apiError(let detail):
-                    showError("Could not load checkout: \(detail.message)")
+                    showError("Could not load checkout: \(detail.serverMessage ?? "Unknown error")")
                 default:
                     showError(error.localizedDescription)
                 }
@@ -38,7 +38,7 @@ When a checkout attempt fails, the result handler or `try/catch` block receives 
   </Tab>
   <Tab title="UIKit">
     ```swift
-    CheckoutSheet.present(from: self, product: product, userId: currentUser.id) { result in
+    CheckoutSheet.present(from: self, product: product) { result in
         switch result {
         case .success(let transaction):
             self.unlockContent(transaction.productId)
@@ -50,10 +50,10 @@ When a checkout attempt fails, the result handler or `try/catch` block receives 
                 switch zsError {
                 case .checkoutFailed(let reason):
                     self.showError("Payment failed: \(reason)")
-                case .userIdRequired:
+                case .userNotIdentified:
                     self.showError("Please sign in to purchase.")
                 case .apiError(let detail):
-                    self.showError("Could not load checkout: \(detail.message)")
+                    self.showError("Could not load checkout: \(detail.serverMessage ?? "Unknown error")")
                 default:
                     self.showError(error.localizedDescription)
                 }
@@ -64,45 +64,61 @@ When a checkout attempt fails, the result handler or `try/catch` block receives 
   </Tab>
 </Tabs>
 
-`ZeroSettleError.isCancellation(_:)` returns `true` for user-initiated cancellations regardless of which layer threw — `ZeroSettleError.cancelled`, Swift's `CancellationError`, StoreKit's `.userCancelled`, or `PaymentSheetError.cancelled`. Always filter cancellations before showing an error UI.
+`ZeroSettleError.isCancellation(_:)` returns `true` for user-initiated cancellations regardless of which layer threw — `ZeroSettleError.cancelled`, Swift's `CancellationError`, StoreKit's `StoreKitError.userCancelled`, or the SDK's internal payment-sheet cancellation. Always filter cancellations before showing an error UI.
 
 ## iOS Error Reference (`ZeroSettleError`)
 
 | Error | Cause | Recommended Action |
 |-------|-------|--------------------|
-| `.cancelled` | User dismissed the sheet | No action — use `isCancellation(_:)` to filter |
-| `.checkoutFailed(reason:)` | Payment processing failed | Show error to user; inspect `reason` for detail |
-| `.userIdRequired(productId:)` | Subscription or non-consumable purchased without a `userId` | Require sign-in before presenting checkout |
-| `.apiError(APIErrorDetail)` | Network or server error creating PaymentIntent | Show retry prompt |
 | `.notConfigured` | `configure()` was not called | Call `configure()` before any SDK use |
 | `.invalidPublishableKey` | Key format invalid | Check key from dashboard |
 | `.productNotFound(String)` | Product ID not in catalog | Verify product ID matches dashboard |
+| `.checkoutFailed(reason: CheckoutFailureReason)` | Payment processing failed | Show error to user; inspect `reason` for detail |
 | `.transactionVerificationFailed(String)` | Server verification failed after payment | Log and contact support; do not unlock content |
-| `.webCheckoutDisabledForJurisdiction` | Dashboard config disables web checkout in this region | Gracefully fall back or hide the button |
+| `.apiError(APIErrorDetail)` | Network or server error creating the PaymentIntent | Show retry prompt; read `serverMessage` / `statusCode` |
+| `.checkoutConfigExpired` | The deferred-mode checkout config expired | Re-initiate checkout to get a fresh session |
+| `.invalidCallbackURL` | The checkout callback URL could not be parsed | Log and contact support |
+| `.webCheckoutDisabledForJurisdiction(Jurisdiction)` | Dashboard config disables web checkout in this region | Gracefully fall back or hide the button |
+| `.userIdRequired(productId: String)` | **Deprecated — no longer thrown.** Retained for source compatibility; will be removed in 2.0 | Catch `.userNotIdentified` instead |
+| `.restoreEntitlementsFailed(partialEntitlements: [Entitlement], underlyingError: Error)` | Partial restore failure | Check `partialEntitlements` for recovered items |
+| `.cancelled` | User dismissed the sheet | No action — use `isCancellation(_:)` to filter |
 | `.purchasePending` | Ask to Buy pending parental approval | Show "Purchase pending approval" UI |
-| `.restoreEntitlementsFailed` | Partial restore failure | Check `partialEntitlements` for recovered items |
+| `.storeKitVerificationFailed(underlyingError: Error)` | A StoreKit transaction failed verification | Log and do not unlock content |
+| `.invalidUserId` | The `userId` provided was empty or whitespace-only | Pass a non-empty user identifier to `identify(_:)` |
+| `.userNotIdentified` | A user-scoped method was called before `identify(_:)` | Call `identify(.user(id:))` (or `.anonymous`) at launch before checkout |
+| `.checkoutNotStarted` | The PaymentIntent was never created — the customer was **not** charged | Treat as a terminal error; check backend logs |
+| `.applePayUnavailable` | Apple-Pay-only merchant config and the device cannot do Apple Pay | Show your own UX or skip the purchase path |
+| `.applePaySetupRequired(autoPresentedSetup: Bool)` | Apple-Pay-only merchant config and Wallet has no supported card | If `autoPresentedSetup` is `false`, call `presentApplePaySetup()`; if `true`, the SDK already opened Wallet |
 
 ## Android Error Reference (`ZeroSettleError`)
 
+On Android, `ZeroSettleError` is a `sealed class`. Public SDK methods return `kotlin.Result<T>`, so handle failures with `result.onFailure { ... }` and pattern-match on the sealed subtypes with `when`.
+
 | Error | Description |
 |-------|-------------|
-| `ZeroSettleError.Cancelled` | User dismissed — no action needed |
-| `ZeroSettleError.NotConfigured` | Call `configure()` first |
-| `ZeroSettleError.CheckoutFailed(reason)` | Inspect `reason` (`CheckoutFailure`) for detail |
-| `ZeroSettleError.UserIdRequired(productId)` | Require sign-in before checkout |
-| `ZeroSettleError.TransactionVerificationFailed(detail)` | Server verification failed |
-
-### Android `CheckoutFailure` reasons
-
-| Reason | Description |
-|--------|-------------|
-| `CheckoutFailure.NetworkUnavailable` | No network connection |
-| `CheckoutFailure.StripeError(code, message)` | Card declined or Stripe error |
-| `CheckoutFailure.ServerError(statusCode, message)` | Server returned non-2xx |
-| `CheckoutFailure.ProductNotFound` | Product not in catalog |
-| `CheckoutFailure.MerchantNotOnboarded` | Stripe onboarding incomplete |
-| `CheckoutFailure.Other(message)` | Unclassified error |
+| `ZeroSettleError.NotConfigured` | `configure()` was not called |
+| `ZeroSettleError.NotBootstrapped` | SDK not yet bootstrapped — call `identify(...)` first |
+| `ZeroSettleError.UserNotIdentified` | `identify(...)` must be called before this API |
+| `ZeroSettleError.UserIdRequired` | An `Identity.User.id` is required for this operation |
+| `ZeroSettleError.InvalidUserId(reason)` | The supplied `userId` was invalid |
+| `ZeroSettleError.CheckoutFailed(reason)` | Checkout failed — `reason` is a `String` describing the failure |
+| `ZeroSettleError.CheckoutInFlight` | A web checkout is already in progress |
+| `ZeroSettleError.PurchaseCancelled` | User cancelled — no action needed |
+| `ZeroSettleError.PurchasePending` | Purchase is pending Google's review (parental approval, etc.) |
+| `ZeroSettleError.PlayBillingError(responseCode, debugMessage)` | Google Play Billing returned an error |
+| `ZeroSettleError.BackendError(statusCode, body)` | Server returned a non-2xx response |
+| `ZeroSettleError.NetworkError(cause)` | Network failure — inspect `cause` |
+| `ZeroSettleError.PlayApiUnreachable` | The Play Developer API is temporarily unreachable |
+| `ZeroSettleError.ProductNotFound(productId)` | Product ID not in catalog |
+| `ZeroSettleError.NotFound(message)` | A targeted entity (pending action, offer) was not found in local state |
+| `ZeroSettleError.NoActiveSubscription(productId)` | No active subscription for the product |
+| `ZeroSettleError.AlreadyMigrated(productId)` | Product already migrated to web checkout |
+| `ZeroSettleError.OfferIneligible` | User is not currently eligible for any offer |
+| `ZeroSettleError.MerchantNotOnboarded` | Merchant has not completed Stripe onboarding |
+| `ZeroSettleError.JurisdictionBlocked(country)` | Web checkout unavailable in this jurisdiction |
+| `ZeroSettleError.SwitchAndSaveUnavailable` | The device/account is not enrolled in the External Content Link billing program |
+| `ZeroSettleError.SwitchAndSaveRequiresActivity` | A `MIGRATE_PLAY_TO_WEB` offer was accepted without an `Activity` — call `acceptOffer(activity)` |
 
 <Note>
-  `.cancelled` / `ZeroSettleError.Cancelled` is not a real error — it means the user changed their mind. Do not show an error message for cancellations.
+  `.cancelled` / `ZeroSettleError.PurchaseCancelled` is not a real error — it means the user changed their mind. Do not show an error message for cancellations.
 </Note>

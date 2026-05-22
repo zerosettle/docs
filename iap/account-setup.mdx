@@ -124,13 +124,13 @@ ZeroSettle.shared.configure(.init(
 ```
 
 ```kotlin Kotlin
-ZeroSettle.configure(context, ZeroSettle.Configuration(
+ZeroSettle.configure(context, ZeroSettleConfig(
     publishableKey = "zs_pk_test_..."  // Sandbox for development
 ))
 ```
 
 ```tsx React Native
-await ZeroSettle.configure({
+await ZeroSettleKit.configure({
     publishableKey: 'zs_pk_test_...',  // Sandbox for development
 });
 ```

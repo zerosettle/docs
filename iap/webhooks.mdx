@@ -200,17 +200,23 @@ class PurchaseManager : ZeroSettleDelegate {
 ```
 
 ```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
+import { useZeroSettleEvents } from 'react-native-zerosettle';
 
-ZeroSettle.onEntitlementUpdate((entitlements) => {
-  for (const entitlement of entitlements) {
-    if (entitlement.isActive) {
-      unlockFeature(entitlement.productId);
-    } else {
-      lockFeature(entitlement.productId);
-    }
-  }
-});
+function PurchaseManager() {
+  useZeroSettleEvents({
+    onEntitlementsDidUpdate: (entitlements) => {
+      for (const entitlement of entitlements) {
+        if (entitlement.isActive) {
+          unlockFeature(entitlement.productId);
+        } else {
+          lockFeature(entitlement.productId);
+        }
+      }
+    },
+  });
+
+  return null;
+}
 ```
 
 ```dart Flutter
@@ -265,11 +271,17 @@ fun ContentScreen() {
 ```
 
 ```tsx React Native
-import { useEntitlements } from 'react-native-zerosettle-kit';
+import { useState } from 'react';
+import { useZeroSettleEvents, Entitlement } from 'react-native-zerosettle';
 
 function ContentScreen() {
-  const entitlements = useEntitlements();
-  const hasAccess = entitlements.some(e => e.isActive);
+  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
+
+  useZeroSettleEvents({
+    onEntitlementsDidUpdate: setEntitlements,
+  });
+
+  const hasAccess = entitlements.some((e) => e.isActive);
 
   return hasAccess ? <PremiumContent /> : <UpgradePrompt />;
 }

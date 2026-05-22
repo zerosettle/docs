@@ -63,6 +63,47 @@ sequenceDiagram
   After switching, the user has **two active entitlements** temporarily — the existing StoreKit subscription (running out its paid period) and the new web checkout subscription. This overlap is intentional: the user already paid Apple for the current period and shouldn't lose access early. The StoreKit entitlement expires naturally.
 </Note>
 
+## Play Store (Android)
+
+Switch & Save also works for **Google Play Billing** subscribers on Android. The user flow mirrors the StoreKit flow — the subscriber switches to discounted web billing, keeps Play access until their current period ends, and the old Play subscription is cancelled — with two key Android-specific differences:
+
+1. **The migration runs through Google's External Content Link (ECL) billing program.** Android does not have an iOS-style payment sheet. The Android SDK opens Google's ECL disclosure dialog, then a Chrome Custom Tab to the migration session — it does **not** present an in-app WebView checkout (that would violate Google Play policy).
+2. **ZeroSettle's backend cancels the Play subscription programmatically** via the Play Developer API after the migration completes (StoreKit can't be cancelled server-side, so Apple users have to do it themselves in iOS Settings).
+
+<Steps>
+  <Step title="Configure Real-time Developer Notifications (RTDN)">
+    RTDN must be wired up for your Play app (this is the same prerequisite as the [Play Billing integration](/iap/play-billing-integration)). The backend uses the `SUBSCRIPTION_CANCELED` RTDN to reconcile the post-migration cancellation, and a periodic sweep as a backstop if an RTDN is missed.
+  </Step>
+  <Step title="The SDK launches the ECL Switch & Save flow">
+    The Android SDK checks ECL availability on the device, requests a single-use Play Billing attribution token, exchanges it with the backend (`POST /v1/iap/switch-and-save/session/`) for a migration-session URL, then opens Google's ECL disclosure dialog and — on acknowledgement — the migration URL in a Chrome Custom Tab. If the device or account is not enrolled in the ECL program, the offer is suppressed (the SDK never shows a dead CTA).
+  </Step>
+  <Step title="The backend cancels the Play subscription (best-effort)">
+    After the migration completes, ZeroSettle calls `subscriptionsv2.cancel` for the user's old Play subscription, with retries. If the cancellation can't be completed (e.g., Play returns a permanent error, or it keeps failing), the transaction is flagged for **manual intervention** instead of silently failing.
+  </Step>
+  <Step title="The SDK surfaces a fallback banner when needed">
+    When the backend couldn't cancel the Play subscription, [`GET /iap/entitlements/`](/api-reference/endpoint/get-entitlements) returns a `manual_play_cancel` entry in `pending_actions[]`. The SDK renders a banner with a deep link to the Play Store subscriptions screen so the user can cancel it themselves. The user keeps their new web subscription regardless. The SDK dismisses the banner via [`POST /iap/migration-actions/{transaction_id}/dismiss/`](/api-reference/endpoint/dismiss-migration-action) once the user acts on it. See [Pending Actions](/sdk/android/pending-actions).
+  </Step>
+</Steps>
+
+<Note>
+  Just like the Apple flow, the user keeps their **Play Store access until the current billing period ends** — the old Play subscription isn't revoked early. After it expires, the web subscription is the only active one. Right after migration the SDK also surfaces a one-time `migration_completed_info` banner explaining this.
+</Note>
+
+### Android API
+
+On Android, the Switch & Save flow is driven through the unified `OfferManager` — a `MIGRATE_PLAY_TO_WEB` offer is accepted with the `Activity` overload:
+
+```kotlin
+val mgr = ZeroSettle.offerManager()
+mgr.evaluate()
+// For a MIGRATE_PLAY_TO_WEB offer, acceptOffer REQUIRES an Activity:
+mgr.acceptOffer(activity)
+```
+
+The drop-in `ZeroSettleOfferTip` Composable (`:ui` module) handles this routing automatically. For a fully custom flow, `ZeroSettle.launchSwitchAndSave(activity)` is the headless entry point. See [Offers (Android)](/sdk/android/offers).
+
+The discount, copy, tenure, and rollout for the Play campaign are configured in the [dashboard Switch & Save campaign](/iap/dashboard#migration-campaigns), the same as the Apple campaign — campaigns carry a platform (Apple, Google, or both).
+
 ## Usage
 
 <CodeGroup>
@@ -90,9 +131,9 @@ MigrationTipView(
 ```
 
 ```tsx React Native
-import { OfferTipView } from 'react-native-zerosettle';
+import { ZSMigrateTipView } from 'react-native-zerosettle';
 
-<OfferTipView
+<ZSMigrateTipView
   userId={currentUser.id}
   stripeCustomerId="cus_abc123"            // optional
   backgroundColorHex="#1E1E1E"
@@ -110,18 +151,18 @@ MigrationTipView(
 ```
 
 ```kotlin Kotlin
-// The Android SDK does not yet ship a built-in migration widget. Use the headless
-// `MigrationPrompt` model from the SDK to drive your own UI — fetch the prompt via
-// `ZeroSettle.getMigrationPrompt(...)`, then render it however your app design dictates.
-// A built-in component is on the roadmap.
+// Android does not use MigrationTipView. The unified ZeroSettleOfferTip Composable
+// (from the optional :ui module) renders Play→web Switch & Save offers.
+val mgr = ZeroSettle.offerManager()
+ZeroSettleOfferTip(offerManager = mgr)
 ```
 
 </CodeGroup>
 
-All three use the same native implementation under the hood. Only `userId` is required — everything else has sensible defaults.
+The iOS, React Native, and Flutter views share the same native implementation. On Android, Switch & Save is exposed differently — see the [Android API](#android-api) section above and [Offers (Android)](/sdk/android/offers).
 
 <Note>
-  `MigrationTipView` targets users switching from **Apple StoreKit** subscriptions to direct billing. On Android, the equivalent switch and save flow from Google Play Billing is not yet supported by this component.
+  `MigrationTipView` targets iOS / React Native / Flutter apps switching users from **Apple StoreKit** subscriptions. On Android, use the unified `ZeroSettleOfferTip` Composable, which handles both Play→web Switch & Save migrations and upgrade offers.
 </Note>
 
 ## Automatic Visibility
@@ -289,9 +330,9 @@ ZSMigrationManager.resetDismissedState()
 ```
 
 ```tsx React Native
-import { resetMigrateTipState } from 'react-native-zerosettle';
-
-resetMigrateTipState();
+// Not available in the React Native SDK — the dismissed-state reset
+// API is not exposed by react-native-zerosettle. To re-test the tip
+// during development, reinstall the app to clear persisted state.
 ```
 
 ```dart Flutter
@@ -323,12 +364,9 @@ ZSMigrationManager.resetRegionOverride()
 ```
 
 ```tsx React Native
-import { forceUSARegion, resetRegionOverride } from 'react-native-zerosettle';
-
-forceUSARegion();
-
-// Reset to real jurisdiction detection
-resetRegionOverride();
+// Not available in the React Native SDK — region-override APIs are not
+// exposed by react-native-zerosettle. To test the migration tip from a
+// non-US region, use a US-region device or simulator.
 ```
 
 ```dart Flutter

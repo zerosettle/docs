@@ -100,42 +100,44 @@ import ZeroSettleKit
 // Configure once
 ZeroSettle.shared.configure(.init(publishableKey: "your_key"))
 
-// Fetch your product catalog
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: user.id)
+// Identify the user — fetches the product catalog and restores entitlements
+let catalog = try await ZeroSettle.shared.identify(.user(id: user.id))
 
 // Show the payment sheet
-.checkoutSheet(item: $selectedProduct, userId: user.id) { result in
+.checkoutSheet(item: $selectedProduct) { result in
     // Done. That's it.
 }
 ```
 
 ```kotlin Android
 import com.zerosettle.sdk.ZeroSettle
+import com.zerosettle.sdk.ZeroSettleConfig
+import com.zerosettle.sdk.Identity
 
 // Configure once
-ZeroSettle.configure(context, ZeroSettle.Configuration(
+ZeroSettle.configure(context, ZeroSettleConfig(
     publishableKey = "your_key"
 ))
 
-// Fetch your product catalog
-val catalog = ZeroSettle.bootstrap(userId = user.id)
+// Identify the user — fetches the catalog and restores entitlements
+ZeroSettle.identify(Identity.User(id = user.id))
 
 // Show the payment sheet
-val txn = ZeroSettle.purchase(activity, product.id, user.id)
+val txn = ZeroSettle.purchase(activity = activity, productId = product.id)
 // Done. That's it.
 ```
 
 ```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
+import { ZeroSettleKit } from 'react-native-zerosettle';
 
 // Configure once
-await ZeroSettle.configure({ publishableKey: 'your_key' });
+await ZeroSettleKit.configure({ publishableKey: 'your_key' });
 
 // Fetch your product catalog
-const catalog = await ZeroSettle.fetchProducts(user.id);
+const catalog = await ZeroSettleKit.fetchProducts(user.id);
 
 // Show the payment sheet
-const txn = await ZeroSettle.purchase(product.id, user.id);
+const txn = await ZeroSettleKit.purchase(product.id, user.id);
 // Done. That's it.
 ```
 
@@ -145,12 +147,11 @@ import 'package:zerosettle/zerosettle.dart';
 // Configure once
 await ZeroSettle.instance.configure(publishableKey: 'your_key');
 
-// Fetch your product catalog
-final catalog = await ZeroSettle.instance.fetchProducts(userId: user.id);
+// Identify the user — fetches the product catalog and restores entitlements
+await ZeroSettle.instance.identify(Identity.user(id: user.id));
 
 // Show the payment sheet
-final txn = await ZeroSettle.instance.presentPaymentSheet(
-    productId: product.id, userId: user.id);
+final txn = await ZeroSettle.instance.purchase(productId: product.id);
 // Done. That's it.
 ```
 </CodeGroup>

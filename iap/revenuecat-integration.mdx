@@ -6,6 +6,8 @@ icon: 'puzzle-piece'
 
 ZeroSettle works alongside RevenueCat. You can use RevenueCat for StoreKit and Play Billing subscription management while routing eligible purchases through ZeroSettle's web checkout for lower fees.
 
+Both ZeroSettle and RevenueCat must be identified to the same user ID before purchase. ZeroSettle is identify-first on iOS, Android, and Flutter — call `identify(...)` once after sign-in, alongside RevenueCat's `logIn(rcUserId)`. On iOS use `try await ZeroSettle.shared.identify(.user(id: rcUserId))`, on Android `ZeroSettle.identify(Identity.User(id = rcUserId))`, and on Flutter `await ZeroSettle.instance.identify(Identity.user(id: rcUserId))`.
+
 There are two integration approaches:
 
 ## Option 1: SDK Integration (Recommended)
@@ -45,6 +47,7 @@ struct YourApp: App {
 
 ```kotlin Kotlin
 import com.zerosettle.sdk.ZeroSettle
+import com.zerosettle.sdk.ZeroSettleConfig
 import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.PurchasesConfiguration
 
@@ -57,24 +60,24 @@ class MyApp : Application() {
             PurchasesConfiguration.Builder(this, "your_revenuecat_key").build()
         )
 
-        // Configure ZeroSettle with Play Store sync disabled
-        ZeroSettle.configure(this, ZeroSettle.Configuration(
+        // Configure ZeroSettle with Play Billing sync disabled
+        ZeroSettle.configure(this, ZeroSettleConfig(
             publishableKey = "your_zerosettle_key",
-            syncPlayStoreTransactions = false,  // RevenueCat manages Play Billing
+            syncPlayPurchases = false,  // RevenueCat manages Play Billing
         ))
     }
 }
 ```
 
 ```tsx React Native
-import { ZeroSettle } from 'react-native-zerosettle-kit';
+import { ZeroSettleKit } from 'react-native-zerosettle';
 import Purchases from 'react-native-purchases';
 
 // Configure RevenueCat first
 Purchases.configure({ apiKey: 'your_revenuecat_key' });
 
 // Configure ZeroSettle with StoreKit sync disabled
-await ZeroSettle.configure({
+await ZeroSettleKit.configure({
   publishableKey: 'your_zerosettle_key',
   syncStoreKitTransactions: false,
 });
@@ -96,54 +99,61 @@ await ZeroSettle.instance.configure(
 </CodeGroup>
 
 <Warning>
-  Always set `syncStoreKitTransactions: false` (iOS) or `syncPlayStoreTransactions: false` (Android) when using RevenueCat. Both SDKs listening for store transactions will cause conflicts.
+  Always set `syncStoreKitTransactions: false` (iOS) or `syncPlayPurchases = false` (Android) when using RevenueCat. Both SDKs listening for store transactions will cause conflicts.
 </Warning>
 
 ### User Identity
 
-Pass RevenueCat's `appUserID` as the `userId` when making ZeroSettle purchases. This links web checkout purchases to the correct RevenueCat customer:
+Use RevenueCat's `appUserID` as the user ID for ZeroSettle. This links web checkout purchases to the correct RevenueCat customer. Identify ZeroSettle with the same ID on every platform.
 
 <CodeGroup>
 ```swift Swift
 let rcUserId = Purchases.shared.appUserID
 
+// Identify ZeroSettle with the same user ID (do this once after sign-in)
+try await ZeroSettle.shared.identify(.user(id: rcUserId))
+
 // Fetch ZeroSettle product catalog
-let catalog = try await ZeroSettle.shared.fetchProducts(userId: rcUserId)
+let catalog = try await ZeroSettle.shared.fetchProducts()
 
 // Purchase via web checkout using .checkoutSheet() in your SwiftUI view:
-// .checkoutSheet(item: $selectedProduct, userId: rcUserId) { result in ... }
+// .checkoutSheet(item: $selectedProduct) { result in ... }
 ```
 
 ```kotlin Kotlin
 val rcUserId = Purchases.sharedInstance.appUserID
 
+// Identify ZeroSettle with the same user ID (do this once after sign-in)
+ZeroSettle.identify(Identity.User(id = rcUserId))
+
 // Fetch ZeroSettle product catalog
-val catalog = ZeroSettle.fetchProducts(userId = rcUserId)
+val catalog = ZeroSettle.fetchProducts().getOrThrow()
 
 // Purchase via web checkout
-val transaction = ZeroSettle.purchase(
+ZeroSettle.purchase(
     activity = this,
     productId = product.id,
-    userId = rcUserId,
-)
+).onSuccess { transaction -> /* unlock content */ }
 ```
 
 ```tsx React Native
 const rcUserId = await Purchases.getAppUserID();
 
-const catalog = await ZeroSettle.fetchProducts(rcUserId);
+const catalog = await ZeroSettleKit.fetchProducts(rcUserId);
 
-const transaction = await ZeroSettle.purchase(product.id, rcUserId);
+const transaction = await ZeroSettleKit.purchase(product.id, rcUserId);
 ```
 
 ```dart Flutter
 final rcUserId = await Purchases.appUserID;
 
-final catalog = await ZeroSettle.instance.fetchProducts(userId: rcUserId);
+// Identify ZeroSettle with the same user ID (do this once after sign-in)
+await ZeroSettle.instance.identify(Identity.user(id: rcUserId));
 
-final transaction = await ZeroSettle.instance.presentPaymentSheet(
+final catalog = await ZeroSettle.instance.fetchProducts();
+
+final transaction = await ZeroSettle.instance.purchase(
   productId: product.id,
-  userId: rcUserId,
 );
 ```
 </CodeGroup>
@@ -162,12 +172,11 @@ struct PaywallView: View {
     var body: some View {
         VStack(spacing: 16) {
             // Web checkout — lower fees
-            Button("Subscribe — \(zsProduct.webPrice.formatted)") {
+            Button("Subscribe — \(zsProduct.webPrice?.formatted ?? "")") {
                 selectedProduct = zsProduct
             }
             .checkoutSheet(
-                item: $selectedProduct,
-                userId: Purchases.shared.appUserID
+                item: $selectedProduct
             ) { result in
                 if case .success = result {
                     // Refresh RC customer info to pick up the webhook
@@ -197,17 +206,17 @@ fun PaywallScreen(zsProduct: Product, rcPackage: Package) {
         // Web checkout — lower fees
         Button(onClick = {
             scope.launch {
-                try {
-                    ZeroSettle.purchase(
-                        activity = context as Activity,
-                        productId = zsProduct.id,
-                        userId = Purchases.sharedInstance.appUserID,
-                    )
+                ZeroSettle.purchase(
+                    activity = context as Activity,
+                    productId = zsProduct.id,
+                ).onSuccess {
                     // Refresh RC customer info to pick up the webhook
                     Purchases.sharedInstance.getCustomerInfo(
                         object : ReceiveCustomerInfoCallback { /* ... */ }
                     )
-                } catch (_: ZeroSettleError.Cancelled) { }
+                }.onFailure { e ->
+                    if (e !is ZeroSettleError.PurchaseCancelled) showError(e.message)
+                }
             }
         }) {
             Text("Subscribe — ${zsProduct.webPrice?.formatted}")
@@ -232,7 +241,7 @@ fun PaywallScreen(zsProduct: Product, rcPackage: Package) {
 // Web checkout — lower fees
 const handleWebPurchase = async () => {
   try {
-    await ZeroSettle.purchase(zsProduct.id, Purchases.getAppUserID());
+    await ZeroSettleKit.purchase(zsProduct.id, Purchases.getAppUserID());
     // Refresh RC customer info
     await Purchases.getCustomerInfo();
   } catch (e) {
@@ -249,9 +258,8 @@ const handleStorePurchase = async () => {
 ```dart Flutter
 // Web checkout — lower fees
 try {
-  final transaction = await ZeroSettle.instance.presentPaymentSheet(
+  final transaction = await ZeroSettle.instance.purchase(
     productId: zsProduct.id,
-    userId: await Purchases.appUserID,
   );
   // Refresh RC customer info
   await Purchases.getCustomerInfo();

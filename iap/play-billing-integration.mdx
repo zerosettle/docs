@@ -8,61 +8,75 @@ ZeroSettle works alongside Google Play Billing. You can use web checkout as your
 
 ## How It Works
 
-When `syncPlayStoreTransactions` is enabled (the default), the SDK's `PlayBillingManager` automatically:
+When `syncPlayPurchases` is enabled (the default), the SDK automatically:
 
-1. Connects to Google Play Billing on startup
-2. Syncs completed Play Store transactions to your ZeroSettle backend
+1. Installs a `PurchasesUpdatedListener` and connects to Google Play Billing
+2. Forwards every completed Play purchase to your ZeroSettle backend (`POST /v1/iap/play-store-transactions/`)
 3. Merges Play Store entitlements with web checkout entitlements
+4. Acknowledges purchases per the [acknowledgement model](/sdk/android/acknowledgement-model), retrying failed syncs via a [persistent sync queue](/sdk/android/sync-queue)
 
-This means a user who purchases via the Play Store will have their entitlements available via `restoreEntitlements()` — alongside their web checkout purchases.
+This means a user who purchases via the Play Store will have their entitlements available via `ZeroSettle.entitlements` — alongside their web checkout purchases.
 
 ## Configuration
 
-Play Store sync is enabled by default:
+Play purchase sync is enabled by default:
 
 ```kotlin
 import com.zerosettle.sdk.ZeroSettle
+import com.zerosettle.sdk.ZeroSettleConfig
 
-// Play Store sync enabled (default)
-ZeroSettle.configure(context, ZeroSettle.Configuration(
-    publishableKey = "your_key"
+// Play purchase sync enabled (default)
+ZeroSettle.configure(context, ZeroSettleConfig(
+    publishableKey = "zs_pk_live_…"
 ))
 
-// Play Store sync disabled (use with RevenueCat)
-ZeroSettle.configure(context, ZeroSettle.Configuration(
-    publishableKey = "your_key",
-    syncPlayStoreTransactions = false
+// Play purchase sync disabled (use with RevenueCat)
+ZeroSettle.configure(context, ZeroSettleConfig(
+    publishableKey = "zs_pk_live_…",
+    syncPlayPurchases = false
 ))
 ```
 
 <Warning>
-  If you use RevenueCat, set `syncPlayStoreTransactions = false` to avoid conflicts. RevenueCat manages its own Play Billing listener. See [RevenueCat Integration](/iap/revenuecat-integration).
+  If you use RevenueCat, set `syncPlayPurchases = false` to avoid conflicts. RevenueCat manages its own Play Billing listener. See [RevenueCat Integration](/iap/revenuecat-integration).
 </Warning>
 
-## Purchasing via Play Store
+## User Choice Billing
 
-Use `purchaseViaPlayStore()` to trigger a native Play Billing purchase:
+If your app and market are enrolled in Google's **User Choice Billing (UCB)**, the SDK exposes a `StateFlow` you can use to adapt your purchase UI:
 
 ```kotlin
-try {
-    ZeroSettle.purchaseViaPlayStore(
-        activity = this,
-        productId = "premium_monthly",
-        userId = currentUser.id,
-    )
-    // Purchase flow started — result delivered via delegate
-} catch (e: ZeroSettleError.ProductNotFound) {
-    showError("Product not found in Play Store")
-} catch (e: PlayBillingPurchaseError) {
-    when (e) {
-        is PlayBillingPurchaseError.UserCancelled ->
-            { /* User cancelled */ }
-        is PlayBillingPurchaseError.ProductNotFound ->
-            showError("Product ${e.productId} not in Play Console")
-        else ->
-            showError("Purchase error: ${e.message}")
-    }
+ZeroSettle.isUcbEnabled.collect { ucbEnabled ->
+    // ucbEnabled reflects the server-side PlayBillingConfig.is_enabled.
+    // true  → present a single unified "Buy" button; Google's choice screen
+    //         routes the purchase between web checkout and Play Billing.
+    // false → you may show separate web and Play purchase paths.
 }
+```
+
+`isUcbEnabled` is tenant- and market-scoped — it resets on `configure()`, not on `logout()`, and starts `false` until `identify()` completes bootstrap.
+
+## Purchasing via Play Billing
+
+Use `purchaseViaPlayBilling()` to trigger a native Play Billing purchase. Like `purchase()`, it is awaitable and returns a `Result<CheckoutTransaction>`. Requires `syncPlayPurchases = true`.
+
+```kotlin
+val result = ZeroSettle.purchaseViaPlayBilling(
+    activity = this,
+    productId = "premium_monthly",
+)
+result
+    .onSuccess { txn -> /* unlock content */ }
+    .onFailure { e ->
+        when (e) {
+            is ZeroSettleError.PurchaseCancelled -> { /* user cancelled */ }
+            is ZeroSettleError.ProductNotFound -> showError("Product not in catalog")
+            is ZeroSettleError.PlayBillingError ->
+                showError("Play error ${e.responseCode}: ${e.debugMessage}")
+            is ZeroSettleError.PurchasePending -> { /* pending Google review */ }
+            else -> showError("Purchase error: ${e.message}")
+        }
+    }
 ```
 
 ## Hybrid Purchase Flow
@@ -78,57 +92,47 @@ fun ProductView(product: Product) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Primary: Web checkout (lower fees)
         Button(onClick = {
-            scope.launch {
-                try {
-                    ZeroSettle.purchase(activity, product.id, currentUser.id)
-                } catch (e: ZeroSettleError.Cancelled) { /* cancelled */ }
-            }
+            scope.launch { ZeroSettle.purchase(activity, product.id) }
         }) {
-            Text("Buy — ${product.webPrice.formatted}")
+            Text("Buy")
         }
 
-        // Fallback: Play Store (if user prefers Google Play)
-        if (product.playStoreAvailable) {
+        // Fallback: Play Billing (if the product is configured in Play Console)
+        if (product.playProductId != null) {
             OutlinedButton(onClick = {
-                scope.launch {
-                    ZeroSettle.purchaseViaPlayStore(activity, product.id, currentUser.id)
-                }
+                scope.launch { ZeroSettle.purchaseViaPlayBilling(activity, product.id) }
             }) {
-                Text("Buy with Google Play — ${product.playStorePrice?.formatted ?: ""}")
+                Text("Buy with Google Play")
             }
         }
     }
 }
 ```
 
-The `Product` model tells you whether a Play Store product is available:
-- `product.playStoreAvailable` — `true` if the product is configured in Google Play Console
-- `product.playStorePrice` — the Google Play price (may differ from `webPrice`)
+The `Product` model carries Play-specific fields (all nullable, populated when the product is configured in Google Play Console):
+- `product.playProductId` — the Play Console product id
+- `product.playBasePlanId` — the Play base plan id (subscriptions)
+- `product.playStorePrice` — a forward-compat slot for the Play price (the backend does not currently emit it)
 
-## Play Store Sync Delegate
+## Sync Events
 
-When `syncPlayStoreTransactions` is enabled, the SDK automatically syncs Play Store purchases to your ZeroSettle backend. You can listen for these sync events:
+When `syncPlayPurchases` is enabled, the SDK syncs Play purchases automatically. Observe sync outcomes via `ZeroSettle.events` — there is no delegate interface on Android:
 
 ```kotlin
-class PurchaseManager : ZeroSettleDelegate {
-    override fun zeroSettleDidSyncPlayStoreTransaction(
-        productId: String,
-        purchaseToken: String
-    ) {
-        // A Play Store transaction was synced to ZeroSettle
-        println("Synced Play Store transaction for $productId")
-    }
-
-    override fun zeroSettlePlayStoreSyncFailed(error: Throwable) {
-        // Play Store sync failed — purchase still went through Play Store
-        // The sync will be retried automatically
-        println("Play Store sync failed: $error")
+ZeroSettle.events.collect { event ->
+    when (event) {
+        is ZeroSettleEvent.SyncFailed ->
+            // A Play sync failed. terminal == true means the retry schedule
+            // is exhausted. The purchase itself still went through Google.
+            println("Sync failed (terminal=${event.terminal}, attempts=${event.attempts})")
+        is ZeroSettleEvent.EntitlementsRefreshed -> { /* entitlements updated */ }
+        else -> Unit
     }
 }
 ```
 
 <Note>
-  Sync failures don't affect the Play Store purchase itself. The user still gets their purchase through Google. The sync will be retried the next time the app launches.
+  Sync failures don't affect the Play purchase itself. The user still gets their purchase through Google. The sync is retried automatically via the [persistent sync queue](/sdk/android/sync-queue).
 </Note>
 
 ## Entitlement Sources
@@ -136,7 +140,7 @@ class PurchaseManager : ZeroSettleDelegate {
 Entitlements track where each purchase came from:
 
 ```kotlin
-val entitlements = ZeroSettle.restoreEntitlements(userId = currentUser.id)
+val entitlements = ZeroSettle.restoreEntitlements().getOrThrow()
 
 for (entitlement in entitlements) {
     when (entitlement.source) {
@@ -146,19 +150,25 @@ for (entitlement in entitlements) {
             println("${entitlement.productId}: purchased via Google Play")
         EntitlementSource.STORE_KIT ->
             println("${entitlement.productId}: purchased via App Store")
+        EntitlementSource.UNKNOWN ->
+            println("${entitlement.productId}: unknown source")
     }
 }
 ```
 
 Both sources are merged into a single entitlements list. Your app doesn't need to treat them differently.
 
+## Cross-account ownership conflicts
+
+If a Play purchase is already owned by a different ZeroSettle account, the SDK does **not** silently transfer it. It surfaces a `PendingClaim` on `ZeroSettle.pendingClaims`; the host app resolves it explicitly with `ZeroSettle.transferPlayOwnershipToCurrentUser(productId)`.
+
 ## Requirements
 
 | Requirement | Version |
 |---|---|
-| Android | API 26+ (Android 8.0) |
-| Kotlin | 1.9+ |
-| Google Play Billing | Library 7.x (bundled) |
+| Android | API 23+ |
+| Kotlin | 2.1+ |
+| Google Play Billing | Bundled with the SDK |
 | Play Console | Products must be configured |
 
 ## Next Steps

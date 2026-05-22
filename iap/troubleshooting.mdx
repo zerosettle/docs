@@ -65,7 +65,7 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
     Button("Buy") {
         selectedProduct = product  // This must happen
     }
-    .checkoutSheet(item: $selectedProduct, userId: user.id) { result in
+    .checkoutSheet(item: $selectedProduct) { result in
         // ...
     }
     ```
@@ -124,7 +124,7 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
   <Accordion title="User ID mismatch">
     Entitlements are tied to the `userId` passed during checkout. If you use a different user ID when restoring, the entitlements won't match.
 
-    **Fix:** Ensure the same `userId` is used consistently across `bootstrap()`, `checkoutSheet`, and `restoreEntitlements()`.
+    **Fix:** Ensure the same user identifier is used consistently in `identify(_:)` (iOS, Android, and Flutter are all identify-first), `checkoutSheet`, and `restoreEntitlements()`.
   </Accordion>
 
   <Accordion title="Sandbox/Live environment mismatch">
@@ -241,16 +241,9 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
 
 ## Debug Logging
 
-Enable verbose SDK logging to diagnose issues:
+The SDK logs key events to the console by default — no configuration flag is required. Each subsystem uses a distinct prefix so you can filter the log stream:
 
-```swift
-ZeroSettle.shared.configure(.init(
-    publishableKey: "zs_pk_test_...",
-))
-```
-
-The SDK logs key events to the console with these prefixes:
-- `[ZeroSettle]` — General SDK events (configure, bootstrap, product fetch)
+- `[ZeroSettle]` — General SDK events (configure, identify, product fetch)
 - `[ZSCheckout]` — Checkout flow events (PaymentIntent creation, sheet presentation, callbacks)
 - `[ZSMigrateTipView Business Logic]` — Switch & Save visibility decisions
 - `[ZSStoreKit]` — StoreKit sync events (transaction forwarding, verification)

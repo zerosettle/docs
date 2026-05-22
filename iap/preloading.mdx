@@ -22,14 +22,14 @@ Two options in `Configuration` control preloading behavior:
 ```swift
 ZeroSettle.shared.configure(.init(
     publishableKey: "your_live_key",
-    preloadCheckout: true,          // Pre-create PIs for all products on bootstrap
+    preloadCheckout: true,          // Pre-create PIs for all products on identify
     maxPreloadedWebViews: 3         // Cap WebView pool to 3 (nil = no limit)
 ))
 ```
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `preloadCheckout` | `false` | When `true`, `bootstrap()` calls `warmUpAll()` for every product |
+| `preloadCheckout` | `false` | When `true`, `identify(_:)` calls `warmUpAll()` for every product |
 | `maxPreloadedWebViews` | `nil` (no limit) | Caps the WebView pre-rendering pool. Set to `0` to disable WebView pre-rendering entirely (PI caching still works) |
 
 ## How It Works
@@ -49,7 +49,7 @@ When preloading fires:
 
 After PI caching completes:
 
-1. For `.webView` and `.nativePay` checkout types only (skipped for `.browser`)
+1. For `.webView` and `.nativePay` checkout types only (skipped for the `.safari` and `.safariVC` browser-based modes)
 2. Loads the checkout URL into off-screen `WKWebView` instances
 3. All WebViews share a **single `WKProcessPool`**, reducing per-view overhead
 4. Each WebView waits for a JavaScript "ready" signal (8-second timeout fallback)
@@ -106,16 +106,16 @@ The backend deduplicates pending PaymentIntents to avoid creating unnecessary St
 
 There are several ways to trigger preloading, from automatic to fully manual:
 
-### 1. Automatic via `bootstrap()`
+### 1. Automatic via `identify(_:)`
 
-When `preloadCheckout: true`, `bootstrap()` warms up **all** products after fetching the catalog:
+When `preloadCheckout: true`, `identify(_:)` warms up **all** products after fetching the catalog:
 
 ```swift
 ZeroSettle.shared.configure(.init(
     publishableKey: "your_live_key",
     preloadCheckout: true
 ))
-try? await ZeroSettle.shared.bootstrap(userId: currentUser.id)
+try? await ZeroSettle.shared.identify(.user(id: currentUser.id))
 // All products are now preloaded
 ```
 
@@ -127,21 +127,20 @@ Control preloading per-modifier with the `preload:` parameter:
   <Tab title="SwiftUI">
     ```swift
     // Preload all products
-    .checkoutSheet(item: $selectedProduct, userId: currentUser.id, preload: .all) { result in
+    .checkoutSheet(item: $selectedProduct, preload: .all) { result in
         handleResult(result)
     }
 
     // Preload specific products
     .checkoutSheet(
         item: $selectedProduct,
-        userId: currentUser.id,
         preload: .specified(topProducts)
     ) { result in
         handleResult(result)
     }
 
     // Default: preloads only the bound product
-    .checkoutSheet(item: $selectedProduct, userId: currentUser.id) { result in
+    .checkoutSheet(item: $selectedProduct) { result in
         handleResult(result)
     }
     ```
@@ -199,7 +198,6 @@ Returns the checkout URL and transaction ID for manual presentation (e.g., UIKit
 
     .checkoutSheet(
         item: $selectedProduct,
-        userId: currentUser.id,
         checkoutURL: preloaded?.checkoutURL,
         transactionId: preloaded?.transactionId
     ) { result in
@@ -245,7 +243,7 @@ Returns the checkout URL and transaction ID for manual presentation (e.g., UIKit
 
 | Feature | Default | Opt-in |
 |---------|---------|--------|
-| PI preload on bootstrap | **OFF** | `preloadCheckout: true` |
+| PI preload on identify | **OFF** | `preloadCheckout: true` |
 | PI caching (5-min TTL) | **ON** | Built-in, no config needed |
 | Request coalescing | **ON** | Built-in, no config needed |
 | WebView pre-rendering | **ON** (no limit) | Cap with `maxPreloadedWebViews` |
