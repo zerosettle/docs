@@ -19,6 +19,12 @@
     }
   },
   "favicon": "/favicon.png",
+  "integrations": {
+    "posthog": {
+      "apiKey": "phc_orFeZtj7qj9yGWHRKzfw4CpnaZwDZf4jcmrey6ugnbSq",
+      "apiHost": "https://us.i.posthog.com"
+    }
+  },
   "openapi": [
     "api-reference/openapi.json"
   ],
