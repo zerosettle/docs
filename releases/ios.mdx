@@ -4,7 +4,7 @@ description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
 icon: 'apple'
 ---
 
-**Current version:** `1.4.0`
+**Current version:** `1.5.0`
 **Package:** Swift Package Manager / CocoaPods
 **Minimum requirements:** iOS 17.0+, Swift 5.9+, Xcode 15.0+
 
@@ -13,8 +13,26 @@ icon: 'apple'
 </Tip>
 
 <Warning>
-  Release notes for `1.1.6` through `1.2.x`, and for `1.4.0`, are not yet written up below. The entries on this page jump from the 1.1.x series to the 1.3.x series. The 1.3.x notes were reconstructed from the SDK changelog.
+  Release notes for `1.1.6` through `1.2.x`, and for `1.4.0` and `1.4.1`, are not yet written up below. The entries on this page jump from the 1.1.x series to the 1.3.x series. The 1.3.x notes were reconstructed from the SDK changelog.
 </Warning>
+
+---
+
+## June 2026
+
+<Update label="1.5.0" description="2026-06-01">
+### On-screen offer impressions
+
+The SDK now reports an offer impression only when an offer banner is at least 50% visible on screen, deduped to once per session per user. The dashboard reflects what users actually saw rather than every banner that mounted off-screen.
+
+- **`.offerImpression()`** — SwiftUI view modifier you can attach to any custom offer surface to opt into the same on-screen, once-per-session impression reporting that `OfferTipView` uses internally.
+- **`OfferImpressionInteraction`** — UIKit equivalent for non-SwiftUI banners.
+- **`ZeroSettle.currentOffer`** — resolved-offer accessor for the active user; used by the impression modifiers to auto-fill `productId` / `variantId` / `flowType`.
+- **`ZeroSettle.reportOfferViewed(productId:variantId:flowType:)`** — low-level fire-and-forget call for headless integrators that render their own offer UI.
+- `OfferTipView` now reports its own impression through `.offerImpression()`. No migration required.
+
+Removed: the unused internal `ZSOfferManager.reportImpressionIfNeeded(...)` helper.
+</Update>
 
 ---
 
