@@ -4,7 +4,7 @@ description: 'Release notes for the ZeroSettle Flutter plugin'
 icon: 'mobile'
 ---
 
-**Current version:** `1.4.0`
+**Current version:** `1.6.0`
 **Package:** pub.dev (`zerosettle`)
 **Minimum requirements:** Flutter 3.3.0+, Dart 3.10+
 
@@ -12,9 +12,49 @@ icon: 'mobile'
   Add to your `pubspec.yaml`:
   ```yaml
   dependencies:
-    zerosettle: ^1.4.0
+    zerosettle: ^1.6.0
   ```
 </Tip>
+
+---
+
+## June 2026
+
+<Update label="1.6.0" description="2026-06-01">
+### `OfferImpression` widget and `reportOfferViewed`
+
+Flutter wrapper for the offer impression system that shipped in ZeroSettleKit 1.5.0 and ZeroSettle-Android 1.2.0. Wrap a custom offer banner with `OfferImpression(child: ...)` to automatically fire an impression event when it becomes ≥50% visible. Call `ZeroSettle.reportOfferViewed(...)` directly for fully headless integrations. `ZsOfferTipView` (the built-in native widget) tracks itself and should **not** be wrapped.
+
+- **Feature**: `OfferImpression` widget — wraps any custom offer banner and auto-reports a `POST /v1/iap/offer-viewed/` impression event when ≥50% visible, once per appearance
+- **Feature**: `ZeroSettle.reportOfferViewed(productId?, variantId?, flowType?)` — static, fire-and-forget impression event for custom offer UIs; resolves the active offer automatically when parameters are omitted
+</Update>
+
+---
+
+## May 2026
+
+<Update label="1.5.1" description="2026-05-25">
+### Soft-deprecate `setEclAvailabilityOverride`
+
+`setEclAvailabilityOverride` (introduced in 1.5.0) is immediately soft-deprecated in favor of `setSwitchAndSaveTestMode`, which simulates the full Switch & Save flow end-to-end rather than just the offer gate. The method remains callable; it will be removed in 2.0.
+
+- **Improvement**: `ZeroSettle.instance.setEclAvailabilityOverride` deprecated — use `setSwitchAndSaveTestMode` for complete end-to-end Switch & Save testing
+</Update>
+
+<Update label="1.5.0" description="2026-05-22">
+### Android Play transfer simplification and Switch & Save test-mode
+
+Aligned with ZeroSettle-Android 1.1.0. `transferPlayOwnershipToCurrentUser` now takes only `productId` — the Play purchase token is sourced automatically from the matching `PendingClaim`. Two new helpers let developers exercise the Switch & Save flow on non-ECL-enrolled Android devices.
+
+<Warning>
+  **Breaking change (Android only):** `transferPlayOwnershipToCurrentUser(productId: ..., originalTransactionId: ...)` is now `transferPlayOwnershipToCurrentUser(productId: ...)`. Remove the `originalTransactionId:` named argument from call sites.
+</Warning>
+
+- **Breaking**: `transferPlayOwnershipToCurrentUser` drops the `originalTransactionId` named parameter — the Play purchase token is resolved internally (Android only; iOS unaffected)
+- **Feature**: `ZeroSettle.instance.setSwitchAndSaveTestMode(bool)` — fakes Play ECL plumbing so the full Switch & Save flow runs on non-ECL Android devices
+- **Feature**: `ZeroSettle.instance.setEclAvailabilityOverride(bool?)` — override the ECL availability gate (deprecated in 1.5.1; prefer `setSwitchAndSaveTestMode`)
+- **Feature**: `PendingClaim.purchaseToken: String?` — new optional field carrying the Play purchase token for Android ownership transfer
+</Update>
 
 ---
 

@@ -4,7 +4,7 @@ description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
 icon: 'apple'
 ---
 
-**Current version:** `1.4.0`
+**Current version:** `1.5.0`
 **Package:** Swift Package Manager / CocoaPods
 **Minimum requirements:** iOS 17.0+, Swift 5.9+, Xcode 15.0+
 
@@ -13,12 +13,48 @@ icon: 'apple'
 </Tip>
 
 <Warning>
-  Release notes for `1.1.6` through `1.2.x`, and for `1.4.0`, are not yet written up below. The entries on this page jump from the 1.1.x series to the 1.3.x series. The 1.3.x notes were reconstructed from the SDK changelog.
+  Release notes for `1.1.6` through `1.2.x` are not yet written up below. The entries on this page jump from the 1.1.x series to the 1.3.x series. The 1.3.x notes were reconstructed from the SDK changelog.
 </Warning>
 
 ---
 
+## June 2026
+
+<Update label="1.5.0" description="2026-06-01">
+### On-screen offer impressions
+
+Automatic offer impression tracking lands in 1.5.0. The SDK fires a deduplicated `POST /v1/iap/offer-viewed/` event when an offer banner is ≥50% visible on screen — once per (user, session, variant). `OfferTipView` tracks itself automatically; custom offer UIs opt in with the `.offerImpression()` SwiftUI modifier or `OfferImpressionInteraction` (UIKit).
+
+- **Feature**: `.offerImpression(productId:variantId:flowType:)` — SwiftUI view modifier; reports when the decorated view is ≥50% visible, once per session
+- **Feature**: `OfferImpressionInteraction` — UIKit `UIInteraction` equivalent for custom offer UIs
+- **Feature**: `ZeroSettle.reportOfferViewed(productId:variantId:flowType:)` — headless, fire-and-forget method for fully custom offer rendering
+- **Feature**: `ZeroSettle.shared.currentOffer: ResolvedOffer?` — the SDK's most-recently-resolved eligible offer for the active user
+- **Feature**: `ZeroSettle.shared.sessionId: String` — per-launch identifier used for impression deduplication; reset on `logout()`
+</Update>
+
+---
+
 ## May 2026
+
+<Update label="1.4.1" description="2026-05-25">
+### StoreKit reconcile chunking fix
+
+Fixed an edge case where bulk StoreKit reconciliation failed with `DATA_UPLOAD_MAX` when a user had a large transaction history. The reconcile call is now chunked to stay within the backend's upload size limit. No API changes.
+
+- **Fix**: Chunk bulk StoreKit reconcile to avoid `DATA_UPLOAD_MAX` on large transaction histories
+</Update>
+
+<Update label="1.4.0" description="2026-05-21">
+### UserOffer enrichment, checkout identity fallbacks, and bug fixes
+
+`UserOffer.OfferData` gains three additive fields: `maxSubscriptionDays?`, `source` (a new `SourceStorefront` enum: `.storeKit` / `.playStore`), and `rolloutPercent` (informational — the server applies the rollout gate before responding, provided for telemetry). Checkout now falls back to the identified user when no explicit `userId` is passed, and swipe-dismissing the sheet correctly surfaces `.cancelled`.
+
+- **Feature**: `UserOffer.OfferData` adds `maxSubscriptionDays: Int?`, `source: SourceStorefront?`, and `rolloutPercent: Int` (defaults to 100)
+- **Feature**: New `SourceStorefront` enum (`.storeKit` / `.playStore`)
+- **Fix**: `CheckoutSheet.present(...)` and SwiftUI modifiers fall back to the identified user when no `userId` is passed
+- **Fix**: Swipe-dismissing the sheet correctly surfaces `.cancelled` instead of an ambiguous failure
+- **Fix**: Product ID lookup is now case-insensitive across all lookup sites
+</Update>
 
 <Update label="1.3.6" description="2026-05-11">
 ### Checkout sheet shrink fix (UIKit `present`)

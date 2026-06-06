@@ -4,17 +4,60 @@ description: 'Release notes for zerosettle-android — the Kotlin SDK'
 icon: 'android'
 ---
 
-**Current version:** `1.0.0`
+**Current version:** `1.2.0`
 **Package:** Maven Central (`io.zerosettle:zerosettle-android` — headless core; `io.zerosettle:zerosettle-android-ui` — optional Compose components)
 **Minimum requirements:** Android API 23+, Kotlin 2.1+
 
 <Tip>
   Add to your `build.gradle.kts`:
   ```kotlin
-  implementation("io.zerosettle:zerosettle-android:1.0.0")
-  implementation("io.zerosettle:zerosettle-android-ui:1.0.0")  // optional Compose UI
+  implementation("io.zerosettle:zerosettle-android:1.2.0")
+  implementation("io.zerosettle:zerosettle-android-ui:1.2.0")  // optional Compose UI
   ```
 </Tip>
+
+---
+
+## June 2026
+
+<Update label="1.2.0" description="2026-06-01">
+### On-screen offer impressions
+
+Mirrors ZeroSettleKit 1.5.0. `ZeroSettle.reportOfferViewed()` fires a deduplicated `POST /v1/iap/offer-viewed/` event when an offer is viewed, using the new `sessionId` for once-per-session deduplication. `ZeroSettleOfferTip` (`:ui` module) tracks impressions automatically; `Modifier.offerImpression()` adds opt-in tracking to custom Compose offer UIs.
+
+- **Feature**: `ZeroSettle.reportOfferViewed(productId, variantId?, flowType?)` — fire-and-forget offer impression report; safe to call from any thread
+- **Feature**: `ZeroSettle.sessionId: String` — stable per-launch session identifier for impression deduplication
+- **Feature**: `ZeroSettle.currentOffer: StateFlow<ResolvedOffer?>` — reactive current eligible offer, updated by `OfferManager`
+- **Feature**: `Modifier.offerImpression()` (`:ui` module) — Compose modifier that auto-reports when a view is ≥50% visible
+</Update>
+
+---
+
+## May 2026
+
+<Update label="1.1.1" description="2026-05-25">
+### Soft-deprecate `eclAvailabilityOverride`
+
+`ZeroSettle.eclAvailabilityOverride` is deprecated in favor of `switchAndSaveTestMode`, which simulates the entire Switch & Save flow end-to-end — not just the offer gate. Existing code continues to compile with a deprecation warning; the property will be removed in 2.0.
+
+- **Improvement**: `ZeroSettle.eclAvailabilityOverride` deprecated — migrate to `ZeroSettle.switchAndSaveTestMode` for full end-to-end Switch & Save testing on non-ECL devices
+</Update>
+
+<Update label="1.1.0" description="2026-05-22">
+### Functional Play entitlement transfer, Switch & Save test-mode, and API simplification
+
+`transferPlayOwnershipToCurrentUser` now resolves the Play purchase token internally from the matching `PendingClaim` — callers only pass `productId`. The SDK also gains `switchAndSaveTestMode` for end-to-end Switch & Save testing on non-ECL-enrolled dev devices, and it now reconciles owned Play purchases automatically on startup.
+
+<Warning>
+  **Breaking change:** `transferPlayOwnershipToCurrentUser(productId, originalTransactionId)` is now `transferPlayOwnershipToCurrentUser(productId)`. Remove the `originalTransactionId` argument from call sites — the SDK resolves the Play purchase token internally from `PendingClaim.purchaseToken`.
+</Warning>
+
+- **Breaking**: `ZeroSettle.transferPlayOwnershipToCurrentUser` signature simplified — `originalTransactionId` parameter removed; token is sourced from `PendingClaim.purchaseToken`
+- **Feature**: `ZeroSettle.switchAndSaveTestMode: Boolean` — fakes Play ECL availability and attribution token so the full Switch & Save flow runs on non-enrolled dev devices
+- **Feature**: `PendingClaim.purchaseToken: String?` — new optional field carrying the Play purchase token for ownership transfer
+- **Feature**: SDK reconciles owned Play purchases automatically on `configure()`
+- **Feature**: Full end-to-end Play entitlement transfer functional
+</Update>
 
 ---
 
