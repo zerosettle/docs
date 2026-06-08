@@ -1893,6 +1893,34 @@
             "description": "Whether the current user is eligible for a free trial on this product. Null if `user_id` was not provided in the request.",
             "type": "boolean",
             "nullable": true
+          },
+          "trial": {
+            "description": "Trial mode details for this product. Present only for `auto_renewable_subscription` products that have a free trial configured AND whose trial eligibility was resolved (i.e., `user_id` was included in the request and the user is trial-eligible). Absent for non-subscription products, products without a trial, and anonymous requests.",
+            "nullable": true,
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["free", "paid", "auth_hold"],
+                "description": "How the trial is collected. `free`: no charge during the trial period; the payment method is saved and billed at trial end. `paid`: a real upfront charge of `upfront_amount_cents` is collected immediately and kept; the full subscription price is billed at trial end. `auth_hold`: a temporary authorization hold of `hold_amount_cents` is placed (shown as a pending charge); released when the subscription converts or is cancelled."
+              },
+              "duration": {
+                "type": "string",
+                "description": "Duration token for the trial period (e.g., `1_week`, `3_days`, `1_month`). This is a ZeroSettle token, not an ISO 8601 duration. The app should map this to its own display copy."
+              },
+              "upfront_amount_cents": {
+                "type": "integer",
+                "description": "For `paid` mode: the real charge collected at checkout, in cents. Zero for `free` and `auth_hold` modes."
+              },
+              "hold_amount_cents": {
+                "type": "integer",
+                "description": "For `auth_hold` mode: the authorization hold amount placed at checkout, in cents. Zero for `free` and `paid` modes."
+              },
+              "validates_card": {
+                "type": "boolean",
+                "description": "`true` for `paid` and `auth_hold` modes (a real or pending charge verifies the card); `false` for `free` mode."
+              }
+            }
           }
         }
       },
@@ -2067,6 +2095,11 @@
             "type": "integer",
             "nullable": true,
             "description": "The charge amount in cents that will be billed when the trial ends. Only present when a trial is active."
+          },
+          "intent_type": {
+            "type": "string",
+            "enum": ["setup", "payment"],
+            "description": "Discriminator for which Stripe confirm method the client must call. `setup`: confirms a SetupIntent (free trial — card saved, no immediate charge); `payment`: confirms a PaymentIntent (paid/auth_hold trial upfront charge, or any normal charge). Also returned by `POST /iap/payment-intents/{transaction_id}/finalize/` with the same semantics."
           }
         }
       },

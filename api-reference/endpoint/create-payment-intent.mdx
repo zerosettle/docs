@@ -2,3 +2,37 @@
 title: 'Create Payment Intent'
 openapi: 'POST /iap/payment-intents'
 ---
+
+## Trial mode discriminators
+
+When a trial is active, the response includes `intent_type` to tell the SDK which Stripe confirm method to call:
+
+| `intent_type` | Stripe object | When |
+|---|---|---|
+| `setup` | `SetupIntent` | Free trial — card saved, no immediate charge. |
+| `payment` | `PaymentIntent` | Paid trial (upfront charge), auth-hold trial, or any non-trial checkout. |
+
+Call `stripe.confirmSetup()` when `intent_type == "setup"` and `stripe.confirmPayment()` when `intent_type == "payment"`. The `client_secret` in the response belongs to the corresponding intent type.
+
+---
+
+## Related endpoints
+
+The following two endpoints are part of the trial-mode checkout flow but are not listed separately in this reference. Their response fields are documented here.
+
+### GET /v1/iap/checkout-config/\{transaction\_id\}/
+
+Fetches the Stripe intent config for a pending transaction (called by the SDK to render the payment sheet). As of the trial-mode release this response includes two additional fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `intent_type` | `"setup" \| "payment"` | Same discriminator as the create response — which Stripe confirm method to use. |
+| `charge_amount` | integer | The amount in cents the intent will charge or hold. For `paid` mode this is `upfront_amount_cents`; for `auth_hold` mode this is `hold_amount_cents`; for all other cases this is the normal subscription price. |
+
+### POST /v1/iap/payment-intents/\{transaction\_id\}/finalize/
+
+Finalizes a deferred payment intent (called after the SDK confirms any out-of-band payment). This response also includes `intent_type` with the same semantics:
+
+| Field | Type | Description |
+|---|---|---|
+| `intent_type` | `"setup" \| "payment"` | Which Stripe intent type was finalized. Use this to call the correct confirm method if re-confirmation is required. |

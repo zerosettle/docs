@@ -15,6 +15,55 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ---
 
+## June 2026
+
+<Update label="API" description="2026-06-08">
+### Trial mode: `trial` facts object + `intent_type`/`charge_amount` discriminators
+
+Three additive, non-breaking changes to the IAP API surface the payment mechanics for free, paid, and authorization-hold trial modes. SDKs that do not yet read these fields continue to work unchanged (unknown keys are ignored).
+
+**`GET /v1/iap/products/` — `trial` object on eligible subscription products**
+
+When `user_id` is included in the request and the user is eligible for a trial on an `auto_renewable_subscription`, that product now carries a `trial` object:
+
+```json
+"trial": {
+  "mode": "free | paid | auth_hold",
+  "duration": "1_week",
+  "upfront_amount_cents": 0,
+  "hold_amount_cents": 0,
+  "validates_card": false
+}
+```
+
+- `free` — card saved, no immediate charge, billed at trial end.
+- `paid` — `upfront_amount_cents` charged immediately and kept; full price billed at trial end.
+- `auth_hold` — `hold_amount_cents` placed as a temporary pending authorization; released on convert or cancel.
+
+`validates_card` is `true` for `paid` and `auth_hold`. The object is absent for non-subscription products, products without a trial, and anonymous requests.
+
+**These are facts for the app to render its own copy — ZeroSettle ships no trial copy strings.**
+
+**`GET /v1/iap/checkout-config/{transaction_id}/` — `intent_type` + `charge_amount`**
+
+- `intent_type` (`"setup" | "payment"`) — which Stripe confirm method the SDK must call. `setup` for free-trial SetupIntents; `payment` for paid/auth-hold upfront charges and all normal checkouts.
+- `charge_amount` (integer cents) — the amount the intent will charge or hold (`upfront_amount_cents` for paid, `hold_amount_cents` for auth-hold, normal price otherwise).
+
+**`POST /v1/iap/payment-intents/{transaction_id}/finalize/` — `intent_type`**
+
+Same `"setup" | "payment"` discriminator returned on finalize so the SDK can call the correct confirm method.
+</Update>
+
+<Update label="API" description="2026-06-04">
+### Idle checkout sessions auto-recover instead of failing
+
+A web checkout session that sat idle past its 30-minute validity window used to fail with `checkout_config_expired` when the buyer finally tapped Pay, forcing a full checkout restart. The backend now transparently revalidates and refreshes an expired session at payment time and proceeds — no restart, no SDK changes.
+
+- The buyer is always charged the **exact price the checkout sheet displayed** (the amount is never silently re-resolved).
+- Switch & Save migration and upgrade sessions are revalidated against the customer's current subscription before recovering. If the underlying subscription has since ended, the session still returns `checkout_config_expired` so the SDK re-evaluates eligibility — preventing a mis-aligned trial.
+- No request or response schema changes; existing SDK integrations benefit automatically.
+</Update>
+
 ## April 2026
 
 <Update label="API" description="2026-04-27">

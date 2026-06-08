@@ -2,3 +2,29 @@
 title: 'Get Products'
 openapi: 'GET /iap/products'
 ---
+
+## Trial mode object
+
+When `user_id` is included in the request and the user is eligible for a free trial on an `auto_renewable_subscription` product, that product's response object includes a `trial` field containing the following:
+
+| Field | Type | Description |
+|---|---|---|
+| `mode` | `"free" \| "paid" \| "auth_hold"` | How the trial is collected (see below). |
+| `duration` | string | Duration token (e.g. `1_week`, `3_days`, `1_month`). Maps to the trial length; the app controls how this is displayed. |
+| `upfront_amount_cents` | integer | Cents charged immediately at checkout. Non-zero only for `paid` mode. |
+| `hold_amount_cents` | integer | Cents placed as an authorization hold. Non-zero only for `auth_hold` mode. |
+| `validates_card` | boolean | `true` for `paid` and `auth_hold` (a real or pending charge verifies the payment method); `false` for `free`. |
+
+**`trial.mode` semantics:**
+
+- `free` — No charge during the trial. The payment method is saved at checkout and billed at trial end for the full subscription price.
+- `paid` — A real charge of `upfront_amount_cents` is collected immediately and kept. The full subscription price is then billed at trial end.
+- `auth_hold` — A temporary authorization hold of `hold_amount_cents` is placed (shown as a pending charge in the customer's bank). The hold is released when the subscription converts or is cancelled. The trial itself costs nothing.
+
+The `trial` object is **absent** (not null) for:
+- Non-subscription products
+- Subscription products with no trial configured
+- Requests without a `user_id`
+- Users who are not trial-eligible
+
+**App responsibility:** These fields are facts about the payment mechanics. The app owns all trial copy and UI — ZeroSettle does not supply copy strings.
