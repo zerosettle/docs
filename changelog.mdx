@@ -125,7 +125,7 @@ Existing endpoints remain fully supported; old SDKs continue to work unchanged.
 
 Two new optional fields are now accepted by the `POST /iap/payment-intents/` endpoint. Existing clients that omit them continue to work without changes.
 
-- **`external_purchase_token`** *(string, optional)* — The `externalPurchaseToken` received from StoreKit at the disclosure-sheet confirmation step. When provided, ZeroSettle stores the token and uses it for automatic external-purchase reporting in eligible jurisdictions (EU, UK, JP MSCA). No action required for apps outside those regions.
+- **`external_purchase_token`** *(string, optional)* — The `externalPurchaseToken` received from StoreKit at the disclosure-sheet confirmation step. When provided, ZeroSettle stores the token and uses it for automatic external-purchase reporting in eligible jurisdictions (EU/EEA under the DMA alternative terms, EEA music streaming, and Japan MSCA on iOS 26.4+). No action required for apps outside those regions.
 - **`ios_version`** *(string, optional)* — iOS version of the checkout client (e.g., `"26.4.1"`). Used for JP MSCA regime gating, which requires iOS 26+. Provide this field when targeting Japanese users on iOS 26+.
 
 Both fields are persisted on the resulting `Transaction` record and surfaced in the Apple Reporting dashboard.
