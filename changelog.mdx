@@ -17,6 +17,16 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## June 2026
 
+<Update label="SDK" description="2026-06-10">
+### Automatic Apple external-purchase token minting
+
+ZeroSettleKit now mints the Apple external-purchase token automatically at checkout initiation — no StoreKit code required from the app. Minting is region-gated (EU/EEA under the DMA alternative terms, EEA music streaming, and Japan MSCA on iOS 26.4+) and degrades gracefully: if a token cannot be minted, checkout proceeds and the transaction is recorded as token-less in the coverage dashboard.
+
+- **Auto-minting** — the SDK resolves the eligible regime from the device's App Store storefront and mints the appropriate token type internally. The existing manual `external_purchase_token` parameter remains as an advanced override.
+- **True storefront reporting** — checkout initiation now sends the device's actual App Store storefront, so jurisdiction detection for compliance reporting keys off the user's store region instead of their card billing country.
+- **New setup guide** — see [External Purchase Reporting](/iap/external-purchase-reporting) for Apple program enrollment, entitlements, `SKExternalPurchase*` keys, dashboard configuration, and Google Play alternative billing setup.
+</Update>
+
 <Update label="API" description="2026-06-08">
 ### Trial mode: `trial` facts object + `intent_type`/`charge_amount` discriminators
 

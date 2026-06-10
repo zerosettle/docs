@@ -1,0 +1,97 @@
+---
+title: 'External Purchase Reporting'
+description: 'Set up automatic Apple and Google external-purchase compliance reporting'
+icon: 'file-invoice'
+---
+
+Apple and Google both require apps that sell digital goods outside the store's own billing system to report those sales back to the store. ZeroSettle automates this reporting — but each store requires one-time enrollment and (for Apple) app-level configuration before reports are accepted.
+
+## Who needs this
+
+| Store | Regime | Reporting required? |
+|---|---|---|
+| Apple | EU/EEA under the DMA alternative terms | Yes |
+| Apple | EEA music streaming entitlement | Yes |
+| Apple | Japan (MSCA), iOS 26.4+ | Yes |
+| Apple | United States | No — no token, no report, no commission today |
+| Google Play | Alternative billing programs (UCB, EEA alternative-billing-only, external offers) | Yes |
+
+<Note>
+  **Commissions still apply in the EU and Japan.** External purchase does not eliminate Apple's commission in these regions — it reduces it. Reporting is how Apple invoices that reduced commission. Budget for it.
+</Note>
+
+<Warning>
+  **South Korea and the Netherlands are not yet supported** by ZeroSettle's automatic reporting. The US currently requires no reporting, but that position is the subject of active litigation and may change. See [Limitations](#limitations) below.
+</Warning>
+
+## Apple setup
+
+### 1. Enroll in Apple's external purchase program
+
+Before anything else, your Apple developer account must be enrolled in the applicable program — the StoreKit External Purchase Link Entitlement (EU alternative terms addendum) for EU/EEA, the music streaming services entitlement for EEA music apps, or the MSCA-driven program for Japan. Enrollment happens through your Apple Developer account; Apple grants the entitlements after approval.
+
+### 2. Add the entitlements to your app target
+
+Add the external purchase link entitlement to your app's entitlements file:
+
+- `com.apple.developer.storekit.external-purchase-link`
+- For custom purchase links (and Japan): the `custom-purchase-link.allowed-regions` addition, listing the regions where your app uses a custom link
+
+### 3. Add the `SKExternalPurchase*` Info.plist keys
+
+Declare your external purchase configuration in `Info.plist` using the matching `SKExternalPurchase*` keys (the regions where your app offers external purchases, and the link URL configuration for link-out / custom-link flows). The regions you declare must match the regions in your entitlement.
+
+### 4. Check your minimum iOS versions
+
+| Capability | Minimum iOS |
+|---|---|
+| External purchase link-out | 17.4 |
+| Custom link token minting (`token(for:)`) | 18.1 |
+| Japan token types | 26.4 |
+
+Users below these floors cannot produce an external-purchase token; ZeroSettle records those transactions as token-less and surfaces them in the coverage dashboard.
+
+### 5. Upload your In-App Purchase key in the ZeroSettle dashboard
+
+ZeroSettle calls Apple's External Purchase Server API on your behalf using your **In-App Purchase key** (the same key type used for the App Store Server API). Generate it in App Store Connect under **Users and Access → Integrations → In-App Purchase**, then upload it in the ZeroSettle dashboard.
+
+### 6. Enroll your programs in the dashboard
+
+Go to **/compliance → Apple Reporting** in the ZeroSettle dashboard and enable the programs your app is enrolled in (EU alternative terms, EEA music streaming, Japan). ZeroSettle only reports transactions for regimes you have enabled.
+
+### 7. What the SDK does automatically
+
+Starting with the next ZeroSettleKit release, the SDK handles the device side with **zero StoreKit code from you**:
+
+- Mints the Apple external-purchase token at checkout initiation (region-gated — only on eligible storefronts)
+- Sends the true App Store storefront with every checkout, so jurisdiction detection uses the user's actual store region rather than their card billing country
+
+Token minting never blocks checkout — if a token cannot be minted (unsupported iOS version, missing entitlement, user declined), the purchase proceeds and the transaction is flagged token-less in the coverage dashboard.
+
+## Google Play setup
+
+### 1. Enroll in alternative billing in Play Console
+
+In **Play Console → Settings → Alternative billing**, enroll in the program that applies to you: the user-choice billing (UCB) pilot, the DMA EEA alternative-billing-only option, or external offers.
+
+### 2. Enable the program toggles in the dashboard
+
+Go to **/compliance → Google Play Reporting** in the ZeroSettle dashboard and enable the per-region program toggles matching your Play Console enrollment.
+
+### 3. Reporting is automatic
+
+Once enabled, ZeroSettle reports external transactions to Google's `externaltransactions` API automatically, within Google's 24-hour window — including subscription **renewals** and **refunds**. No app code is required beyond the standard SDK integration.
+
+## Limitations
+
+Be aware of what ZeroSettle does **not** cover today:
+
+| Region | Status |
+|---|---|
+| South Korea | Not supported. Korea uses a different Apple entitlement and is not in ZeroSettle's automatic reporting yet — you are responsible for manual reporting there. |
+| Netherlands | Not supported. Apple's Netherlands (dating apps) regime reports on a **weekly** fiscal cadence that ZeroSettle does not yet implement — manual reporting required. |
+| United States | No token, no report, and no commission are currently required for US external purchases. This is mid-litigation and may change; ZeroSettle does not mint tokens or send reports for US transactions today. |
+
+<Note>
+  **Legal / Compliance Note** — ZeroSettle is not a law firm and does not provide legal advice. Requirements in this area change frequently; review your specific implementation with your own legal counsel. For the authoritative policy summary, see [zerosettle.io/transparency](https://zerosettle.io/transparency).
+</Note>

@@ -114,6 +114,7 @@
                 ]
               },
               "iap/compliance",
+              "iap/external-purchase-reporting",
               {
                 "group": "Testing & Launch",
                 "icon": "flask-vial",
