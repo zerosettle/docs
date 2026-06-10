@@ -121,7 +121,8 @@
                   "iap/testing",
                   "iap/troubleshooting",
                   "iap/go-live",
-                  "iap/migration-guide"
+                  "iap/migration-guide",
+                  "iap/sdk-versions"
                 ]
               },
               "iap/best-practices",

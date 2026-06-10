@@ -1,0 +1,20 @@
+---
+title: 'SDK minimum versions'
+description: 'Minimum ZeroSettle SDK versions for offer view tracking and other features.'
+---
+
+## Offer view tracking
+
+On-screen offer impression tracking — the **Viewed/Shown** stage in **Campaign → Analyze** —
+requires the minimum SDK versions below. Older SDKs still convert and report purchases
+correctly, but they cannot report on-screen views, so the Viewed stage under-reports and
+the view-based conversion rate is unavailable.
+
+| Platform | Minimum version | Released |
+| --- | --- | --- |
+| iOS (ZeroSettleKit) | 1.5.0 | 2026-06-01 |
+| Android | 1.2.0 | 2026-06-01 |
+| Flutter | 1.6.0 | 2026-06-01 |
+
+Update your SDK to at least the version above to populate the Viewed stage and the
+view-based conversion rate in the migration and upgrade analytics.
