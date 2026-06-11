@@ -4,7 +4,7 @@ description: 'Release notes for the ZeroSettle Flutter plugin'
 icon: 'mobile'
 ---
 
-**Current version:** `1.6.0`
+**Current version:** `1.7.0`
 **Package:** pub.dev (`zerosettle`)
 **Minimum requirements:** Flutter 3.3.0+, Dart 3.10+
 
@@ -19,6 +19,17 @@ icon: 'mobile'
 ---
 
 ## June 2026
+
+<Update label="1.7.0" description="2026-06-10">
+### Trial billing facts and Apple external-purchase compliance (iOS)
+
+1.7.0 raises the native SDK floors to ZeroSettleKit `~> 1.5.2` (iOS) and `zerosettle-android 1.2.1` (Android) and surfaces their new `TrialFacts` through the Dart layer. `Product.trial` carries the trial mode, amounts, and duration your paywall needs to render accurate copy. iOS apps in the EU, EEA, or Japan inherit automatic Apple external-purchase token minting from the ZeroSettleKit 1.5.2 floor bump with no Dart-side changes required; you should follow the [native setup guide](https://docs.zerosettle.io/iap/external-purchase) for Apple program enrollment and the required entitlements and `Info.plist` keys.
+
+- **Feature**: `TrialFacts` Dart class — `mode: ZSTrialMode` (`.free` / `.paid` / `.authHold`), `duration: String?`, `upfrontAmountCents: int`, `holdAmountCents: int`, `validatesCard: bool`; `fromMap()` returns `null` on unknown `mode` values (forward-compatible)
+- **Feature**: `ZSTrialMode` enum — Dart mirror of the native trial-mode type, with `fromRawValueOrNull()` factory
+- **Feature**: `Product.trial: TrialFacts?` — bridges native `ZSProduct.trial` (iOS) and `Product.trial` (Android) via both platform bridges; `null` when no trial is configured or the user ID was omitted from product fetch
+- **Improvement**: iOS floor raised to ZeroSettleKit `~> 1.5.2` — inherits automatic Apple external-purchase token minting for EU/EEA/Japan; Android floor raised to `zerosettle-android 1.2.1`
+</Update>
 
 <Update label="1.6.0" description="2026-06-01">
 ### `OfferImpression` widget and `reportOfferViewed`

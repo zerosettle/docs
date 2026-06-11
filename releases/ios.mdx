@@ -4,7 +4,7 @@ description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
 icon: 'apple'
 ---
 
-**Current version:** `1.5.0`
+**Current version:** `1.5.2`
 **Package:** Swift Package Manager / CocoaPods
 **Minimum requirements:** iOS 17.0+, Swift 5.9+, Xcode 15.0+
 
@@ -19,6 +19,25 @@ icon: 'apple'
 ---
 
 ## June 2026
+
+<Update label="1.5.2" description="2026-06-10">
+### Apple external-purchase compliance (EU/EEA/Japan)
+
+ZeroSettleKit 1.5.2 adds automatic Apple external-purchase token minting for apps in the EU, EEA, and Japan. When a user-initiated checkout begins, the SDK silently mints a compliance token — via `ExternalPurchaseCustomLink` on iOS 18.1+ or the notice-sheet fallback on iOS 17.4+ — and forwards it to the ZeroSettle backend with every checkout-initiation request. The backend records it for compliance reporting. The user's App Store storefront country code is also sent so the backend can apply per-region pricing and program rules. No changes are required in your app code; EU/EEA/Japan apps should follow the [external-purchase setup guide](https://docs.zerosettle.io/iap/external-purchase) for Apple program enrollment and the required entitlements and `Info.plist` keys.
+
+- **Feature**: `ExternalPurchaseTokenProvider` — region-gated silent token minting: EU/EEA use `ExternalPurchaseCustomLink` ACQUISITION→SERVICES on iOS 18.1+ with a 4-second deadline, falling back to `ExternalPurchase.presentNoticeSheet()` on iOS 17.4+; Japan uses `LINK_OUT` on iOS 26.4+; all other storefronts (including US) mint nothing
+- **Feature**: App Store storefront country code sent with every checkout-initiation request — enables server-side per-region compliance and pricing logic
+- **Fix**: Disclosure-sheet (notice-sheet) path is gated to user-initiated checkouts only — preloads and warm-ups never surface Apple's sheet unprompted; the silent custom-link mint is raced against a 4-second deadline so a hung StoreKit call cannot stall checkout
+</Update>
+
+<Update label="1.5.1" description="2026-06-09">
+### Trial billing facts on `ZSProduct`
+
+`ZSProduct` gains a new optional `trial: ZSTrialFacts?` property that exposes how a product's trial is billed — free, paid (an upfront charge), or auth-hold (a card-validation hold that is released at trial end) — along with the amounts involved. Use these facts to render accurate paywall copy ("Start your free trial", "Pay $1 now, then $9.99/month", etc.) without hard-coding trial details in your app. `trial` is populated when a user ID was supplied to `fetchProducts()` and the backend has a trial configured for that product; it is `nil` otherwise and is additive alongside the existing `freeTrialDuration` / `isTrialEligible` fields.
+
+- **Feature**: `ZSTrialFacts` — new public `Sendable`/`Equatable`/`Codable` struct with `mode` (`ZSTrialFacts.Mode`: `.free` / `.paid` / `.authHold`), `duration: String?`, `upfrontAmountCents: Int`, `holdAmountCents: Int`, and `validatesCard: Bool`
+- **Feature**: `ZSProduct.trial: ZSTrialFacts?` — optional, additive alongside existing `freeTrialDuration` / `isTrialEligible`; decoded leniently (unknown future `mode` values result in `nil` rather than a decode error)
+</Update>
 
 <Update label="1.5.0" description="2026-06-01">
 ### On-screen offer impressions

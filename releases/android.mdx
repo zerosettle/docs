@@ -4,7 +4,7 @@ description: 'Release notes for zerosettle-android — the Kotlin SDK'
 icon: 'android'
 ---
 
-**Current version:** `1.2.0`
+**Current version:** `1.2.1`
 **Package:** Maven Central (`io.zerosettle:zerosettle-android` — headless core; `io.zerosettle:zerosettle-android-ui` — optional Compose components)
 **Minimum requirements:** Android API 23+, Kotlin 2.1+
 
@@ -19,6 +19,16 @@ icon: 'android'
 ---
 
 ## June 2026
+
+<Update label="1.2.1" description="2026-06-09">
+### Trial billing facts on `Product`
+
+`Product` gains a new optional `trial: TrialFacts?` property mirroring `ZeroSettleKit 1.5.1`. When a user ID was supplied to `fetchProducts()` and the product has a server-configured trial, `trial` carries the billing mode, amounts, and duration your paywall needs to render accurate copy. On unknown `mode` values the field is `null` — a custom `NullableTrialFactsSerializer` absorbs unrecognized modes so the parent `Product` always decodes cleanly, keeping the SDK forward-compatible with new backend trial types.
+
+- **Feature**: `TrialMode` enum — `FREE` / `PAID` / `AUTH_HOLD` with a `wire` string property and a `fromWireOrNull()` factory that returns `null` on unrecognized values
+- **Feature**: `TrialFacts` — new public `@Serializable` data class with `mode: TrialMode`, `duration: String?`, `upfrontAmountCents: Int`, `holdAmountCents: Int`, and `validatesCard: Boolean`; wire keys follow `snake_case` via `@SerialName`
+- **Feature**: `Product.trial: TrialFacts?` — decoded via `NullableTrialFactsSerializer`; `null` when absent or when the `mode` is unrecognized; additive alongside the existing `freeTrialDuration` / `isTrialEligible` fields
+</Update>
 
 <Update label="1.2.0" description="2026-06-01">
 ### On-screen offer impressions
