@@ -93,12 +93,34 @@ let result = try await product.purchase(options: options)
 
 `Transaction.updates` does not redeliver a transaction that StoreKit already handed back from `Product.purchase()`. Renewals, refunds, revocations, and purchases made on another device all come through the listener — but the purchase your own code just completed does not.
 
-It is not lost. The next `identify(_:)` syncs `Transaction.currentEntitlements` and picks it up, so a purchase made today appears on the dashboard at the latest on the next launch. If you want it sooner, call `identify(_:)` again after the purchase completes — off the critical path, never between the purchase and unlocking access.
+Report it yourself with `recordStoreKitPurchase(_:)`:
 
 ```swift
-// After finishing, unlocking, and dismissing — not before.
-Task { try? await ZeroSettle.shared.identify(.user(id: currentUser.id)) }
+let result = try await product.purchase(options: options)
+
+if case .success(.verified(let transaction)) = result {
+    await transaction.finish()
+    unlock()
+    dismiss()
+
+    // After finishing, unlocking, and dismissing — never between them.
+    Task { await ZeroSettle.shared.recordStoreKitPurchase(result) }
+}
 ```
+
+It never throws, returns `false` rather than complaining when there is nothing to report, and does **not** finish the transaction — your app already owns that. A failed report goes onto the same persistent retry queue that backs the listener.
+
+Overloads take a `Product.PurchaseResult`, a `VerificationResult<Transaction>`, or a `productId:` when you no longer hold either.
+
+<Warning>
+  Call it off the purchase's critical path. It performs a network round trip, and nothing a customer sees should wait on analytics.
+</Warning>
+
+If you skip it entirely, nothing is lost — the next `identify(_:)` syncs `Transaction.currentEntitlements` and picks the purchase up, at the latest on the following launch.
+
+<Note>
+  Requires ZeroSettleKit 1.6.0 or later. On earlier versions, call `identify(_:)` again after the purchase instead.
+</Note>
 
 ## What lands in the dashboard
 

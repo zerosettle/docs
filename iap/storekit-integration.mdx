@@ -155,6 +155,16 @@ class PurchaseManager: ZeroSettleDelegate {
   - **No user impact**: The purchase succeeds immediately through Apple; only the backend sync (entitlement creation, revenue tracking) is retried in the background
 </Note>
 
+## Reporting a purchase your app made
+
+`Transaction.updates` does not redeliver a transaction StoreKit already returned from `Product.purchase()`. If your app runs its own StoreKit purchase rather than calling `purchaseViaStoreKit(productId:)`, report it explicitly:
+
+```swift
+Task { await ZeroSettle.shared.recordStoreKitPurchase(result) }
+```
+
+Non-throwing, does not finish the transaction, and retries through the same persistent queue as the listener. Requires ZeroSettleKit 1.6.0+. See [Analytics-Only Integration](/iap/analytics-only) for the full pattern.
+
 ## Entitlement Sources
 
 Entitlements track where each purchase came from:
