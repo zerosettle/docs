@@ -18,15 +18,31 @@ https://github.com/zerosettle/ZeroSettleKit
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/zerosettle/ZeroSettleKit", from: "1.4.0")
+    .package(url: "https://github.com/zerosettle/ZeroSettleKit", from: "1.5.2")
 ]
 ```
 
 Then add `ZeroSettleKit` as a dependency of your target.
 
 <Note>
-  Requires **iOS 17.0+**, **Swift 5.9+**, and **Xcode 15.0+**. No third-party dependencies.
+  Requires **iOS 17.0+**, **Swift 6.1+**, and **Xcode 16.3+** — `Package.swift` is `swift-tools-version: 6.1` and uses package traits.
 </Note>
+
+### Dependencies and the `NativePay` trait
+
+ZeroSettleKit declares one package dependency: [stripe-ios](https://github.com/stripe/stripe-ios) (`23.0.0..<25.0.0`). SwiftPM resolves it for every adopter, but it is only **linked** when you enable the `NativePay` trait, which turns on native Apple Pay checkout via `STPApplePayContext`. Leave the trait off and nothing from Stripe is compiled into your binary.
+
+```swift
+.package(
+    url: "https://github.com/zerosettle/ZeroSettleKit",
+    from: "1.5.2",
+    traits: ["NativePay"]   // omit for web-only checkout
+)
+```
+
+In an Xcode project (rather than a `Package.swift`), toggle the trait under the package dependency's settings — Xcode 16.3+ exposes package traits there.
+
+With `NativePay` on, the SDK also needs an Apple merchant identifier: pass `appleMerchantId` in your `Configuration`, or set `apple_merchant_id` on the dashboard. Without either, native Apple Pay falls back to webview checkout and the SDK logs why.
 
 ### Verify Installation
 
@@ -38,7 +54,7 @@ print(ZeroSettle.shared)
 ```
 
 <Tip>
-  Make sure "Embed & Sign" is selected for ZeroSettleKit in your target's **Frameworks, Libraries, and Embedded Content** settings.
+  Installing the prebuilt `ZeroSettleKit.xcframework` instead of the Swift package? Select **Embed & Sign** for it under your target's **Frameworks, Libraries, and Embedded Content**. Swift Package Manager handles embedding for you — no action needed.
 </Tip>
 
 ---
@@ -157,7 +173,7 @@ ZeroSettleKit.configure({ publishableKey: 'zs_pk_live_...' });
 ```
 
 <Note>
-  The React Native package wraps **ZeroSettleKit 1.3.x** and is currently iOS-only — it is one minor version behind the native iOS, Flutter, and Android SDKs (1.4.0). The `bootstrap(userId:)` identity model documented for React Native reflects what this version supports.
+  The React Native package wraps **ZeroSettleKit 1.3.x** and is currently iOS-only — it trails the native iOS (1.5.2), Flutter (1.7.0), and Android (1.2.1) SDKs. The `bootstrap(userId:)` identity model documented for React Native reflects what this version supports; every other platform is identify-first.
 </Note>
 
 **Resources:**

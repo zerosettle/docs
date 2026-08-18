@@ -46,7 +46,7 @@ final cached = await ZeroSettle.instance.getEntitlements();
 
 </CodeGroup>
 
-It's safe to call `restoreEntitlements()` frequently throughout your app. The SDK caches entitlements locally and the network request is lightweight.
+`restoreEntitlements()` performs a network request every time it is called — there is no staleness window. Call it at launch and at meaningful moments (returning from background, opening a paywall), and read the cached `ZeroSettle.shared.entitlements` everywhere else.
 
 ## Checking If A User Is Subscribed
 
@@ -186,7 +186,7 @@ This fetches entitlements from both ZeroSettle's web checkout system and StoreKi
 
 ### Anonymous Users
 
-If your app has no auth system, identify with `Identity.anonymous()` (`bootstrap('')` on React Native 1.3.x). The SDK persists a stable per-install UUID, so `restoreEntitlements()` works normally — entitlements are tied to that UUID.
+If your app has no auth system, identify with `Identity.anonymous` (`bootstrap('')` on React Native 1.3.x). The SDK persists a stable per-install UUID, so `restoreEntitlements()` works normally — entitlements are tied to that UUID.
 
 This means:
 
@@ -200,13 +200,17 @@ This means:
 
 ## Cache
 
-The SDK caches the user's subscription information **in memory** to reduce your app's reliance on the network. The cache is not persisted to disk — it is cleared when the app process terminates.
+The SDK holds the user's entitlements **in memory** on `ZeroSettle.shared.entitlements`. That cache is not persisted to disk — it is gone when the app process terminates.
 
-Users who unlock entitlements will be able to access them even without an internet connection for the duration of the session. The SDK will update the cache if it's older than 5 minutes when you call `restoreEntitlements()`, make a purchase, or restore purchases. It's a good idea to call `restoreEntitlements()` on app launch and any time a user accesses premium content.
+Reads of `entitlements` are free and never touch the network, so a user who unlocked something keeps access offline for the rest of the session. `restoreEntitlements()` is the opposite: it always calls the backend, with no TTL or staleness check. Don't put it behind a paywall render or a feature gate.
 
 <Note>
-  Because the cache is in-memory only, you should call `restoreEntitlements()` on every app launch to rehydrate the user's entitlements from the server.
+  Because the cache is in-memory only, call `restoreEntitlements()` once on every app launch (or let `identify(_:)` do it) to rehydrate from the server, then read `ZeroSettle.shared.entitlements` for the rest of the session.
 </Note>
+
+<Warning>
+  Entitlements are the SDK's view of what the backend and the local store know. They are not a substitute for a server-side check on anything you would mind a determined user unlocking — see [Best Practices → Security](/iap/best-practices#security).
+</Warning>
 
 ## Listening For Entitlement Updates
 
@@ -264,7 +268,8 @@ You can also observe state reactively in your UI framework:
 
 ```swift SwiftUI
 struct ContentView: View {
-    @ObservedObject var iap = ZeroSettle.shared
+    // ZeroSettle is @Observable — reading it in `body` is tracked automatically.
+    private var iap: ZeroSettle { .shared }
 
     var body: some View {
         if iap.entitlements.contains(where: { $0.isActive }) {

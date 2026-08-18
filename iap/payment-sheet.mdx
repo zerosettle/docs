@@ -16,12 +16,12 @@ This is the recommended way to accept payments on iOS with ZeroSettle.
 
 <Tabs>
   <Tab title="SwiftUI">
-    Use the `.checkoutSheet()` view modifier on any view. Pass an optional `Product?` binding — the sheet presents when the binding is non-nil and resets to `nil` on dismiss. This mirrors SwiftUI's `.sheet(item:)` pattern, and works for both single-product paywalls and multi-product stores.
+    Use the `.checkoutSheet()` view modifier on any view. Pass an optional `ZSProduct?` binding — the sheet presents when the binding is non-nil and resets to `nil` on dismiss. This mirrors SwiftUI's `.sheet(item:)` pattern, and works for both single-product paywalls and multi-product stores.
 
     ```swift
     struct PaywallView: View {
-        @State private var selectedProduct: Product?
-        let product: Product
+        @State private var selectedProduct: ZSProduct?
+        let product: ZSProduct
 
         var body: some View {
             Button("Subscribe — \(product.webPrice?.formatted ?? "")") {
@@ -45,9 +45,9 @@ This is the recommended way to accept payments on iOS with ZeroSettle.
 
     ```swift
     class PaywallViewController: UIViewController {
-        private let product: Product
+        private let product: ZSProduct
 
-        init(product: Product) {
+        init(product: ZSProduct) {
             self.product = product
             super.init(nibName: nil, bundle: nil)
         }

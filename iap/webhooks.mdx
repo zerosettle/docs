@@ -245,7 +245,8 @@ You can also observe entitlements reactively in your UI framework:
 
 ```swift SwiftUI
 struct ContentView: View {
-    @ObservedObject var iap = ZeroSettle.shared
+    // ZeroSettle is @Observable — reading it in `body` is tracked automatically.
+    private var iap: ZeroSettle { .shared }
 
     var body: some View {
         if iap.entitlements.contains(where: { $0.isActive }) {

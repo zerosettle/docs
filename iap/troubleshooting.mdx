@@ -54,7 +54,7 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
   <Accordion title="Web checkout disabled for jurisdiction">
     ZeroSettle respects jurisdiction configurations set on your dashboard. If web checkout is disabled for the user's region, the SDK won't present a payment sheet.
 
-    **Fix:** Check `isWebCheckoutEnabled` on the product or call `fetchProducts()` and inspect the `jurisdictionConfig`. Enable web checkout for the target jurisdiction on the dashboard.
+    **Fix:** Check `ZeroSettle.shared.isWebCheckoutEnabled` (it reads the remote config resolved for the user's jurisdiction, so it is only meaningful after `identify(_:)`). `ZeroSettle.shared.effectiveJurisdiction` tells you which jurisdiction the SDK resolved. Enable web checkout for that jurisdiction on the dashboard.
   </Accordion>
 
   <Accordion title="Missing product selection">
@@ -233,24 +233,46 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
   </Accordion>
 
   <Accordion title="JWS verification failure">
-    The backend verifies the StoreKit transaction's JWS signature against Apple's root CA. If verification fails (e.g., due to a tampered transaction), the sync will be rejected.
+    The backend verifies the StoreKit transaction's JWS signature against Apple's root CA. If verification fails, the sync is rejected with a 401.
 
-    **Fix:** This typically indicates a security issue. Check the server logs for details.
+    **Most common cause: a local StoreKit configuration file.** Purchases made against an Xcode `.storekit` file (Product → Scheme → Options → StoreKit Configuration) are signed by Xcode's local test certificate, not by Apple. ZeroSettle's backend cannot verify them and will refuse the sync. This is expected and harmless — the purchase itself is unaffected and no fabricated revenue reaches your dashboard.
+
+    **Fix:** To exercise StoreKit sync end to end, set the scheme's StoreKit Configuration to **None** and buy with a Sandbox Apple ID on a physical device.
+
+    If you are already on Sandbox and still seeing failures, check the server logs — a genuine verification failure indicates a tampered transaction.
+  </Accordion>
+  <Accordion title="The app runs its own Product.purchase() call">
+    `Transaction.updates` does not redeliver a transaction that StoreKit already returned directly from `Product.purchase()`. If your app runs its own purchase flow rather than calling `purchaseViaStoreKit(productId:)`, the SDK's listener never sees that purchase.
+
+    It is not lost — the next `identify(_:)` syncs `Transaction.currentEntitlements` and picks it up. But it will not appear on the dashboard until then.
+
+    **Fix:** Also stamp `recommendedAppAccountToken()` into your purchase options so ownership attribution works — see [Entitlement Ownership](/iap/entitlement-ownership#how-transactions-get-attributed-in-multi-tenant-apps).
   </Accordion>
 </AccordionGroup>
 
 ## Debug Logging
 
-The SDK logs key events to the console by default — no configuration flag is required. Each subsystem uses a distinct prefix so you can filter the log stream:
+The SDK logs to Apple's unified logging system under the subsystem `com.zerosettle.kit`. No configuration flag is required. Categories:
 
-- `[ZeroSettle]` — General SDK events (configure, identify, product fetch)
-- `[ZSCheckout]` — Checkout flow events (PaymentIntent creation, sheet presentation, callbacks)
-- `[ZSMigrateTipView Business Logic]` — Switch & Save visibility decisions
-- `[ZSStoreKit]` — StoreKit sync events (transaction forwarding, verification)
+| Category | Covers |
+|---|---|
+| `General` | configure, identify, anonymous session, offer resolution |
+| `Checkout` | PaymentIntent creation, sheet presentation, callbacks |
+| `Entitlements` | StoreKit sync, entitlement merge, ownership |
+| `DeepLinks` | universal-link callbacks |
+| `Network` | HTTP requests and failures |
+| `CancelFlow` | cancel flow and retention |
+| `Migration` | Switch & Save visibility decisions |
 
-<Tip>
-  Filter your Xcode console by `ZeroSettle` to see all SDK logs in one view.
-</Tip>
+Filter the Xcode console by `com.zerosettle.kit`, or stream from a device:
+
+```bash
+log stream --predicate 'subsystem == "com.zerosettle.kit"' --level debug
+```
+
+<Warning>
+  **Release builds redact every log message.** `ZSLogger` formats with `%{public}@` in DEBUG and `%{private}@` in Release, so a TestFlight or App Store build shows `<private>` in place of each message in Console.app and in sysdiagnose. To read SDK logs from a real build, attach Xcode's debugger to the running process, or reproduce in a Debug build.
+</Warning>
 
 ## Still Stuck?
 

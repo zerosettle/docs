@@ -10,6 +10,10 @@ ZeroSettle works alongside Apple's StoreKit 2. You can use web checkout as your 
   Building for Android? See [Play Billing Integration](/iap/play-billing-integration) for the equivalent guide using Google Play Billing.
 </Tip>
 
+<Tip>
+  Not selling through ZeroSettle yet, and only want the StoreKit tracking? See [Analytics-Only Integration](/iap/analytics-only) — configure, identify, done.
+</Tip>
+
 ## How It Works
 
 When `syncStoreKitTransactions` is enabled (the default), the SDK's `StoreKitManager` automatically:
@@ -85,8 +89,8 @@ A common pattern is to offer web checkout as the primary option with StoreKit as
 
 ```swift
 struct ProductView: View {
-    @State private var selectedProduct: Product?
-    let product: Product
+    @State private var selectedProduct: ZSProduct?
+    let product: ZSProduct
 
     var body: some View {
         VStack(spacing: 16) {
@@ -195,5 +199,5 @@ Any other failure surfaces as `.checkoutFailed(reason:)`.
 |---|---|
 | iOS | 17.0+ |
 | StoreKit | StoreKit 2 |
-| Xcode | 15.0+ |
+| Xcode | 16.3+ |
 | App Store Connect | Products must be configured and approved |

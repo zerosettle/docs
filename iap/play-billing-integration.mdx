@@ -13,7 +13,7 @@ When `syncPlayPurchases` is enabled (the default), the SDK automatically:
 1. Installs a `PurchasesUpdatedListener` and connects to Google Play Billing
 2. Forwards every completed Play purchase to your ZeroSettle backend (`POST /v1/iap/play-store-transactions/`)
 3. Merges Play Store entitlements with web checkout entitlements
-4. Acknowledges purchases per the [acknowledgement model](/sdk/android/acknowledgement-model), retrying failed syncs via a [persistent sync queue](/sdk/android/sync-queue)
+4. Acknowledges purchases per the acknowledgement model described below, retrying failed syncs via a persistent sync queue
 
 This means a user who purchases via the Play Store will have their entitlements available via `ZeroSettle.entitlements` — alongside their web checkout purchases.
 
@@ -132,7 +132,7 @@ ZeroSettle.events.collect { event ->
 ```
 
 <Note>
-  Sync failures don't affect the Play purchase itself. The user still gets their purchase through Google. The sync is retried automatically via the [persistent sync queue](/sdk/android/sync-queue).
+  Sync failures don't affect the Play purchase itself. The user still gets their purchase through Google. The sync is retried automatically via the SDK's persistent sync queue.
 </Note>
 
 ## Entitlement Sources

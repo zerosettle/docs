@@ -16,7 +16,18 @@ Use the ZeroSettleKit SDK alongside RevenueCat in your app. This gives you full 
 
 ### Configuration
 
-When using RevenueCat, disable ZeroSettle's StoreKit/Play Billing listener to avoid conflicts:
+Decide first whether you want ZeroSettle to see your native store purchases.
+
+| You want | Set | Result |
+|---|---|---|
+| RevenueCat owns native billing; ZeroSettle only handles web checkout | `syncStoreKitTransactions: false` | ZeroSettle's dashboard shows web checkout only |
+| ZeroSettle to also track your StoreKit revenue, trials, and entitlements | `syncStoreKitTransactions: true` (the default) | Both platforms observe the same purchases |
+
+The second row is a normal, supported setup — it is how you evaluate ZeroSettle against RevenueCat on the same traffic, and how you get ZeroSettle's trial and entitlement telemetry without moving checkout. The two SDKs do not fight over StoreKit: `Transaction.updates` is a broadcast sequence that delivers to every listener, and `transaction.finish()` is idempotent. What you get is the same purchase reported to two analytics backends, which is exactly the point.
+
+Turn the listener **off** only when you specifically do not want native purchases in ZeroSettle's numbers.
+
+The examples below show the web-checkout-only setup:
 
 <CodeGroup>
 ```swift Swift
@@ -98,9 +109,9 @@ await ZeroSettle.instance.configure(
 ```
 </CodeGroup>
 
-<Warning>
-  Always set `syncStoreKitTransactions: false` (iOS) or `syncPlayPurchases = false` (Android) when using RevenueCat. Both SDKs listening for store transactions will cause conflicts.
-</Warning>
+<Note>
+  If you leave the listener on, also read [Analytics-Only Integration](/iap/analytics-only) — it covers the one thing that is genuinely easy to miss: a purchase your own code makes with `Product.purchase()` is not redelivered through `Transaction.updates`, so it reaches ZeroSettle on the next `identify(_:)` rather than immediately.
+</Note>
 
 ### User Identity
 
@@ -165,8 +176,8 @@ Show both ZeroSettle (web checkout) and RevenueCat (StoreKit/Play Billing) purch
 <CodeGroup>
 ```swift Swift
 struct PaywallView: View {
-    @State private var selectedProduct: Product?
-    let zsProduct: Product      // From ZeroSettleKit
+    @State private var selectedProduct: ZSProduct?
+    let zsProduct: ZSProduct    // From ZeroSettleKit
     let rcPackage: Package        // From RevenueCat
 
     var body: some View {
@@ -178,9 +189,12 @@ struct PaywallView: View {
             .checkoutSheet(
                 item: $selectedProduct
             ) { result in
+                // The completion handler is not async — hop into a Task.
                 if case .success = result {
-                    // Refresh RC customer info to pick up the webhook
-                    try? await Purchases.shared.customerInfo()
+                    Task {
+                        // Refresh RC customer info to pick up the webhook
+                        _ = try? await Purchases.shared.customerInfo()
+                    }
                 }
             }
 

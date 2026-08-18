@@ -16,13 +16,17 @@ Initialize the SDK as early as possible in your app's lifecycle. iOS, Android, a
 ```swift Swift
 @main
 struct YourApp: App {
+    init() {
+        // Synchronous, and it must run before anything can purchase.
+        ZeroSettle.shared.configure(.init(
+            publishableKey: "your_live_key"
+        ))
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .task {
-                    ZeroSettle.shared.configure(.init(
-                        publishableKey: "your_live_key"
-                    ))
                     try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                 }
                 .zeroSettleHandler()
@@ -426,11 +430,9 @@ struct PurchaseButton: View {
             case .success(let transaction):
                 unlockProduct(transaction.productId)
             case .failure(let error):
-                if let zsError = error as? ZeroSettleError,
-                   zsError == .cancelled {
-                    // User cancelled — don't show an error
-                    return
-                }
+                // ZeroSettleError is not Equatable — use isCancellation(_:),
+                // which also catches CancellationError and StoreKit's own cancel.
+                if ZeroSettleError.isCancellation(error) { return }
                 showError(error)
             }
         }
@@ -515,7 +517,7 @@ ElevatedButton(
 
 The `.checkoutSheet()` modifier automatically preloads the `PaymentIntent` and `WKWebView` before presenting the sheet, so the checkout is fully rendered the moment it slides up.
 
-`PaymentIntent` results are cached for 5 minutes. This means re-opens after dismiss skip the API call entirely. The cache is invalidated automatically after a successful payment.
+`PaymentIntent` results are cached for 30 minutes. This means re-opens after dismiss skip the API call entirely. The cache is invalidated automatically after a successful payment.
 
 For the fastest first open, call `warmUp()` right after fetching products:
 
@@ -587,7 +589,8 @@ Show feedback immediately when a checkout is in progress:
 <CodeGroup>
 ```swift Swift
 struct PurchaseButton: View {
-    @ObservedObject var iap = ZeroSettle.shared
+    // ZeroSettle is @Observable — reading it in `body` is tracked automatically.
+    private var iap: ZeroSettle { .shared }
     @State private var selectedProduct: ZSProduct?
     let product: ZSProduct
 
@@ -607,8 +610,7 @@ struct PurchaseButton: View {
             case .success(let transaction):
                 unlockProduct(transaction.productId)
             case .failure(let error):
-                if let zsError = error as? ZeroSettleError,
-                   zsError == .cancelled { return }
+                if ZeroSettleError.isCancellation(error) { return }
                 showError(error)
             }
         }
@@ -936,10 +938,16 @@ ElevatedButton(
 
 ### Use Stable Identifiers
 
-Choose a user ID that won't change:
+Choose a user ID that won't change. See [Picking an identity on iOS](/iap/user-identity#picking-an-identity-on-ios) for the full rundown.
 
 <CodeGroup>
 ```swift Swift
+// Best on iOS: Sign in with Apple's opaque user identifier.
+// Stable forever, scoped to your team, same on every device the person
+// signs into, survives reinstall — and scoped to the Apple ID that owns
+// their StoreKit purchases.
+userId: appleCredential.user
+
 // Good: Backend-generated UUID
 userId: user.id  // "usr_abc123"
 
@@ -1080,17 +1088,22 @@ ZeroSettle uses specific error types for different scenarios:
 
 **iOS:**
 
-All SDK errors are `ZeroSettleError` cases:
+All SDK errors are `ZeroSettleError` cases. [Checkout Errors](/iap/checkout-errors) is the complete reference — every case, its cause, and the recommended handling. The ones you will hit most:
 
 | Error Case | When It's Thrown |
 |---|---|
 | `.notConfigured` | SDK not configured before use |
-| `.productNotFound` | Product ID not found in catalog |
+| `.productNotFound(String)` | Product ID not found in catalog |
 | `.cancelled` | User dismissed the checkout |
-| `.networkError` | Network request failed |
+| `.apiError(APIErrorDetail)` | Network or server error — read `statusCode` / `serverMessage` |
+| `.checkoutFailed(reason:)` | Payment processing failed |
 | `.purchasePending` | Purchase awaiting external approval |
-| `.storeKitVerificationFailed` | StoreKit transaction verification failed |
+| `.storeKitVerificationFailed(underlyingError:)` | StoreKit transaction verification failed |
 | `.userNotIdentified` | `identify(_:)` not called before this API |
+
+<Note>
+  `ZeroSettleError` is not `Equatable` — several cases carry an `any Error` payload. Match with `if case` / `switch`, and use `ZeroSettleError.isCancellation(_:)` rather than `== .cancelled`.
+</Note>
 
 **Android:**
 
@@ -1111,17 +1124,23 @@ All SDK failures carry a `ZeroSettleError` (a sealed class), delivered via `Resu
     case .success(let transaction):
         unlockProduct(transaction.productId)
     case .failure(let error):
+        // Cancellations are not errors — filter them before any UI.
+        if ZeroSettleError.isCancellation(error) { return }
+
         if let zsError = error as? ZeroSettleError {
             switch zsError {
             case .notConfigured:
-                fatalError("SDK not configured")
+                // Misconfiguration — log it and hide the purchase path.
+                // Don't crash a shipping app on a payment failure.
+                logger.error("ZeroSettle not configured")
+                hidePurchaseUI()
             case .productNotFound(let id):
-                print("Product \(id) not found")
-            case .networkError(let underlying):
-                showRetry("Network error: \(underlying.localizedDescription)")
-            case .cancelled:
-                // User cancelled — don't show an error
-                break
+                logger.error("Product \(id) not found in the catalog")
+                hidePurchaseUI()
+            case .apiError(let detail):
+                showRetry(detail.serverMessage ?? "Something went wrong. Please try again.")
+            case .checkoutFailed(let reason):
+                showError("Payment failed: \(reason)")
             default:
                 showError(error.localizedDescription)
             }
@@ -1186,7 +1205,7 @@ If the SDK fails to initialize or fetch products, fall back gracefully:
 <CodeGroup>
 ```swift Swift
 struct PaywallView: View {
-    @State private var products: [Product] = []
+    @State private var products: [ZSProduct] = []
     @State private var loadError: Error?
 
     var body: some View {
@@ -1451,7 +1470,7 @@ for (final product in products.take(3)) {
 </CodeGroup>
 
 <Tip>
-  `warmUp()` caches the `PaymentIntent` for 5 minutes. If the user reaches the paywall within that window, the sheet opens without any network delay.
+  `warmUp()` caches the `PaymentIntent` for 30 minutes, matching the backend's checkout-config expiry. If the user reaches the paywall within that window, the sheet opens without any network delay.
 </Tip>
 
 ## Security

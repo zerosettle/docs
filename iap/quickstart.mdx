@@ -16,7 +16,7 @@ In this quickstart, you'll integrate ZeroSettle into your iOS app and make your 
 **Time to complete:** ~10 minutes (assumes you've completed [Account Setup](/iap/account-setup) and [Installation](/iap/installation))
 
 <Note>
-  Requires **iOS 17.0+**, **Swift 5.9+**, and **Xcode 15.0+**. See [Installation](/iap/installation) if you haven't added the package yet.
+  Requires **iOS 17.0+**, **Swift 6.1+**, and **Xcode 16.3+**. See [Installation](/iap/installation) if you haven't added the package yet.
 </Note>
 
 <Tip>
@@ -32,7 +32,7 @@ In this quickstart, you'll integrate ZeroSettle into your iOS app and make your 
 <Check>A ZeroSettle account with at least one product created ([Account Setup](/iap/account-setup))</Check>
 <Check>ZeroSettleKit added to your Xcode project ([Installation](/iap/installation))</Check>
 <Check>Your sandbox API key (`zs_pk_test_...`) from the dashboard</Check>
-<Check>Xcode 15.0+ with an iOS 17.0+ target</Check>
+<Check>Xcode 16.3+ with an iOS 17.0+ target</Check>
 
 <Steps>
 <Step title="Configure the SDK">
@@ -46,13 +46,18 @@ Configure the SDK early in your app lifecycle. `configure()` is synchronous — 
 
     @main
     struct YourApp: App {
+        init() {
+            // configure() is synchronous — do it before the first view renders.
+            ZeroSettle.shared.configure(.init(
+                publishableKey: "zs_pk_test_..."
+            ))
+        }
+
         var body: some Scene {
             WindowGroup {
                 ContentView()
+                    // identify() is async — as soon as you know who the user is.
                     .task {
-                        ZeroSettle.shared.configure(.init(
-                            publishableKey: "zs_pk_test_..."
-                        ))
                         try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                     }
                     .zeroSettleHandler()
@@ -180,8 +185,8 @@ Present a checkout sheet with Apple Pay and card support. The checkout mode (emb
   <Tab title="SwiftUI">
     ```swift
     struct PaywallView: View {
-        @State private var selectedProduct: Product?
-        let product: Product
+        @State private var selectedProduct: ZSProduct?
+        let product: ZSProduct
 
         var body: some View {
             Button("Subscribe — \(product.webPrice?.formatted ?? "")") {
@@ -205,9 +210,9 @@ Present a checkout sheet with Apple Pay and card support. The checkout mode (emb
   <Tab title="UIKit">
     ```swift
     class PaywallViewController: UIViewController {
-        private let product: Product
+        private let product: ZSProduct
 
-        init(product: Product) {
+        init(product: ZSProduct) {
             self.product = product
             super.init(nibName: nil, bundle: nil)
         }
@@ -298,13 +303,16 @@ let hasPremium = entitlements.contains {
 
     @main
     struct MyApp: App {
+        init() {
+            ZeroSettle.shared.configure(.init(
+                publishableKey: "zs_pk_test_..."
+            ))
+        }
+
         var body: some Scene {
             WindowGroup {
                 ContentView()
                     .task {
-                        ZeroSettle.shared.configure(.init(
-                            publishableKey: "zs_pk_test_..."
-                        ))
                         try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                     }
                     .zeroSettleHandler()
@@ -313,8 +321,9 @@ let hasPremium = entitlements.contains {
     }
 
     struct ContentView: View {
-        @ObservedObject var iap = ZeroSettle.shared
-        @State private var selectedProduct: Product?
+        // ZeroSettle is @Observable — reading it in `body` is tracked automatically.
+    private var iap: ZeroSettle { .shared }
+        @State private var selectedProduct: ZSProduct?
 
         var body: some View {
             VStack {
@@ -374,9 +383,9 @@ let hasPremium = entitlements.contains {
     }
 
     class PaywallViewController: UIViewController {
-        private let product: Product
+        private let product: ZSProduct
 
-        init(product: Product) {
+        init(product: ZSProduct) {
             self.product = product
             super.init(nibName: nil, bundle: nil)
         }

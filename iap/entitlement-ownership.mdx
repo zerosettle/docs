@@ -95,7 +95,20 @@ New purchases always belong to the currently logged-in account.
 
 ### How transactions get attributed in multi-tenant apps
 
-When multiple ZeroSettle apps share the same iOS bundle ID — for example, two tenants both publish via the same parent App Store record — the backend uses each StoreKit transaction's `appAccountToken` to route App Store Server Notifications to the correct app. The SDK sets this token automatically (since ZeroSettleKit 1.1.5 / Android 0.15.0) when your `userId` is a valid UUID. Older SDK versions without this attribution should not be used in multi-tenant deployments.
+When multiple ZeroSettle apps share the same iOS bundle ID — for example, two tenants both publish via the same parent App Store record — the backend uses each StoreKit transaction's `appAccountToken` to route App Store Server Notifications to the correct app.
+
+The SDK sets this token automatically (since ZeroSettleKit 1.1.5 / Android 0.15.0) whenever it makes the purchase itself, via `purchaseViaStoreKit(productId:)`. Your `userId` does **not** need to be a UUID — the SDK derives a UUIDv5 from whatever string you pass, so Firebase UIDs, Auth0 `sub` values, and Apple's opaque user identifier all work unchanged. Older SDK versions without this attribution should not be used in multi-tenant deployments.
+
+<Warning>
+  **If your app calls StoreKit's `Product.purchase()` directly, the SDK cannot stamp the token for you** — Apple signs `appAccountToken` at purchase time, and by the time the SDK observes the transaction it is immutable. Pass it yourself:
+
+  ```swift
+  let token = try ZeroSettle.shared.recommendedAppAccountToken()
+  let result = try await product.purchase(options: [.appAccountToken(token)])
+  ```
+
+  `recommendedAppAccountToken()` requires `identify(_:)` to have run and throws `ZeroSettleError.userNotIdentified` otherwise. Without it the purchase still syncs and revenue is still attributed to the right user — but Apple-verified ownership transfer (cancel-and-rebuy, family sharing, reinstall-and-resignin) will refuse on that transaction, and the SDK logs a loud `appAccountToken mismatch` error explaining exactly this.
+</Warning>
 
 ## Explicit Entitlement Claiming
 

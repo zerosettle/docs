@@ -81,7 +81,7 @@ Switch & Save also works for **Google Play Billing** subscribers on Android. The
     After the migration completes, ZeroSettle calls `subscriptionsv2.cancel` for the user's old Play subscription, with retries. If the cancellation can't be completed (e.g., Play returns a permanent error, or it keeps failing), the transaction is flagged for **manual intervention** instead of silently failing.
   </Step>
   <Step title="The SDK surfaces a fallback banner when needed">
-    When the backend couldn't cancel the Play subscription, [`GET /iap/entitlements/`](/api-reference/endpoint/get-entitlements) returns a `manual_play_cancel` entry in `pending_actions[]`. The SDK renders a banner with a deep link to the Play Store subscriptions screen so the user can cancel it themselves. The user keeps their new web subscription regardless. The SDK dismisses the banner via [`POST /iap/migration-actions/{transaction_id}/dismiss/`](/api-reference/endpoint/dismiss-migration-action) once the user acts on it. See [Pending Actions](/sdk/android/pending-actions).
+    When the backend couldn't cancel the Play subscription, [`GET /iap/entitlements/`](/api-reference/endpoint/get-entitlements) returns a `manual_play_cancel` entry in `pending_actions[]`. The SDK renders a banner with a deep link to the Play Store subscriptions screen so the user can cancel it themselves. The user keeps their new web subscription regardless. The SDK dismisses the banner via `POST /iap/migration-actions/{transaction_id}/dismiss/` once the user acts on it. See the Android SDK reference for pending actions.
   </Step>
 </Steps>
 
@@ -100,7 +100,7 @@ mgr.evaluate()
 mgr.acceptOffer(activity)
 ```
 
-The drop-in `ZeroSettleOfferTip` Composable (`:ui` module) handles this routing automatically. For a fully custom flow, `ZeroSettle.launchSwitchAndSave(activity)` is the headless entry point. See [Offers (Android)](/sdk/android/offers).
+The drop-in `ZeroSettleOfferTip` Composable (`:ui` module) handles this routing automatically. For a fully custom flow, `ZeroSettle.launchSwitchAndSave(activity)` is the headless entry point. See [Play Billing Integration](/iap/play-billing-integration).
 
 The discount, copy, tenure, and rollout for the Play campaign are configured in the [dashboard Switch & Save campaign](/iap/dashboard#migration-campaigns), the same as the Apple campaign — campaigns carry a platform (Apple, Google, or both).
 
@@ -159,7 +159,7 @@ ZeroSettleOfferTip(offerManager = mgr)
 
 </CodeGroup>
 
-The iOS, React Native, and Flutter views share the same native implementation. On Android, Switch & Save is exposed differently — see the [Android API](#android-api) section above and [Offers (Android)](/sdk/android/offers).
+The iOS, React Native, and Flutter views share the same native implementation. On Android, Switch & Save is exposed differently — see the [Android API](#android-api) section above.
 
 <Note>
   `MigrationTipView` targets iOS / React Native / Flutter apps switching users from **Apple StoreKit** subscriptions. On Android, use the unified `ZeroSettleOfferTip` Composable, which handles both Play→web Switch & Save migrations and upgrade offers.

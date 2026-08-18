@@ -108,6 +108,7 @@
                 "group": "Integrations",
                 "icon": "puzzle-piece",
                 "pages": [
+                  "iap/analytics-only",
                   "iap/revenuecat-integration",
                   "iap/storekit-integration",
                   "iap/play-billing-integration"

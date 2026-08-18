@@ -42,7 +42,7 @@ When preloading fires:
 
 1. The SDK calls `POST /v1/iap/payment-intents/` for each product
 2. The backend creates a **pending** `Transaction` and a Stripe `PaymentIntent` (or `SetupIntent` for migration trials with a $0 trial period)
-3. The response (checkout URL, transaction ID, client secret) is cached in `CheckoutResponseCache` with a **5-minute TTL**
+3. The response (checkout URL, transaction ID, client secret) is cached in `CheckoutResponseCache` with a **30-minute TTL**, aligned to the backend's `checkout_config_expires_at`
 4. Concurrent requests for the same product are **coalesced** — only one network call is made, and all callers receive the same result
 
 ### Layer 2 — WebView Pre-Rendering (UI Layer)
@@ -100,7 +100,7 @@ The backend deduplicates pending PaymentIntents to avoid creating unnecessary St
 ### Cleanup
 
 - **User never confirms** → Stripe auto-cancels the PI after 24 hours → the `payment_intent.canceled` webhook marks the Transaction as `FAILED`
-- **SDK cache expires** (5 minutes) → the next checkout open creates a fresh PI; the old one is eventually cleaned up by Stripe
+- **SDK cache expires** (30 minutes) → the next checkout open creates a fresh PI; the old one is eventually cleaned up by Stripe
 
 ## Preloading Methods
 
@@ -162,7 +162,7 @@ Control preloading per-modifier with the `preload:` parameter:
 | Strategy | Behavior |
 |----------|----------|
 | `.all` | Preloads PaymentIntents for all fetched products |
-| `.specified([Product])` | Preloads only the specified products |
+| `.specified([ZSProduct])` | Preloads only the specified products |
 | `nil` (default) | Preloads only the bound product |
 
 ### 3. `CheckoutSheet.warmUp()`
@@ -244,7 +244,7 @@ Returns the checkout URL and transaction ID for manual presentation (e.g., UIKit
 | Feature | Default | Opt-in |
 |---------|---------|--------|
 | PI preload on identify | **OFF** | `preloadCheckout: true` |
-| PI caching (5-min TTL) | **ON** | Built-in, no config needed |
+| PI caching (30-min TTL) | **ON** | Built-in, no config needed |
 | Request coalescing | **ON** | Built-in, no config needed |
-| WebView pre-rendering | **ON** (no limit) | Cap with `maxPreloadedWebViews` |
+| WebView pre-rendering | **ON** (no limit) — but only runs once PI caching has fired for a product | Cap with `maxPreloadedWebViews` |
 | Backend deduplication (1-hour) | **ON** | Built-in, no config needed |

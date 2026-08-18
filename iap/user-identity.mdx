@@ -17,8 +17,12 @@ ZeroSettle establishes user identity **once per session** with `identify(...)`, 
 | Mode | When to use |
 |------|-------------|
 | `Identity.user(id:)` | You have your own auth system. Pass a stable user ID. |
-| `Identity.anonymous()` | No auth system. The SDK generates and persists a stable session UUID. |
-| `Identity.deferred()` | Auth comes on a later screen. Suppresses the "no user identified" warning until you provide a real identity. |
+| `Identity.anonymous` | No auth system. The SDK generates and persists a stable session UUID. |
+| `Identity.deferred` | Auth comes on a later screen. Suppresses the "no user identified" warning until you provide a real identity. |
+
+<Note>
+  On Swift and Kotlin these are enum cases — write `.anonymous` and `.deferred`, with no parentheses. Flutter's `Identity` is a class with factory constructors, so Dart spells the same two `Identity.anonymous()` and `Identity.deferred()`.
+</Note>
 
 ## Option 1: RevenueCat Users
 
@@ -112,7 +116,7 @@ final transaction = await ZeroSettle.instance.purchase(
 **Restoration**: RevenueCat handles it. Call `Purchases.shared.restorePurchases()`.
 
 <Note>
-  Set `syncStoreKitTransactions: false` (iOS / Flutter) or `syncPlayPurchases = false` (Android) when using RevenueCat. This prevents duplicate transaction reporting since RevenueCat already handles the native store.
+  `syncStoreKitTransactions: false` (iOS / Flutter) and `syncPlayPurchases = false` (Android) keep native store purchases out of ZeroSettle, leaving RevenueCat as the only place they are reported. Leave the listener **on** if you want ZeroSettle to track them too — see [RevenueCat Integration](/iap/revenuecat-integration) for the trade-off, and [Analytics-Only Integration](/iap/analytics-only) for that setup on its own.
 </Note>
 
 ## Option 2: Custom Auth (Recommended)
@@ -207,7 +211,7 @@ final entitlements = await ZeroSettle.instance.restoreEntitlements();
 
 ## Option 3: Anonymous Users
 
-No user system yet? Use `Identity.anonymous()`. The SDK generates and persists a stable per-install UUID, so entitlements remain restorable for the lifetime of the install — no email lookup required.
+No user system yet? Use `Identity.anonymous`. The SDK generates and persists a stable per-install UUID, so entitlements remain restorable for the lifetime of the install — no email lookup required.
 
 <CodeGroup>
 
@@ -270,12 +274,48 @@ final transaction = await ZeroSettle.instance.purchase(
 
 </CodeGroup>
 
-**How it works**: `Identity.anonymous()` persists a stable UUID in on-device storage. The same identity is reused across app launches until you call `logout()` or the user clears app data.
+**How it works**: `Identity.anonymous` persists a stable UUID in on-device storage. The same identity is reused across app launches until you call `logout()` or the user clears app data.
 
-**Restoration**: `restoreEntitlements()` works for anonymous users — entitlements are tied to the persisted UUID. The identity does not survive a reinstall or app-data clear, so promote anonymous users to `Identity.user(id:)` once your app has an auth system for true cross-device restoration.
+**Restoration**: `restoreEntitlements()` works for anonymous users — entitlements are tied to the persisted UUID.
 
 <Warning>
-  Anonymous identities are install-scoped. They are lost on reinstall or app-data clear. Prompt users to create an account for cross-device and reinstall-safe entitlement restoration.
+  **Choosing `.anonymous` is a one-way door.** There is no merge or transfer from an anonymous identity to a real one: calling `identify(.user(id:))` later starts a *new* backend identity, and the anonymous install's purchase history stays behind on the old one. The UUID is also install-scoped — a reinstall or app-data clear loses it.
+
+  If you expect to have real user IDs eventually, don't start on `.anonymous`. Mint a stable identifier you own on first launch and pass it to `Identity.user(id:)` from day one — see [Picking an identity on iOS](#picking-an-identity-on-ios). Reach for `.anonymous` only when you are confident the app will never have accounts.
+</Warning>
+
+## Picking an identity on iOS
+
+The identity you pass to `Identity.user(id:)` should be non-guessable, stable for the life of the account, and never reused by a different person. Three options, best first:
+
+**Sign in with Apple.** If your app has a Sign in with Apple button, `ASAuthorizationAppleIDCredential.user` is the strongest identifier available on the platform. It is opaque, scoped to your developer team, stable forever for that Apple ID, identical on every device the person signs into, and it survives a reinstall. It is also scoped to the same Apple ID that owns their StoreKit purchases, which makes it the right identity for a *payer* rather than merely a convenient one.
+
+```swift
+SignInWithAppleButton(.signIn) { request in
+    request.requestedScopes = [.fullName, .email]
+} onCompletion: { result in
+    guard case .success(let auth) = result,
+          let credential = auth.credential as? ASAuthorizationAppleIDCredential
+    else { return }
+
+    // Persist credential.user in the Keychain — it is not re-issued on
+    // subsequent sign-ins, and getCredentialState(forUserID:) needs it.
+    Keychain.store(appleUserID: credential.user)
+
+    Task { try? await ZeroSettle.shared.identify(.user(id: credential.user)) }
+}
+```
+
+**Your backend's user ID.** A UUID your server minted at signup. Equally good, if you have a server.
+
+**An ID you mint on device.** No accounts and no backend, but you expect them later: generate a `UUID()` on first launch and store it in the Keychain (which survives reinstall, unlike `UserDefaults`). Pass it to `Identity.user(id:)` from the very first launch. This costs nothing now and avoids the anonymous one-way door described above.
+
+<Note>
+  The ID does not need to be a UUID. The SDK derives Apple's `appAccountToken` as a UUIDv5 over whatever string you pass, so Firebase UIDs, Auth0 `sub` values, and Apple's opaque user identifier all work as-is. Don't reshape your IDs to satisfy the SDK.
+</Note>
+
+<Warning>
+  Never use `identifierForVendor`, an advertising identifier, an email address, or any constant. A constant is the worst of these — it makes every install look like one customer and can hand out entitlements nobody paid for.
 </Warning>
 
 ## Checking Entitlements
@@ -340,10 +380,46 @@ Each `Entitlement` includes:
 |----------|------|-------------|
 | `id` | `String` | Unique entitlement identifier |
 | `productId` | `String` | The product ID this entitlement grants |
-| `source` | `EntitlementSource` | `.webCheckout`, `.storeKit` (iOS), or `.playStore` (Android) |
+| `source` | `Entitlement.Source` | `.webCheckout` or `.storeKit`. Android's equivalent adds `.playStore` |
 | `isActive` | `Bool` | Whether currently valid |
+| `status` | `Entitlement.Status` | `.active`, `.paused`, `.expired`, `.revoked`, `.cancelled`, `.gracePeriod`, `.pastDue`, or `.unknown(String)` |
 | `expiresAt` | `Date?` | Expiration date for subscriptions |
-| `purchasedAt` | `Date` | When the purchase was made |
+| `purchasedAt` | `Date` | When this transaction was purchased |
+| `originalPurchaseDate` | `Date?` | When the subscription first started, across renewals |
+
+### Renewal and cancellation
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `willRenew` | `Bool` | Whether the subscription is set to auto-renew |
+| `isCancelled` | `Bool` | Cancelled but still inside the paid period — access continues until `expiresAt` |
+| `cancelledAt` | `Date?` | When the user cancelled |
+
+### Trials
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `isTrial` | `Bool` | Whether this entitlement is currently in its free trial |
+| `trialEndsAt` | `Date?` | When the trial converts to paid |
+| `trialDaysRemaining` | `Int?` | Whole days left in the trial, or `nil` outside one |
+
+### Pause
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `isPaused` | `Bool` | Whether the subscription is paused |
+| `pausedAt` | `Date?` | When the pause began |
+| `pauseResumesAt` | `Date?` | When billing resumes |
+
+### StoreKit linkage
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `storekitOriginalTransactionId` | `String?` | Apple's `originalTransactionId` for entitlements that came from StoreKit |
+
+<Tip>
+  `status`, `isCancelled`, and the trial fields are what you want for paywall and settings copy — "trial ends in 3 days", "cancels on the 14th", "payment failed". `isActive` alone can't tell those apart.
+</Tip>
 
 ## Entitlement Sources
 
@@ -379,7 +455,7 @@ The SDK merges entitlements from all sources when you call `restoreEntitlements(
 | Use your backend's user ID for `Identity.user(id:)` | Use device identifiers (they change) |
 | Use a UUID you generate | Use email (users change emails) |
 | Keep it consistent across platforms | Use different IDs per platform |
-| Use `Identity.anonymous()` when you have no auth system | Mix `Identity.user` and `Identity.anonymous` for the same person |
+| Use `Identity.anonymous` when you have no auth system | Mix `Identity.user` and `Identity.anonymous` for the same person |
 
 <Card title="Quickstart" icon="rocket" href="/iap/quickstart">
   Get started with the full SDK setup

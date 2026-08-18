@@ -1,0 +1,187 @@
+---
+title: 'Analytics-Only Integration'
+description: 'Use ZeroSettle to track StoreKit purchases, trials, and entitlements without moving checkout'
+icon: 'chart-mixed'
+---
+
+You don't have to move checkout to start using ZeroSettle. Point the SDK at your existing StoreKit purchases and it becomes a revenue and subscription analytics layer: transactions, trials, renewals, cancellations, refunds, and entitlement state, all in the dashboard, with your app's purchase flow untouched.
+
+This is the lowest-risk way to adopt ZeroSettle, and the honest way to evaluate it — you can run it alongside RevenueCat and compare the two on identical traffic.
+
+<Note>
+  **Your app stays the authority.** In this mode nothing gates on ZeroSettle. Your existing StoreKit entitlement check keeps deciding who has access, and the SDK is free to fail in any way at all without a paying customer losing anything.
+</Note>
+
+## What you get
+
+| | Analytics-only | Full integration |
+|---|---|---|
+| StoreKit transactions, revenue, refunds | Yes | Yes |
+| Trial starts, conversions, and expiry | Yes | Yes |
+| Renewals, cancellations, grace period, billing retry | Yes | Yes |
+| Entitlement state per user | Yes | Yes |
+| Cancel flows, upgrade offers, Switch & Save | — | Yes |
+| Web checkout and reduced fees | — | Yes |
+
+Everything in the first column comes from the Apple-signed transaction, so it arrives whether or not you ever sell anything through ZeroSettle.
+
+## Setup
+
+### 1. Configure and identify
+
+That is the whole integration.
+
+```swift
+import ZeroSettleKit
+
+@main
+struct YourApp: App {
+    init() {
+        ZeroSettle.shared.configure(.init(
+            publishableKey: "zs_pk_live_...",
+            syncStoreKitTransactions: true   // the default — this is the part doing the work
+        ))
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .task {
+                    // Starts the StoreKit listener and syncs the user's
+                    // current entitlements to ZeroSettle.
+                    try? await ZeroSettle.shared.identify(.user(id: currentUser.id))
+                }
+        }
+    }
+}
+```
+
+<Tip>
+  No `.zeroSettleHandler()`, no Associated Domains entitlement, and no universal-link setup — those exist to bring a **web** checkout result back into your app, and you don't have one.
+</Tip>
+
+`identify(_:)` starts the `Transaction.updates` listener and syncs `Transaction.currentEntitlements` **before** it fetches your product catalog. That ordering matters here: with no products configured in ZeroSettle, the catalog fetch throws, and the `try?` swallows it — but the StoreKit sync has already happened. Tracking works from day one on an empty dashboard.
+
+### 2. Pick an identity
+
+The user ID you pass is what ties transactions together across devices and reinstalls. On iOS, Sign in with Apple's opaque user identifier is the strongest option available; see [Picking an identity on iOS](/iap/user-identity#picking-an-identity-on-ios) for the alternatives.
+
+Avoid `Identity.anonymous` unless you are certain the app will never have accounts — [it is a one-way door](/iap/user-identity#option-3-anonymous-users).
+
+### 3. Stamp `appAccountToken` on your own purchases
+
+If your app calls StoreKit's `Product.purchase()` itself — which every analytics-only adopter does — Apple signs the transaction at purchase time, and the SDK cannot add anything to it afterwards. Pass the token yourself:
+
+```swift
+let options: Set<Product.PurchaseOption>
+if let token = try? ZeroSettle.shared.recommendedAppAccountToken() {
+    options = [.appAccountToken(token)]
+} else {
+    options = []          // identify() hasn't run yet — purchase anyway
+}
+
+let result = try await product.purchase(options: options)
+```
+
+`recommendedAppAccountToken()` returns the same UUIDv5 the backend derives from your user ID, so Apple's signature becomes cryptographic proof that *this* user bought *this* subscription. Without it, revenue is still attributed correctly for the normal case — but ownership transfer after a cancel-and-rebuy, a family-sharing move, or a reinstall-and-resignin will refuse on that transaction, and the SDK logs a loud `appAccountToken mismatch` error saying so.
+
+<Warning>
+  Never let this throw into the purchase path. A missing token is worth a log line; it is not worth a failed sale.
+</Warning>
+
+### 4. Know when your purchases arrive
+
+`Transaction.updates` does not redeliver a transaction that StoreKit already handed back from `Product.purchase()`. Renewals, refunds, revocations, and purchases made on another device all come through the listener — but the purchase your own code just completed does not.
+
+It is not lost. The next `identify(_:)` syncs `Transaction.currentEntitlements` and picks it up, so a purchase made today appears on the dashboard at the latest on the next launch. If you want it sooner, call `identify(_:)` again after the purchase completes — off the critical path, never between the purchase and unlocking access.
+
+```swift
+// After finishing, unlocking, and dismissing — not before.
+Task { try? await ZeroSettle.shared.identify(.user(id: currentUser.id)) }
+```
+
+## What lands in the dashboard
+
+**Real prices, with no catalog setup.** Post-2023 StoreKit transactions carry `price` and `currency` inside the Apple-signed payload, and the backend reads them from there. You do not need to create products in ZeroSettle or connect Stripe to see accurate revenue.
+
+**Product names, if you want them.** An unmapped product is recorded under its raw App Store product identifier. Create matching products on the dashboard and transactions pick up their display names instead.
+
+**Trials, detected server-side.** Apple's `offerType` / `offerDiscountType` fields are read on ingest, so trial starts and trial-end dates populate without any app-side work. They surface on `Entitlement.isTrial`, `trialEndsAt`, and `trialDaysRemaining` — see the [Entitlement reference](/iap/user-identity#checking-entitlements).
+
+**Lifecycle, even across app kills.** Every launch runs a bulk subscription-state reconcile, so renewals, expirations, and revocations that happened while the app was closed are caught up.
+
+## Paywall funnel events
+
+The SDK can also report the steps *before* a purchase, so the dashboard shows a funnel rather than a list of receipts. `trackEvent` is `nonisolated`, fire-and-forget, and never throws:
+
+```swift
+// When your paywall appears
+ZeroSettle.trackEvent(.paywallViewed, productId: product.id, screenName: "post_walk_upsell")
+
+// When the user commits
+ZeroSettle.trackEvent(.checkoutStarted, productId: product.id)
+
+// When they back out without buying
+ZeroSettle.trackEvent(
+    .checkoutAbandoned,
+    productId: product.id,
+    metadata: ["trigger": "tile_limit"]
+)
+```
+
+```swift
+public nonisolated static func trackEvent(
+    _ type: FunnelEventType,
+    productId: String,
+    screenName: String? = nil,
+    metadata: [String: String]? = nil
+)
+```
+
+| Event | Meaning |
+|---|---|
+| `.paywallViewed` | The paywall was presented |
+| `.checkoutStarted` | The user began a purchase |
+| `.checkoutAbandoned` | The user left without completing |
+
+`screenName` and `metadata` are free-form — use them to tell one paywall entry point from another.
+
+Two things to know: events sent before `configure()` are dropped rather than queued, and events sent before `identify(_:)` are attributed to the literal user `"anonymous"`. Send them from a paywall that can only appear after both have run.
+
+## Testing
+
+<Warning>
+  **A local StoreKit configuration file will not work.** Purchases made against an Xcode `.storekit` file are signed by Xcode's local test certificate, not by Apple, so the backend cannot verify the JWS and refuses the sync with a 401. This is expected — the purchase is unaffected and no fabricated revenue reaches your dashboard.
+</Warning>
+
+To exercise the integration end to end:
+
+1. Set the scheme's **StoreKit Configuration** to **None**
+2. Run on a physical device signed into a **Sandbox** Apple ID
+3. Use a **sandbox** publishable key (`zs_pk_test_...`) — a sandbox Apple ID with a live key files the transaction under sandbox anyway, where the live dashboard won't show it. See [Testing & Sandbox](/iap/testing#storekit-sandbox--live-key-mismatch)
+4. Buy, then check **Transactions** on the dashboard in sandbox mode
+
+## Running alongside RevenueCat
+
+Supported, and the point of the exercise if you are comparing them. Both SDKs observe `Transaction.updates`, which is a broadcast sequence — every listener gets every update — and `transaction.finish()` is idempotent, so neither can strand the other's transaction. Configure both, identify both with the same user ID, and read the two dashboards side by side.
+
+See [RevenueCat Integration](/iap/revenuecat-integration) for the full comparison.
+
+## Graduating to checkout
+
+Nothing here has to be undone. When you are ready to sell through ZeroSettle, create products on the dashboard, connect Stripe, add the universal-link handler, and present `.checkoutSheet(item:)`. The identity, the transaction history, and the entitlements you have been accumulating are already attached to the right users.
+
+<CardGroup cols={2}>
+  <Card title="StoreKit Integration" icon="apple" href="/iap/storekit-integration">
+    The sync path in detail, including the retry queue
+  </Card>
+  <Card title="Entitlement Ownership" icon="shield-check" href="/iap/entitlement-ownership">
+    How purchases are attributed when accounts share an Apple ID
+  </Card>
+  <Card title="User Identity" icon="user" href="/iap/user-identity">
+    Choosing the ID you'll be stuck with
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/iap/quickstart">
+    The full integration, when you want checkout too
+  </Card>
+</CardGroup>
