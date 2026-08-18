@@ -476,3 +476,29 @@ exist. Until it does, anonymous → identified loses the install's purchase hist
 Not a framework change, but if the Flutter/Swift shapes keep colliding in the
 docs, consider adding `public static func anonymous() -> Identity` so both spellings
 compile. Probably not worth it — fixing the prose is cheaper.
+
+### F6. ZeroSettleKit ships no privacy manifest
+
+`find Sources -name PrivacyInfo.xcprivacy` → nothing, while the SDK uses
+`UserDefaults` in six files across 27 sites (the anonymous session UUID, the
+StoreKit sync queue, offer dismissal state, Apple Pay availability caching).
+
+`UserDefaults` is on Apple's required-reason API list
+(`NSPrivacyAccessedAPICategoryUserDefaults`, reason `CA92.1` for an SDK reading
+and writing only its own app-scoped defaults). A third-party SDK is expected to
+declare its own; without one, every adopter either absorbs the declaration into
+their app's manifest — which they cannot do accurately, because they cannot see
+inside the SDK — or ships without it and collects ITMS-91053 "Missing API
+declaration" on upload.
+
+This is a payments SDK, which is the category Apple looks at hardest. Shipping
+`Sources/ZeroSettleKit/PrivacyInfo.xcprivacy` (declaring the UserDefaults
+category, and `NSPrivacyTracking` false, and the data types the backend
+receives) removes a recurring adopter surprise for a few lines of plist.
+
+Worth checking the same for the Android, Flutter, and React Native packages —
+the Flutter and React Native ones vendor ZeroSettleKit and inherit the gap.
+
+Separately, and not ZeroSettle's problem: **Pawprints itself ships no
+`PrivacyInfo.xcprivacy`** either, and it uses `UserDefaults` heavily. That
+pre-dates this integration, but it is on the same App Store submission path.
