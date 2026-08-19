@@ -28,6 +28,21 @@ Then add `ZeroSettleKit` as a dependency of your target.
   Requires **iOS 17.0+**, **Swift 6.1+**, and **Xcode 16.3+** — `Package.swift` is `swift-tools-version: 6.1` and uses package traits.
 </Note>
 
+### Privacy manifest
+
+ZeroSettleKit ships its own `PrivacyInfo.xcprivacy` (SDK 1.6.0+). You do not
+need to declare the SDK's `UserDefaults` access or the data it sends in your
+app's manifest — Xcode aggregates ours into your app's privacy report.
+
+It declares `NSPrivacyTracking` as `false`, `NSPrivacyAccessedAPICategoryUserDefaults`
+with reason `CA92.1`, and four collected data types: user ID, purchase history,
+and — only if you pass them — customer name and email.
+
+<Note>
+  Your app still needs its own `PrivacyInfo.xcprivacy` for whatever *it* does.
+  Ours covers the SDK only.
+</Note>
+
 ### Dependencies and the `NativePay` trait
 
 ZeroSettleKit declares one package dependency: [stripe-ios](https://github.com/stripe/stripe-ios) (`23.0.0..<25.0.0`). SwiftPM resolves it for every adopter, but it is only **linked** when you enable the `NativePay` trait, which turns on native Apple Pay checkout via `STPApplePayContext`. Leave the trait off and nothing from Stripe is compiled into your binary.

@@ -477,7 +477,7 @@ Not a framework change, but if the Flutter/Swift shapes keep colliding in the
 docs, consider adding `public static func anonymous() -> Identity` so both spellings
 compile. Probably not worth it — fixing the prose is cheaper.
 
-### F6. ZeroSettleKit ships no privacy manifest
+### F6. ZeroSettleKit ships no privacy manifest — FIXED 2026-08-18
 
 `find Sources -name PrivacyInfo.xcprivacy` → nothing, while the SDK uses
 `UserDefaults` in six files across 27 sites (the anonymous session UUID, the
@@ -496,8 +496,16 @@ This is a payments SDK, which is the category Apple looks at hardest. Shipping
 category, and `NSPrivacyTracking` false, and the data types the backend
 receives) removes a recurring adopter surprise for a few lines of plist.
 
-Worth checking the same for the Android, Flutter, and React Native packages —
-the Flutter and React Native ones vendor ZeroSettleKit and inherit the gap.
+**Fixed**: `Sources/ZeroSettleKit/PrivacyInfo.xcprivacy`, declared as a `.copy`
+resource. Verified to land at the root of `ZeroSettleKit_ZeroSettleKit.bundle`
+and to ship inside a consuming app next to RevenueCat's.
+
+Still open for the sibling SDKs: the Flutter and React Native packages vendor
+ZeroSettleKit and now inherit the manifest through it, but each also has its own
+Swift/ObjC bridging layer that should be audited for required-reason API use.
+Android has no `xcprivacy` equivalent — its analogue is the Play Console Data
+safety form, which is the adopter's to fill in, though the SDK should document
+what it sends so they can.
 
 Separately, and not ZeroSettle's problem: **Pawprints itself ships no
 `PrivacyInfo.xcprivacy`** either, and it uses `UserDefaults` heavily. That
