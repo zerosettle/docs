@@ -132,7 +132,7 @@
             ]
           },
           {
-            "group": "AI Assistants",
+            "group": "MCP Server",
             "pages": [
               "ai/overview",
               "ai/connect",
