@@ -246,7 +246,9 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
 
     It is not lost — the next `identify(_:)` syncs `Transaction.currentEntitlements` and picks it up. But it will not appear on the dashboard until then.
 
-    **Fix:** Call `ZeroSettle.shared.recordStoreKitPurchase(result)` after you finish and unlock (ZeroSettleKit 1.6.0+), and stamp `recommendedAppAccountToken()` into your purchase options so ownership attribution works. See [Analytics-Only Integration](/iap/analytics-only).
+    **Fix, if the delay matters:** call `ZeroSettle.shared.recordStoreKitPurchase(result)` after you finish and unlock (ZeroSettleKit 1.6.0+). It is optional — without it the purchase simply appears at the next launch instead.
+
+    **Fix, regardless:** stamp `recommendedAppAccountToken()` into your purchase options, or Apple-verified ownership transfer will not work for that transaction. See [Analytics-Only Integration](/iap/analytics-only).
   </Accordion>
 </AccordionGroup>
 

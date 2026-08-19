@@ -89,11 +89,13 @@ let result = try await product.purchase(options: options)
   Never let this throw into the purchase path. A missing token is worth a log line; it is not worth a failed sale.
 </Warning>
 
-### 4. Know when your purchases arrive
+### 4. Optional: report your own purchases immediately
 
-`Transaction.updates` does not redeliver a transaction that StoreKit already handed back from `Product.purchase()`. Renewals, refunds, revocations, and purchases made on another device all come through the listener — but the purchase your own code just completed does not.
+This step is optional. Skip it and everything still works — your purchase reaches the dashboard at the next `identify(_:)`, typically the next app launch. Add it only if you want the sale to appear within seconds instead.
 
-Report it yourself with `recordStoreKitPurchase(_:)`:
+The reason there is a gap at all is Apple's: `Transaction.updates` does not redeliver a transaction StoreKit already handed back from `Product.purchase()`, so no listener can see it. Renewals, refunds, revocations, expiries, and purchases made on another device *do* come through the listener, plus a launch-time reconcile — none of those need anything from you.
+
+If you want the immediate report, use `recordStoreKitPurchase(_:)`:
 
 ```swift
 let result = try await product.purchase(options: options)
@@ -116,11 +118,13 @@ Overloads take a `Product.PurchaseResult`, a `VerificationResult<Transaction>`, 
   Call it off the purchase's critical path. It performs a network round trip, and nothing a customer sees should wait on analytics.
 </Warning>
 
-If you skip it entirely, nothing is lost — the next `identify(_:)` syncs `Transaction.currentEntitlements` and picks the purchase up, at the latest on the following launch.
-
 <Note>
-  Requires ZeroSettleKit 1.6.0 or later. On earlier versions, call `identify(_:)` again after the purchase instead.
+  Requires ZeroSettleKit 1.6.0 or later. On earlier versions, skip this — the next `identify(_:)` picks the purchase up regardless.
 </Note>
+
+### You never need this if the SDK made the purchase
+
+`ZeroSettle.shared.purchase(productId:)`, `purchaseViaStoreKit(productId:)`, and the `.checkoutSheet` modifier all sync on your behalf. `recordStoreKitPurchase` exists for exactly one case: **your app called StoreKit's `Product.purchase()` itself, and you want that purchase reported now rather than at the next launch.**
 
 ## What lands in the dashboard
 
