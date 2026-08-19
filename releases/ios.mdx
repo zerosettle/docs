@@ -4,9 +4,9 @@ description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
 icon: 'apple'
 ---
 
-**Current version:** `1.5.2`
+**Current version:** `1.6.0`
 **Package:** Swift Package Manager / CocoaPods
-**Minimum requirements:** iOS 17.0+, Swift 5.9+, Xcode 15.0+
+**Minimum requirements:** iOS 17.0+, Swift 6.1+, Xcode 16.3+
 
 <Tip>
   Update to the latest version in Xcode: **File → Packages → Update to Latest Package Versions**, or update your `Package.swift` dependency.
@@ -17,6 +17,31 @@ icon: 'apple'
 </Warning>
 
 ---
+
+## August 2026
+
+<Update label="1.6.0" description="2026-08-19">
+### Observer-mode support, and a privacy manifest
+
+An additive minor for apps that use ZeroSettle to **track** purchases rather than to sell them. `Configuration` is untouched — no new fields, no changed defaults — so upgrading from 1.5.x is drop-in.
+
+**`recordStoreKitPurchase(_:)`** reports a StoreKit purchase your own code made with `Product.purchase()`. It is optional, and most apps never need it: buying through the SDK (`purchase`, `purchaseViaStoreKit`, `.checkoutSheet`) already syncs, and renewals, refunds, revocations, and purchases from other devices all arrive through the `Transaction.updates` listener regardless. It closes exactly one window — Apple does not redeliver a transaction StoreKit already returned from `Product.purchase()`, so an app that owns its paywall would otherwise wait until the next `identify(_:)` for its own sale to appear. See [Analytics-Only Integration](/iap/analytics-only).
+
+**A privacy manifest** now ships with the SDK, so you no longer have to declare our `UserDefaults` use or our data collection on our behalf — Xcode aggregates ours into your app's privacy report.
+
+- **Feature**: `recordStoreKitPurchase(_:)` — three non-throwing overloads taking a `Product.PurchaseResult`, a `VerificationResult<Transaction>`, or a `productId:`. Returns `Bool`; a failed report is retried by the same persistent queue that backs the StoreKit listener. Does **not** finish the transaction — an app on this path already owns that
+- **Feature**: `PrivacyInfo.xcprivacy` — declares `NSPrivacyAccessedAPICategoryUserDefaults` with reason `CA92.1`, `NSPrivacyTracking` false with no tracking domains, and four collected data types (user ID, purchase history, and the optional customer name/email you may pass)
+- **Feature**: `ZeroSettleError` and `CheckoutFailureReason` now conform to `Equatable`, so `error == .cancelled` compiles. Cases carrying an `any Error` payload (`apiError`, `restoreEntitlementsFailed`, `storeKitVerificationFailed`) compare by case identity only, since `Error` is not `Equatable`. `ZeroSettleError.isCancellation(_:)` remains the right tool for cancellations — it also catches `CancellationError` and StoreKit's `userCancelled`
+- **Fix**: `objectWillChange` now fires for every observable mutation. Previously only `entitlements` and `pendingClaims` published, so a view reading `ZeroSettle.shared` through `@ObservedObject` / `@StateObject` missed changes to `products`, `pendingCheckout`, `isConfigured`, `currentOffer`, and the entitlements reset inside `identify(_:)` — a product list bound that way never re-rendered when the catalog loaded
+
+<Warning>
+  The `objectWillChange` fix is the one behavioural change in this release. It is a fix, but it is visible: `ObservableObject` consumers begin receiving updates they were previously missing, so a view that appeared static may now re-render. Apps reading `ZeroSettle.shared` directly in a SwiftUI `body` (`@Observable` tracking) were never affected.
+</Warning>
+
+<Note>
+  **Toolchain floor.** `Package.swift` is `swift-tools-version: 6.1` and uses package traits, so 1.6.0 requires Xcode 16.3+. Earlier documentation stated Swift 5.9 / Xcode 15, which was never accurate for the trait-based manifest.
+</Note>
+</Update>
 
 ## June 2026
 
