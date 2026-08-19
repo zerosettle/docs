@@ -1,0 +1,78 @@
+---
+title: 'ZeroSettle in Claude & ChatGPT'
+description: 'Ask your AI assistant about your revenue, subscribers, experiments and customers — straight from Claude Code, claude.ai, or ChatGPT'
+icon: 'robot'
+---
+
+ZeroSettle ships an official **MCP server** so you can use your account from the AI tools you already work in. Connect once, sign in with your ZeroSettle login, and your assistant can answer questions about your apps using the same data the dashboard shows — no exports, no copy-pasting, no API keys to manage.
+
+```text
+> How did Just One do this week, and what's driving churn?
+> Compare revenue by source for Pawprints over the last 90 days.
+> When did customer ryan@example.com last pay, and what do they have access to?
+> Which pricing experiments are running, and is anything ready to call?
+> Write me a Monday status report for all my apps.
+```
+
+<Note>
+  **MCP** (Model Context Protocol) is the open standard Claude, ChatGPT and most other AI clients use to talk to external tools. ZeroSettle's server lives at `https://mcp.zerosettle.io/mcp` and works with any MCP client that supports remote servers with OAuth.
+</Note>
+
+## What you can do
+
+The server exposes **14 read-only tools** that map onto the questions developers actually ask. Your assistant picks the right ones and combines them — you just ask in plain language.
+
+<CardGroup cols={2}>
+  <Card title="Revenue & KPIs" icon="chart-line">
+    App overview, revenue by day / source / product, MRR waterfall, retention cohorts, active users, acquisition funnel.
+  </Card>
+  <Card title="Subscriptions" icon="arrows-rotate">
+    Active trials, recent churn, daily subscriber history, current MRR / ARR / ARPU.
+  </Card>
+  <Card title="Customers & transactions" icon="users">
+    Recent transactions with filters, a single customer's profile, entitlements and purchase history.
+  </Card>
+  <Card title="Growth" icon="flask">
+    Pricing experiments and their results, Switch &amp; Save migration status, the weekly digest.
+  </Card>
+</CardGroup>
+
+See the full [tool reference](/ai/tools) for every tool and its parameters.
+
+## What it does not do
+
+The v1 server is **strictly read-only**. It cannot change prices, start experiments, refund customers, edit products, or touch any settings — and that's enforced on ZeroSettle's side, not just by which tools are listed, so a prompt can't talk the assistant into a write. Write actions (launching experiments, Switch &amp; Save campaigns) are on the roadmap and will arrive as separately-scoped tools.
+
+It also never sees credential-management endpoints: API keys and Stripe onboarding are not reachable through the assistant. Details in [Security](/ai/security).
+
+## Get connected
+
+<CardGroup cols={3}>
+  <Card title="Claude Code" icon="terminal" href="/ai/connect#claude-code">
+    One command, then sign in.
+  </Card>
+  <Card title="claude.ai & Claude Desktop" icon="message" href="/ai/connect#claude-ai-and-claude-desktop">
+    Add as a custom connector.
+  </Card>
+  <Card title="ChatGPT" icon="comment" href="/ai/connect#chatgpt">
+    Add in Developer mode.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="You add the server URL to your client">
+    `https://mcp.zerosettle.io/mcp`. Your client discovers ZeroSettle's OAuth configuration automatically.
+  </Step>
+  <Step title="You sign in with ZeroSettle">
+    A browser window opens to the normal ZeroSettle sign-in. You approve the connection on a consent screen — once.
+  </Step>
+  <Step title="Your assistant calls tools on your behalf">
+    Every request carries your own short-lived credential. The server forwards it to the ZeroSettle API, which applies exactly the same tenant scoping and permissions as the dashboard. The MCP server holds no standing access to your data.
+  </Step>
+</Steps>
+
+<Tip>
+  Add **live** and **sandbox** to your questions to pick the environment — every tool takes an `environment` parameter and defaults to live.
+</Tip>

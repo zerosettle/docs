@@ -1,0 +1,121 @@
+---
+title: 'Connect Your Assistant'
+description: 'Set up the ZeroSettle MCP server in Claude Code, claude.ai, Claude Desktop, ChatGPT, or any other MCP client'
+icon: 'plug'
+---
+
+The server URL is the same everywhere:
+
+```text
+https://mcp.zerosettle.io/mcp
+```
+
+Every client below connects with **OAuth** — you sign in with your ZeroSettle account in a browser and approve once. Nothing to copy, no headers, no keys. Access is tied to your ZeroSettle user, scoped to your organization's apps, and can be removed from the client at any time.
+
+<Tabs>
+  <Tab title="Claude Code">
+    <Steps>
+      <Step title="Add the server">
+        From any terminal:
+
+        ```bash
+        claude mcp add --transport http zerosettle https://mcp.zerosettle.io/mcp
+        ```
+
+        Add `--scope user` to make it available in every project rather than just the current one.
+      </Step>
+      <Step title="Authenticate">
+        Start a Claude Code session, run `/mcp`, select **zerosettle**, and choose **Authenticate**. A browser tab opens to the ZeroSettle sign-in; approve the connection and return to the terminal. Claude Code stores the credential and refreshes it automatically.
+      </Step>
+      <Step title="Ask">
+        ```text
+        > List my ZeroSettle apps.
+        > Give me a revenue overview for Just One, live data, last 30 days.
+        > Which customers churned this month, and what were they paying?
+        ```
+      </Step>
+    </Steps>
+
+    <Tip>
+      Or ask Claude Code to do it: *"Set up the ZeroSettle MCP integration"* — it knows to run the command above, and you finish the sign-in in the browser.
+    </Tip>
+  </Tab>
+
+  <Tab title="claude.ai & Claude Desktop">
+    Custom connectors are available on paid Claude plans and are shared between claude.ai and the Claude Desktop app.
+
+    <Steps>
+      <Step title="Open connector settings">
+        In claude.ai: **Settings → Connectors → Add custom connector** (organization admins on Team/Enterprise: **Organization settings → Connectors**).
+      </Step>
+      <Step title="Enter the server URL">
+        Name it **ZeroSettle** and paste `https://mcp.zerosettle.io/mcp`. Leave the advanced OAuth fields blank — the client registers itself.
+      </Step>
+      <Step title="Connect and sign in">
+        Click **Connect**, sign in with ZeroSettle in the popup, approve. ZeroSettle's tools now appear in the tools menu of every new chat (you can toggle them per conversation).
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="ChatGPT">
+    Remote MCP connectors require **Developer mode** (Plus, Pro, Business, Enterprise and Education plans; web only).
+
+    <Steps>
+      <Step title="Enable Developer mode">
+        **Settings → Apps → Advanced settings → Developer mode**.
+      </Step>
+      <Step title="Add the connector">
+        **Settings → Apps → Create** (or "Add custom connector"), name it **ZeroSettle**, URL `https://mcp.zerosettle.io/mcp`, authentication **OAuth**. Complete the ZeroSettle sign-in when prompted.
+      </Step>
+      <Step title="Use it in a chat">
+        Open a new chat, enable the ZeroSettle connector under the tools menu, and ask away. ChatGPT shows each tool call inline and asks you to confirm the first time.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Other MCP clients">
+    Any client that supports **remote MCP servers over Streamable HTTP with OAuth 2.1** (dynamic client registration) can connect. Point it at `https://mcp.zerosettle.io/mcp` and complete the sign-in when the client opens the browser. For example, Cursor, Windsurf, and VS Code's MCP support all take a server URL in their MCP settings.
+
+    For headless use (CI, scripts, agents that can't open a browser) use a personal access token instead of OAuth — see [Security → Personal access tokens](/ai/security#personal-access-tokens).
+  </Tab>
+</Tabs>
+
+## Things to try
+
+Once connected, these are good first prompts — each exercises a different part of the server:
+
+| Ask | What runs |
+|---|---|
+| "List my apps" | `list_apps` |
+| "How is *Pawprints* doing?" | `get_app_overview` |
+| "Revenue by source for *Just One* over the last 90 days" | `get_revenue` |
+| "Show me the MRR waterfall for the last quarter" | `get_mrr_movement` |
+| "Who churned in the last 30 days?" | `get_subscription_health` |
+| "What's up with customer *a@b.com*?" | `get_customer` |
+| "Are any pricing experiments ready to call?" | `get_experiments` |
+| "Write this week's report for all my apps" | `get_weekly_report` + `get_app_overview` per app |
+
+You can refer to apps by **name, bundle id, slug, or id** — "Just One", `io.zerosettle.JustOne`, and `30` all work. Prefixes are fine too ("Paw").
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Sign-in completes but the first tool call fails with auth_expired">
+    The client's credential didn't reach the server, or it has expired and the client didn't refresh. In Claude Code run `/mcp` → **zerosettle** → re-authenticate; in claude.ai/ChatGPT disconnect and reconnect the connector. If it persists, remove and re-add the server.
+  </Accordion>
+  <Accordion title="The assistant says the app wasn't found">
+    The error lists the apps visible to your account. If yours isn't there, you're signed in to ZeroSettle with a user who isn't a member of that organization — sign out of ZeroSettle in the browser and reconnect with the right account.
+  </Accordion>
+  <Accordion title="I'm rate limited">
+    The server allows 60 requests per minute per credential (and a separate ceiling per IP). Agents composing a big report can burst; it clears within the minute. If you hit it routinely, ask the assistant to narrow date ranges or apps per call.
+  </Accordion>
+  <Accordion title="A query times out">
+    Tools return a `timeout` error when the API takes more than 25 s — usually an all-time transaction scan on a large app. Ask for a date range or a specific product.
+  </Accordion>
+  <Accordion title="I see sandbox data / live data when I expected the other">
+    Every tool defaults to **live**. Say "in sandbox" (or pass `environment: sandbox`) for test data.
+  </Accordion>
+  <Accordion title="How do I disconnect?">
+    Remove the server from the client (`claude mcp remove zerosettle`, or delete the connector in claude.ai/ChatGPT). Credentials are short-lived and only refresh while the connector is installed, so removing it ends access.
+  </Accordion>
+</AccordionGroup>

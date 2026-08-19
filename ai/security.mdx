@@ -1,0 +1,71 @@
+---
+title: 'Authentication & Security'
+description: 'How the ZeroSettle MCP server authenticates you, what it can and cannot reach, and how to use personal access tokens for headless clients'
+icon: 'shield-halved'
+---
+
+The MCP server is designed so that connecting an AI assistant to your account is no more exposure than opening the dashboard — and strictly less, because it can only read.
+
+## How sign-in works
+
+ZeroSettle's MCP server is an **OAuth 2.1 protected resource**, with ZeroSettle's own identity provider as the authorization server. When you add the server URL to a client:
+
+<Steps>
+  <Step title="Discovery">
+    The client fetches `https://mcp.zerosettle.io/.well-known/oauth-protected-resource/mcp` and learns where to send you to sign in. It registers itself automatically (dynamic client registration) — there is nothing to configure on your side.
+  </Step>
+  <Step title="Consent">
+    Your browser opens the ZeroSettle sign-in. After signing in you see a consent screen naming the client (e.g. "Claude Code") and what it will be able to see — your identity and basic profile. You approve once.
+  </Step>
+  <Step title="Short-lived credentials">
+    The client receives an access token that **expires after 24 hours** and a refresh token it uses to renew silently while the connector remains installed. Remove the connector and renewal stops.
+  </Step>
+</Steps>
+
+Every tool call carries your token. The MCP server verifies it, then forwards the **same token** to the ZeroSettle API, which verifies it again independently, resolves your organization, and applies the same permissions the dashboard would. The MCP server has no standing credential of its own and cannot read anyone's data without a live user token.
+
+## What the assistant can — and can't — reach
+
+| | |
+|---|---|
+| **Scope** | Your organization's apps only — the same boundary as your dashboard login. |
+| **Read-only** | Enforced server-side: any non-read request made with an assistant credential is rejected by the ZeroSettle API regardless of which tool asked. Listing only read tools is defense in depth, not the only guard. |
+| **Never reachable** | API keys, secret keys, and Stripe / store-connection settings. Those endpoints refuse assistant credentials outright. |
+| **Writes** | None today. Future action tools (launching experiments, campaigns) will require a separate, explicit grant. |
+| **Rate limits** | 60 requests / minute per credential and a per-IP ceiling at the edge; a per-organization ceiling at the API. |
+| **Logging** | The server logs tool name, timing, status, and a hashed credential id — never tool arguments, responses, or tokens. |
+
+<Info>
+  Clients like Claude Code and ChatGPT show you each tool call as it happens and (by default) ask before the first call in a conversation. That confirmation is the client's; ZeroSettle's read-only enforcement applies whether or not you tighten it.
+</Info>
+
+## Removing access
+
+Remove the server from the client — `claude mcp remove zerosettle`, or delete the connector in claude.ai / ChatGPT settings. Tokens are short-lived and refresh only while the connector exists, so removal ends access within 24 hours at the latest. If you believe a token was exposed, contact support and we will revoke it immediately.
+
+## Personal access tokens
+
+OAuth needs a browser. For **CI jobs, scripts, and agents that can't open one**, ZeroSettle supports long-lived personal access tokens (PATs) that identify a user within an organization:
+
+```text
+zs_pat_…
+```
+
+Pass it as a bearer token when adding the server:
+
+```bash
+claude mcp add --transport http zerosettle https://mcp.zerosettle.io/mcp \
+  --header "Authorization: Bearer zs_pat_…"
+```
+
+PATs carry the same read-only, organization-scoped permissions as an OAuth session, are revocable individually, and record when they were last used. Minting and revoking them from the dashboard (**Settings → API tokens**) is rolling out; if you need one before it reaches your account, [contact support](mailto:support@zerosettle.io) and we'll issue it. Treat a PAT like a password: it is shown once, and anyone holding it can read your data until it is revoked.
+
+<Warning>
+  Prefer OAuth for anything a human operates. Reserve PATs for automation, keep them in a secrets manager, and revoke any you stop using.
+</Warning>
+
+## Data handling
+
+- The MCP server is a stateless proxy: no database, no caching of your data, no retention beyond the in-flight request.
+- Responses go to **your** AI client; what that client stores or trains on is governed by its provider's terms (Anthropic, OpenAI, …), not by ZeroSettle.
+- The server is hosted alongside the ZeroSettle API and covered by the same [security and compliance](/iap/compliance) posture.

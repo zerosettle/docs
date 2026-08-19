@@ -1,0 +1,244 @@
+---
+title: 'Tool Reference'
+description: 'Every tool the ZeroSettle MCP server exposes, with parameters, what comes back, and an example prompt'
+icon: 'list'
+---
+
+The ZeroSettle MCP server exposes **14 tools**, all read-only. You don't call them directly — your assistant does, based on what you ask — but knowing what exists helps you ask well.
+
+## Conventions
+
+Every tool that takes an `app` accepts the app's **id, name, slug, or bundle id**, case-insensitive; a unique prefix of the name works too. Every tool takes `environment` (`live` default, or `sandbox`). Dates are `YYYY-MM-DD`. Money is returned in cents unless a field says otherwise. Responses are compact JSON designed for an LLM to reason over; the assistant turns them into prose, tables or charts.
+
+When something goes wrong the tool returns a structured error instead of throwing:
+
+| `error` | Meaning |
+|---|---|
+| `auth_expired` | Credential missing, expired or revoked — re-authenticate. |
+| `not_found` | App/customer not found. The message lists what *was* found so the assistant can self-correct. |
+| `bad_request` | Conflicting or invalid parameters (e.g. a date preset *and* a date range). |
+| `rate_limited` | Slow down; `retry_after_sec` says how long. |
+| `timeout` | The query took &gt; 25 s — narrow the range. |
+| `backend_unavailable` | ZeroSettle API unreachable; retry. |
+
+---
+
+## Discovery &amp; catalog
+
+### `list_apps`
+
+The apps (projects) in your account with ids, names, bundle ids, and which platforms are set up. Call this first when you need an app id.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `environment` | `live` \| `sandbox` | default `live` |
+
+**Returns** `apps[]` — `{ id, name, slug, bundle_id, is_demo, platforms: { ios, android, web } }`.
+
+> *"What apps do I have on ZeroSettle?"*
+
+### `list_products`
+
+The product catalog for an app: one-time purchases, subscription groups and product families, with storefront links (StoreKit / Play / web) and prices.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `include_archived` | boolean | default `false` |
+| `environment` | | |
+
+**Returns** `{ app, in_app_purchases[], subscription_groups[], families[] }`.
+
+> *"What subscriptions does Just One sell, and at what prices?"*
+
+---
+
+## Revenue &amp; analytics
+
+### `get_app_overview`
+
+The "how is my app doing" snapshot: revenue (today / this week / this month / all-time), revenue by source, fee breakdown, transaction counts, active and total users, web-checkout share, and subscription KPIs — **MRR, ARR, active subscriptions, churn, trials, ARPU**. Use this for the *current* MRR figure.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `date_from`, `date_to` | date | optional; narrows the fee-breakdown section only |
+| `environment` | | |
+
+**Returns** `{ app, revenue, revenue_by_source, fee_breakdown, fee_breakdown_by_source, transactions, active_users, total_users, web_checkout_percent, subscriptions: { mrr_cents, arr_cents, mrr_change_pct, active_subscriptions, new_subscriptions_30d, churned_30d, churn_rate_pct, active_trials, trial_conversion_pct, refund_rate_pct, arpu_cents, … } }`.
+
+> *"What's our MRR for Pawprints right now?"*
+
+### `get_revenue`
+
+Revenue grouped by **day** (time series), **source** (web checkout / StoreKit / Play), or **product**.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `group_by` | `day` \| `source` \| `product` | default `day` |
+| `days` | 1–365 | trailing window, default 30 (ignored when `start`/`end` given) |
+| `start`, `end` | date | explicit range; `group_by=day` only |
+| `environment` | | |
+
+**Returns** for `day`: `{ days, granularity, series: [{ date, revenue, transactions }] }`; for `source`: `{ window, gross_cents, buckets[] }`; for `product`: `{ products[], total_revenue, total_purchases }`.
+
+> *"Chart daily revenue for Just One in July."* · *"How much of Pawprints' revenue is web checkout vs App Store?"*
+
+### `get_mrr_movement`
+
+The MRR waterfall over a trailing window: starting MRR, new, expansion, reactivation, contraction, churned, ending MRR. Use this for how MRR *changed*, not the current figure.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `days` | 1–365 | default 30 |
+| `environment` | | |
+
+**Returns** `{ starting_mrr_cents, new_cents, expansion_cents, reactivation_cents, contraction_cents, churned_cents, ending_mrr_cents }`.
+
+> *"Break down what moved MRR last quarter."*
+
+### `get_retention`
+
+Monthly cohort retention: subscriber cohorts by start month and how many remain each month, plus a summary.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `months` | 1–24 | default 6 |
+| `environment` | | |
+
+**Returns** `{ cohorts[], summary }`.
+
+> *"How does 3-month retention compare across this year's cohorts?"*
+
+### `get_active_users`
+
+DAU / WAU / MAU plus a daily active-user series.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `window` | `7d` \| `30d` \| `90d` \| `365d` | default `30d` |
+| `offset_days` | integer | shift the window back N days to compare a prior period |
+| `environment` | | |
+
+**Returns** `{ as_of, today, dau, wau, mau, daily_series[] }`.
+
+> *"Is MAU up or down versus the previous 30 days?"*
+
+### `get_subscription_health`
+
+Active trials, subscribers churned in the last 30 days, and a daily history of active subs / trials / new / churned counts.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `window` | `7d` \| `30d` \| `90d` \| `365d` | history window (365d is capped to 90d) |
+| `environment` | | |
+
+**Returns** `{ active_trials: { total, summary, trials[] }, churned_last_30d: { total, subscribers[] }, history: { as_of, window_days, daily_series[] } }`.
+
+> *"Who churned this month and how many trials are live?"*
+
+### `get_funnel`
+
+The paywall → checkout → purchase funnel for a date range: stages, conversion rates, breakdown by product and screen, and a time series.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `start_date`, `end_date` | date | **required** |
+| `product_id`, `screen_name` | string | optional filters |
+| `environment` | | |
+
+**Returns** `{ stages, conversion_rates, by_product, by_screen, time_series }`.
+
+> *"What was paywall-to-purchase conversion in August, by screen?"*
+
+---
+
+## Customers &amp; transactions
+
+### `list_transactions`
+
+Recent transactions for an app, newest first, with filters and summary stats. By default each transaction is a compact summary (~15 fields); pass `fields: full` for every backend field.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `date` | `today` \| `7d` \| `30d` \| `90d` \| `month` \| `last_month` \| `ytd` \| `all` | preset; exclusive with `date_from`/`date_to` |
+| `date_from`, `date_to` | date | explicit range |
+| `product_id` | string | comma-separated ids |
+| `email`, `user_id` | string | filter by customer |
+| `trial` | `yes` \| `no` | |
+| `kind` | `initial` \| `renewal` \| `upgrade` | |
+| `status_group` | `real` \| `abandoned` | default `real` |
+| `limit`, `offset` | integer | default 15 / 0, max 100 |
+| `fields` | `summary` \| `full` | default `summary` |
+| `environment` | | |
+
+**Returns** `{ total, limit, offset, stats: { total, today, revenueCents, avgCents, refundRate, statusCounts, sourceBreakdown }, transactions[] }` where each summary is `{ id, product_id, product_name, amount, currency, status, kind, source, is_trial, is_subscription, timestamp, customer: { identity_id, email, user_id }, entitlement: { id, status, active, expires_at }, refunded_at, refund_amount_cents, experiment, price_is_estimated }`.
+
+> *"When was the last transaction on Just One?"* · *"List refunds in the last 30 days."*
+
+### `get_customer`
+
+Everything about one customer: profile and health, current entitlements (what they have access to, from which source, expiring when), and their transactions. Accepts a numeric customer id or an email address.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `customer` | string | customer id **or** email |
+| `fields` | `summary` \| `full` | transaction detail level |
+| `environment` | | |
+
+**Returns** `{ customer, metrics, health, tags, entitlements[], transactions[], transaction_total }`.
+
+> *"Does a@b.com still have access, and when does it expire?"*
+
+---
+
+## Growth
+
+### `get_experiments`
+
+Pricing / offer experiments for an app. Without `experiment_id`: a compact list (status, variant count, responses, outcome). With it: full detail (variants, rollout) plus results (per-variant metrics, significance, headline).
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `experiment_id` | integer | optional |
+| `environment` | | |
+
+**Returns** list mode `{ experiments: [{ id, name, flow_type, status, variant_count, total_responses, created_at, started_at, winning_variant_id, outcome, target_products }] }`; detail mode `{ experiment, results: { variants[], significance, test_window, primary_metric, headline } }`.
+
+> *"Summarise the results of experiment 12 — should we ship it?"*
+
+### `get_switch_save_status`
+
+Switch &amp; Save (store → web migration) status: the per-platform migration funnel (Apple / Google) and readiness (Google Pay enabled, active campaigns, recent migrations, manual-intervention rate).
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `environment` | | |
+
+**Returns** `{ funnel: { apple, google }, readiness: { google_pay_enabled, active_migration_campaigns, recent_migrations_30d, manual_intervention_rate_30d } }`.
+
+> *"How is the Switch &amp; Save campaign converting on iOS vs Android?"*
+
+### `get_weekly_report`
+
+ZeroSettle's pre-aggregated weekly digest for an app — experiments concluded / running / waiting, milestones, and price changes. The best seed for "write me this week's report". `week_start` must be a Monday; omit it for the current week.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `app` | string | required |
+| `week_start` | date (Monday) | default: current week |
+| `environment` | | |
+
+**Returns** `{ week_start, week_end, concluded[], running[], waiting[], milestones[], price_changes[] }`.
+
+> *"Draft my Monday update from last week's digest plus current MRR."*

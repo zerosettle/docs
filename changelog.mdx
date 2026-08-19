@@ -17,6 +17,18 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## August 2026
 
+<Update label="Platform" description="2026-08-19">
+### ZeroSettle MCP server — use your account from Claude and ChatGPT
+
+ZeroSettle now ships an official **MCP server** at `https://mcp.zerosettle.io/mcp`. Add it to Claude Code, claude.ai / Claude Desktop, ChatGPT (Developer mode), or any MCP client that supports remote servers, sign in once with your ZeroSettle account, and ask about your apps in plain language.
+
+- **14 read-only tools** — app overview, revenue by day / source / product, MRR waterfall, retention, active users, funnel, subscription health, transactions, customer detail, experiments, Switch &amp; Save status, weekly digest. See the [tool reference](/ai/tools).
+- **OAuth sign-in, no keys** — the assistant uses a short-lived credential tied to your user and organization; the server holds no standing access. Read-only is enforced server-side. Details in [Security](/ai/security).
+- **Personal access tokens** for CI and headless agents.
+
+Nothing changes for SDK clients. Start at [ZeroSettle in Claude &amp; ChatGPT](/ai/overview).
+</Update>
+
 <Update label="SDK" description="2026-08-19">
 ### Observer mode: track StoreKit purchases without moving checkout
 

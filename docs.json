@@ -130,6 +130,15 @@
               "iap/best-practices",
               "iap/sample-app"
             ]
+          },
+          {
+            "group": "AI Assistants",
+            "pages": [
+              "ai/overview",
+              "ai/connect",
+              "ai/tools",
+              "ai/security"
+            ]
           }
         ]
       },
