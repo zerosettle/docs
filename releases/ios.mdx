@@ -4,7 +4,7 @@ description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
 icon: 'apple'
 ---
 
-**Current version:** `1.6.0`
+**Current version:** `1.6.1`
 **Package:** Swift Package Manager / CocoaPods
 **Minimum requirements:** iOS 17.0+, Swift 6.1+, Xcode 16.3+
 
@@ -17,6 +17,22 @@ icon: 'apple'
 </Warning>
 
 ---
+
+## September 2026
+
+<Update label="1.6.1" description="2026-09-08">
+### Browser checkout fixes: swipe-to-dismiss and `onPresent`
+
+Two fixes for the `.safari` and `.safariVC` checkout paths. No API changes — a drop-in upgrade from 1.6.0.
+
+**Swipe-to-dismiss no longer strands the caller.** `SFSafariViewController` can be dismissed by swiping the sheet away, but `safariViewControllerDidFinish` fires only when the user taps the close button — a swipe routes through `UIAdaptivePresentationControllerDelegate` instead, which the checkout flow never adopted. The result: swiping left `purchase()` suspended forever, `onComplete` never fired, and a buy button in a loading state spun for the entire session. The transaction poller also ran to exhaustion rather than dismissing, since the "keep polling" guard is only cleared when the continuation resumes. Both delegates now wire to the same idempotent resume call.
+
+**`onPresent` now fires on the browser path.** `.checkoutSheet`'s `onPresent` callback previously only fired on the WebView path. Apps using it to clear a "buy tapped" loading state — the pattern the sample app documents — kept that state set for the entire browser session. It now fires at delegation time on the Safari/safariVC path (marginally before the browser appears, but sufficient for clearing loading indicators).
+
+- **Fix**: Swipe-dismissing the checkout browser sheet now correctly resumes the checkout continuation — `purchase()` returns, `onComplete` fires, and the transaction poller exits cleanly
+- **Fix**: `.checkoutSheet(item:…)` `onPresent` now fires on the `.safari` and `.safariVC` checkout paths
+- **Fix**: `PrivacyInfo.xcprivacy` now ships correctly to CocoaPods consumers (was already bundled in SPM since 1.6.0)
+</Update>
 
 ## August 2026
 
