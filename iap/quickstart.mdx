@@ -57,6 +57,10 @@ Configure the SDK early in your app lifecycle. `configure()` is synchronous — 
             WindowGroup {
                 ContentView()
                     // identify() is async — as soon as you know who the user is.
+                    // `Auth.currentUser.id` stands in for YOUR auth system's user id
+                    // (Firebase, your own backend, whatever you use). No user system
+                    // yet? See Identifying Users for the anonymous option — read it
+                    // first, the choice is hard to reverse later.
                     .task {
                         try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                     }
@@ -157,8 +161,10 @@ ZeroSettle uses universal links to return checkout results to your app when the 
 </Tabs>
 
 Make sure you've added the Associated Domains entitlement to your app target:
-- **Sandbox:** `applinks:api.zerosettle.io?mode=developer`
-- **Production:** `applinks:api.zerosettle.io`
+- **Sandbox:** `applinks:api.zerosettle.io?mode=developer` and `applinks:zerosettle.io`
+- **Production:** `applinks:api.zerosettle.io` and `applinks:zerosettle.io`
+
+Both domains are required. `api.zerosettle.io` handles the checkout callback; `zerosettle.io` handles the "Return to App" fallback. See [Universal Links](/iap/universal-links) for the full setup.
 
 See [Universal Links](/iap/universal-links) for step-by-step setup.
 

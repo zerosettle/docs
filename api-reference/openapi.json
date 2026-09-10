@@ -2281,12 +2281,11 @@
               "active",
               "expired",
               "cancelled",
-              "paused",
-              "revoked",
-              "billing_retry",
-              "billing_grace_period"
+              "grace_period",
+              "past_due",
+              "paused"
             ],
-            "description": "Current entitlement status."
+            "description": "Current entitlement status. `active`, `cancelled`, `grace_period` and `past_due` all mean the user still has access — `cancelled` means auto-renew is off but the paid period has not ended. Only `expired` and `paused` mean access has stopped."
           },
           "is_active": {
             "type": "boolean",

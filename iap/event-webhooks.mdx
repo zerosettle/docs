@@ -293,6 +293,12 @@ app.post('/webhooks/zerosettle', express.raw({ type: 'application/json' }), (req
   changes we can make.
 </Info>
 
+- **Pause, resume and dispute reversals do not emit events.** If you offer
+  [pause](/iap/custom-cancel-flow) as a cancel-flow option, the access change reaches
+  your server through no event — and neither does a chargeback being reversed in your
+  favour. A chargeback itself **does** arrive, as `subscription.expired`. Until this gap
+  closes, re-check entitlement state on app foreground rather than treating the event
+  stream as the complete picture.
 - **No store resource id.** The payload does not include the Stripe subscription id or
   the Apple `original_transaction_id`. Key your records on
   `external_user_id` + `product_id`, and use
