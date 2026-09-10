@@ -64,6 +64,8 @@ Configure the SDK early in your app lifecycle. `configure()` is synchronous — 
                     .task {
                         try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                     }
+                    // Harmless on the default webview mode, and already in place if you
+                    // ever switch to a Safari checkout mode. See Step 2.
                     .zeroSettleHandler()
             }
         }
@@ -107,9 +109,20 @@ Configure the SDK early in your app lifecycle. `configure()` is synchronous — 
 | `maxPreloadedWebViews` | `nil` | Cap WebView pre-rendering pool size. See [Preloading](/iap/preloading) |
 
 </Step>
-<Step title="Install the universal link handler">
+<Step title="Install the universal link handler (only for Safari checkout modes)">
 
-ZeroSettle uses universal links to return checkout results to your app when the user pays in Safari or an in-app browser. You must install a handler so these callbacks reach the SDK.
+<Check>
+  **Skip this step for now if you are just getting to a first purchase.** New accounts
+  default to `webview` checkout, which runs inside your app and returns the result
+  directly — no universal link, no Associated Domains, no paid Apple Developer account,
+  no physical device.
+</Check>
+
+If you switch your checkout mode to in-app Safari (`safari_vc`) or external Safari
+(`safari`), the result comes back through a universal link instead, and you need a handler
+to receive it. Because checkout mode is a server-side setting, add the handler before you
+change modes — see [Universal Links](/iap/universal-links) for the full setup, which does
+require a paid Apple Developer account and a physical device to test.
 
 <Tabs>
   <Tab title="SwiftUI">
@@ -321,6 +334,8 @@ let hasPremium = entitlements.contains {
                     .task {
                         try? await ZeroSettle.shared.identify(.user(id: Auth.currentUser.id))
                     }
+                    // Harmless on the default webview mode, and already in place if you
+                    // ever switch to a Safari checkout mode. See Step 2.
                     .zeroSettleHandler()
             }
         }

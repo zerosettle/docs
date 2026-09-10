@@ -6,11 +6,35 @@ icon: 'link'
 
 After a user completes (or cancels) checkout in a browser, ZeroSettle redirects them back to your app via a universal link (iOS) or deep link (Android). This guide covers the setup required to receive these callbacks.
 
-<Note>
-  Universal links are **required** for Safari-based checkout flows to return the purchase result to your app. If you're using the embedded payment sheet (`checkoutSheet`) exclusively, universal links are optional but recommended for deep linking.
-</Note>
+<Check>
+  **You probably don't need this yet.** New accounts default to `webview` checkout, which
+  runs entirely inside your app and returns the result in-process — no universal link
+  involved. This page matters when you switch to a Safari-based checkout mode.
+</Check>
+
+## Do you need universal links?
+
+It depends on one setting: your checkout mode, configured per jurisdiction in the
+Dashboard under **Checkout Configuration**.
+
+| Checkout mode | Where checkout runs | Universal links |
+|---|---|---|
+| `webview` **(default)** | A `WKWebView` inside your app | **Not required** — the result returns in-process |
+| `native_pay` | Native Apple Pay sheet | **Not required** |
+| `safari_vc` | In-app Safari (`SFSafariViewController`) | **Required** to return the result |
+| `safari` | External Safari — the user leaves your app | **Required** to return the result |
+
+<Warning>
+  Checkout mode is a **server-side** setting, so it can change without an app release. If
+  anyone switches your account to a Safari mode and your app has no universal-link handler,
+  every checkout result is lost. Add the handler before changing modes — or now, if you
+  would rather not depend on that ordering.
+</Warning>
 
 ## How It Works
+
+This is the Safari flow. In `webview` mode, steps 2 through 5 do not happen — the sheet
+reports completion directly to the SDK.
 
 1. User initiates purchase via `.checkoutSheet()` (iOS) or the platform-specific purchase API
 2. SDK opens Stripe checkout in Safari
