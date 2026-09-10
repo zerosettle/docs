@@ -101,6 +101,7 @@
                 "icon": "server",
                 "pages": [
                   "iap/webhooks",
+                  "iap/event-webhooks",
                   "iap/stripe-integration"
                 ]
               },

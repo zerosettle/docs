@@ -1,0 +1,302 @@
+---
+title: 'Event Webhooks'
+description: 'Receive subscription lifecycle events on your own server'
+icon: 'bell'
+---
+
+ZeroSettle can POST an event to your server whenever a subscription changes — a
+purchase, a renewal, a cancellation, a refund. Use these to keep your own database in
+sync, trigger emails, or notify your team, without polling our API.
+
+<Note>
+  This page covers events **we send to you**. For the Stripe and App Store notifications
+  that ZeroSettle receives and handles on your behalf, see
+  [Webhooks & Server-Side](/iap/webhooks) — you do not need to handle those yourself.
+</Note>
+
+## Setting up an endpoint
+
+<Steps>
+  <Step title="Add your endpoint">
+    In the Dashboard, go to **Integrations → Webhooks** and add your HTTPS URL.
+  </Step>
+  <Step title="Copy the signing secret">
+    It is shown **once**. If you lose it, use **Rotate** to generate a new one.
+  </Step>
+  <Step title="Choose your events">
+    Subscribe to everything (`*`) or pick a subset. `*` includes event types added in
+    future, so your handler must tolerate a `type` it does not recognise.
+  </Step>
+</Steps>
+
+<Warning>
+  Endpoints are **per environment**. A live endpoint receives nothing from sandbox
+  testing. If you want events while testing, add a separate endpoint in sandbox mode.
+</Warning>
+
+## Event types
+
+<AccordionGroup>
+  <Accordion title="Subscription lifecycle">
+    | Event | When it fires |
+    |---|---|
+    | `subscription.purchased` | A new subscription was purchased (first grant) |
+    | `subscription.renewed` | An existing subscription renewed for a new period |
+    | `subscription.cancelled` | Auto-renew was turned off. **Access continues until period end** |
+    | `subscription.expired` | The subscription ended and access was revoked |
+    | `subscription.billing_issue` | A renewal payment failed; entered grace or past-due |
+    | `subscription.recovered` | Recovered from a billing issue and is active again |
+    | `subscription.product_changed` | The subscriber switched product (upgrade, downgrade, or migration) |
+  </Accordion>
+
+  <Accordion title="Trials">
+    | Event | When it fires |
+    |---|---|
+    | `trial.started` | A free trial began |
+    | `trial.converted` | A free trial converted to a paid subscription |
+  </Accordion>
+
+  <Accordion title="Payments">
+    | Event | When it fires |
+    |---|---|
+    | `transaction.refunded` | A payment was refunded |
+  </Accordion>
+
+  <Accordion title="Switch & Save eligibility">
+    | Event | When it fires |
+    |---|---|
+    | `migration.eligible` | A store subscriber became eligible for the Switch & Save offer |
+    | `migration.ineligible` | A subscriber is no longer eligible |
+    | `migration.completed` | A subscriber completed the migration to web billing |
+
+    See [Switch & Save](/iap/switch-and-save) for the flow these describe.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  `subscription.cancelled` and `subscription.expired` are easy to confuse. Cancelled means
+  they turned off auto-renew and **still have access**. Expired means access has ended.
+  Revoke on `expired`, not on `cancelled`.
+</Tip>
+
+## Payload
+
+Subscription and trial events share one envelope:
+
+```json
+{
+  "id": "evt_12345",
+  "type": "subscription.purchased",
+  "created": "2026-09-10T03:22:24.728189+00:00",
+  "environment": "live",
+  "project_id": 85,
+  "data": {
+    "external_user_id": "firebase-uid-or-anonymous-uuid",
+    "product_id": "com.yourapp.premium.monthly",
+    "source": "web_checkout",
+    "entitlement": {
+      "status": "active",
+      "expires_at": "2026-10-10T03:22:24+00:00",
+      "will_renew": true,
+      "is_trial": false
+    }
+  }
+}
+```
+
+`transaction.refunded` carries a transaction block instead of an entitlement one:
+
+```json
+{
+  "id": "evt_txn_67890",
+  "type": "transaction.refunded",
+  "created": "2026-09-10T03:22:24.728189+00:00",
+  "environment": "live",
+  "project_id": 85,
+  "data": {
+    "external_user_id": "firebase-uid-or-anonymous-uuid",
+    "product_id": "com.yourapp.premium.monthly",
+    "source": "web_checkout",
+    "transaction": {
+      "id": 14050487,
+      "amount_cents": 799,
+      "refund_amount_cents": 799,
+      "status": "refunded"
+    }
+  }
+}
+```
+
+### Field reference
+
+| Field | Notes |
+|---|---|
+| `id` | Unique, stable per event. Also sent as `X-ZeroSettle-Event-Id`. Use it to deduplicate |
+| `type` | The event type. **Note the field is `type`, not `event_type`** |
+| `environment` | `live` or `sandbox` |
+| `data.external_user_id` | Whatever you passed to `identify(_:)`. For anonymous users this is a generated UUID that will not match a user in your system |
+| `data.product_id` | Your canonical product reference id |
+| `data.source` | Which rail the entitlement is currently on — see below |
+| `data.entitlement.status` | Current status — see below |
+| `data.entitlement.will_renew` | Whether it is set to auto-renew |
+| `data.entitlement.is_trial` | Whether the current period is a trial |
+
+### `source` values
+
+| Value | Meaning |
+|---|---|
+| `web_checkout` | Purchased through ZeroSettle web checkout |
+| `store_kit` | Purchased through Apple StoreKit (note the underscore) |
+| `play_store` | Purchased through Google Play |
+| `admin` | Granted manually from the Dashboard |
+| `system` | Granted by an automated process |
+
+During a Switch & Save migration a user can briefly be active on both web and store. In
+that window we report `web_checkout`, because that is the direction of travel.
+
+### `entitlement.status` values
+
+| Value | Has access? |
+|---|---|
+| `active` | Yes |
+| `cancelled` | **Yes** — auto-renew off, paid through period end |
+| `grace_period` | **Yes** — payment failed, retrying |
+| `past_due` | **Yes** — payment failed, in dunning |
+| `expired` | No |
+| `paused` | No |
+
+<Warning>
+  Do not gate access on `status == "active"` alone. `cancelled`, `grace_period` and
+  `past_due` all mean the user has paid for access they still hold.
+</Warning>
+
+## Delivery
+
+Every request carries these headers:
+
+| Header | Purpose |
+|---|---|
+| `X-ZeroSettle-Event-Id` | Unique event id — deduplicate on this |
+| `X-ZeroSettle-Event-Type` | Same value as the body's `type` |
+| `X-ZeroSettle-Idempotency-Key` | Stable key for the underlying state change |
+| `X-ZeroSettle-Signature` | `t=<unix_ts>,v1=<hmac_sha256_hex>` |
+
+Return any `2xx` to acknowledge. We time out after 10 seconds, so acknowledge first and
+do your work asynchronously.
+
+### Retries
+
+Failed deliveries retry six times with backoff: **30s, 2m, 10m, 1h, 6h, 24h**. A `4xx`
+is treated as permanent and not retried, except `408` and `429`. Full delivery history
+and a **Replay** button are in the Dashboard.
+
+<Tip>
+  Retries mean your handler must be idempotent. Deduplicate on `X-ZeroSettle-Event-Id`.
+</Tip>
+
+## Verifying signatures
+
+The signature is `t=<timestamp>,v1=<hex>`, where the HMAC-SHA256 is computed over
+`{timestamp}.{raw_body}` using your signing secret. Verify against the **raw** body,
+before any JSON parsing — re-serialising will change the bytes and break the check.
+
+<CodeGroup>
+
+```javascript Node.js
+const crypto = require('crypto');
+
+function verify(rawBody, header, secret, toleranceSeconds = 300) {
+  const parts = Object.fromEntries(header.split(',').map(p => p.split('=')));
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(`${parts.t}.${rawBody}`)
+    .digest('hex');
+
+  // Reject stale timestamps to blunt replay attacks
+  if (Math.abs(Date.now() / 1000 - Number(parts.t)) > toleranceSeconds) return false;
+
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(parts.v1)
+  );
+}
+```
+
+```python Python
+import hashlib, hmac, time
+
+def verify(raw_body: bytes, header: str, secret: str, tolerance: int = 300) -> bool:
+    parts = dict(p.split('=', 1) for p in header.split(',') if '=' in p)
+    expected = hmac.new(
+        secret.encode(),
+        f"{parts['t']}.{raw_body.decode()}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if abs(time.time() - int(parts['t'])) > tolerance:
+        return False
+
+    return hmac.compare_digest(expected, parts['v1'])
+```
+
+</CodeGroup>
+
+<Warning>
+  Compare with a constant-time function (`timingSafeEqual`, `hmac.compare_digest`).
+  A plain `==` leaks timing information.
+</Warning>
+
+## Handling events
+
+```javascript
+app.post('/webhooks/zerosettle', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!verify(req.body.toString(), req.get('X-ZeroSettle-Signature'), SECRET)) {
+    return res.sendStatus(401);
+  }
+
+  const event = JSON.parse(req.body.toString());
+
+  // Acknowledge immediately — we time out at 10s
+  res.sendStatus(200);
+
+  if (alreadyProcessed(event.id)) return;
+
+  switch (event.type) {
+    case 'subscription.purchased':
+    case 'subscription.renewed':
+    case 'subscription.recovered':
+      grantAccess(event.data.external_user_id, event.data.product_id);
+      break;
+
+    case 'subscription.expired':
+      revokeAccess(event.data.external_user_id);
+      break;
+
+    case 'subscription.cancelled':
+      // Still has access until expires_at — mark it, do not revoke
+      markWillNotRenew(event.data.external_user_id, event.data.entitlement.expires_at);
+      break;
+
+    default:
+      // Unknown type — new events can appear if you subscribed to '*'
+      break;
+  }
+
+  markProcessed(event.id);
+});
+```
+
+## Current limitations
+
+<Info>
+  Two gaps worth designing around. If either blocks you, tell us — both are additive
+  changes we can make.
+</Info>
+
+- **No store resource id.** The payload does not include the Stripe subscription id or
+  the Apple `original_transaction_id`. Key your records on
+  `external_user_id` + `product_id`, and use
+  [`GET /v1/iap/entitlements/`](/api-reference/endpoint/get-entitlements) if you need the
+  underlying resource.
+- **No customer email.** Not included in any event payload. Use
+  [Getting Subscription Status](/iap/subscription-state) to look a customer up.

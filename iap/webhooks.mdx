@@ -6,10 +6,17 @@ icon: 'webhook'
 
 ZeroSettle acts as your Merchant of Record, which means **you never need to set up your own Stripe webhook endpoints** or handle raw payment events. ZeroSettle receives all payment lifecycle events from Stripe (and Apple), processes them automatically, and keeps your Transactions and Entitlements up to date.
 
-Your app interacts with this system in two ways:
+Your app interacts with this system in three ways:
 
 1. **Client-side** -- the SDK receives real-time updates via delegate callbacks
 2. **Server-side** -- your backend queries the Entitlements API to verify purchase status
+3. **Event webhooks** -- ZeroSettle POSTs subscription lifecycle events to your server
+
+<Note>
+  This page covers the Stripe and Apple notifications ZeroSettle receives **on your
+  behalf**. If you want ZeroSettle to notify **your** server when a subscription is
+  purchased, renewed, cancelled or refunded, see [Event Webhooks](/iap/event-webhooks).
+</Note>
 
 ## How It Works
 
