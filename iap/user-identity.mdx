@@ -18,10 +18,39 @@ ZeroSettle establishes user identity **once per session** with `identify(...)`, 
 |------|-------------|
 | `Identity.user(id:)` | You have your own auth system. Pass a stable user ID. |
 | `Identity.anonymous` | No auth system. The SDK generates and persists a stable session UUID. |
-| `Identity.deferred` | Auth comes on a later screen. Suppresses the "no user identified" warning until you provide a real identity. |
+| `Identity.deferred` | Auth comes on a later screen. A placeholder, not an identity — see [Deferring identification](#deferring-identification). |
 
 <Note>
   On Swift and Kotlin these are enum cases — write `.anonymous` and `.deferred`, with no parentheses. Flutter's `Identity` is a class with factory constructors, so Dart spells the same two `Identity.anonymous()` and `Identity.deferred()`.
+</Note>
+
+### Deferring identification
+
+Many apps start the SDK before they know who the user is — `configure()` runs at launch, but auth resolves a screen or two later. `Identity.deferred` is how you say so.
+
+<Warning>
+  **`.deferred` is not an identity, and you cannot purchase under it.** It sets a flag that suppresses the 10-second "no user identified" warning and does nothing else: it creates no user on our side, returns `null` instead of a catalog, and does **not** satisfy the identify-first requirement. `purchase()`, `restoreEntitlements()` and every other user-scoped call keep throwing "user not identified" until you call `identify()` again with `Identity.user(id:)` or `Identity.anonymous`.
+
+  Because no purchase can happen while you are deferred, there is never an earlier transaction to re-attribute when the real identity arrives — and correspondingly, `.deferred` never appears in a [webhook event](/iap/event-webhooks). Every event carries the identity the purchase was actually made under.
+</Warning>
+
+```swift Swift
+// At launch — you don't know who this is yet.
+ZeroSettle.shared.configure(.init(publishableKey: "zs_pk_live_..."))
+try await ZeroSettle.shared.identify(.deferred)   // returns nil, no catalog yet
+
+// ...later, once sign-in completes. This is the call that creates the
+// identity, fetches the catalog and restores entitlements.
+let catalog = try await ZeroSettle.shared.identify(.user(id: user.id))
+
+// Only now can this succeed.
+let transaction = try await ZeroSettle.shared.purchase(productId: "premium_monthly")
+```
+
+Gate your paywall on the second `identify()` having completed. If a user can reach a buy button before you know who they are, you have two choices — block the purchase until they sign in, or call `identify(.anonymous)` and accept that the purchase is permanently tied to that install (see the one-way-door warning under [Anonymous Users](#option-3-anonymous-users)).
+
+<Note>
+  Unrelated: elsewhere in these docs "deferred mode" refers to a checkout warmup optimisation in the SDK's networking layer. It has nothing to do with `Identity.deferred`.
 </Note>
 
 ## Option 1: RevenueCat Users
