@@ -81,11 +81,10 @@ sync, trigger emails, or notify your team, without polling our API.
 
 ## When events are sent
 
-We send an event only when something you can see has changed: the status, access,
-the auto-renew setting, the expiry date, the trial flag or the product. A single
+We do not repeat an event for a change you have already been told about. A single
 cancellation produces one `subscription.cancelled`, and a single expiry produces one
-`subscription.expired`. Retries of a delivery still repeat the same event, so keep
-deduplicating on `X-ZeroSettle-Event-Id`.
+`subscription.expired`, even when more than one system reports the same change. Retries
+of a delivery still repeat the same event, so keep deduplicating on `X-ZeroSettle-Event-Id`.
 
 ### Renewals
 
@@ -180,7 +179,7 @@ Subscription and trial events share one envelope:
 | `environment` | `live` or `sandbox` |
 | `data.external_user_id` | Whatever you passed to `identify(_:)`. For anonymous users this is a generated UUID that will not match a user in your system |
 | `data.product_id` | Your canonical product reference id |
-| `data.source` | The rail the subscription is on: `web_checkout`, `store_kit` or `play_store`. Populated on every subscription event, including `subscription.cancelled` and `subscription.expired` — see below |
+| `data.source` | The rail the subscription is on: `web_checkout`, `store_kit` or `play_store`. It is also set on `subscription.cancelled` and `subscription.expired`. It is `null` only for an entitlement granted manually from the dashboard that has never been on a rail — see below |
 | `data.entitlement.status` | Current status — see below |
 | `data.entitlement.expires_at` | When the current period ends. During a billing problem the meaning depends on the rail — see [Billing problems](#billing-problems) |
 | `data.entitlement.will_renew` | Whether it is set to auto-renew |
