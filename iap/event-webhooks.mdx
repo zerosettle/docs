@@ -41,10 +41,10 @@ sync, trigger emails, or notify your team, without polling our API.
     | Event | When it fires |
     |---|---|
     | `subscription.purchased` | A new subscription was purchased (first grant) |
-    | `subscription.renewed` | An existing subscription renewed for a new period |
+    | `subscription.renewed` | An existing subscription renewed for a new period. Carries the new period's `expires_at` and status `active` |
     | `subscription.cancelled` | Auto-renew was turned off. **Access continues until period end** |
-    | `subscription.expired` | The subscription ended and access was revoked |
-    | `subscription.billing_issue` | A renewal payment failed; entered grace or past-due |
+    | `subscription.expired` | The subscription ended and access was revoked. Also sent when a full refund of the current billing period ends the subscription |
+    | `subscription.billing_issue` | A renewal payment failed. See [Billing problems](#billing-problems) |
     | `subscription.recovered` | Recovered from a billing issue and is active again |
     | `subscription.product_changed` | The subscriber switched product (upgrade, downgrade, or migration) |
   </Accordion>
@@ -59,7 +59,7 @@ sync, trigger emails, or notify your team, without polling our API.
   <Accordion title="Payments">
     | Event | When it fires |
     |---|---|
-    | `transaction.refunded` | A payment was refunded |
+    | `transaction.refunded` | A payment was refunded. See [Refunds](#refunds) |
   </Accordion>
 
   <Accordion title="Switch & Save eligibility">
@@ -78,6 +78,50 @@ sync, trigger emails, or notify your team, without polling our API.
   they turned off auto-renew and **still have access**. Expired means access has ended.
   Revoke on `expired`, not on `cancelled`.
 </Tip>
+
+## When events are sent
+
+We send an event only when something you can see has changed: the status, access,
+the auto-renew setting, the expiry date, the trial flag or the product. A single
+cancellation produces one `subscription.cancelled`, and a single expiry produces one
+`subscription.expired`. Retries of a delivery still repeat the same event, so keep
+deduplicating on `X-ZeroSettle-Event-Id`.
+
+### Renewals
+
+`subscription.renewed` carries the new period's `expires_at` and status `active`. If the
+renewal follows a failed payment, you also receive `subscription.recovered` (status
+`active`). It normally arrives first, but treat both as "grant access" and do not depend
+on the order.
+
+### Billing problems
+
+`subscription.billing_issue` means a renewal payment failed. What you see depends on the
+rail.
+
+**Web checkout.** The status is `past_due`. `expires_at` already shows the end of the new,
+unpaid period, because Stripe starts the period before it collects payment. The customer
+keeps access while Stripe retries. If payment succeeds you receive `subscription.recovered`
+and then `subscription.renewed`. If Stripe gives up you receive `subscription.expired`.
+
+**App Store.** If Billing Grace Period is enabled for the app in App Store Connect, the
+status is `grace_period` and `expires_at` is Apple's grace end date, so access continues
+until then. Billing Grace Period is opt-in, set to 3, 16 or 28 days (weekly plans cap at
+6). Without it, Apple stops service while it retries billing, the status is `past_due`, and
+`expires_at` is the end of the period that was paid.
+
+### Refunds
+
+- **Full refund of the current billing period.** The subscription and access end. You
+  receive `subscription.expired` and `transaction.refunded`, in either order. Revoke on
+  `expired`, and treat `transaction.refunded` as the payment record. For web checkout we
+  also cancel the Stripe subscription, so the customer is not billed again.
+- **Partial refund.** This is a credit only. You receive `transaction.refunded`, and the
+  subscription and access are unchanged.
+- **Refund of an earlier period** while a later period is paid and active. You receive only
+  `transaction.refunded`, and the subscription stays active.
+
+The same rule, current period versus earlier period, applies to App Store refunds.
 
 ## Payload
 
@@ -136,8 +180,9 @@ Subscription and trial events share one envelope:
 | `environment` | `live` or `sandbox` |
 | `data.external_user_id` | Whatever you passed to `identify(_:)`. For anonymous users this is a generated UUID that will not match a user in your system |
 | `data.product_id` | Your canonical product reference id |
-| `data.source` | Which rail the entitlement is currently on — see below |
+| `data.source` | The rail the subscription is on: `web_checkout`, `store_kit` or `play_store`. Populated on every subscription event, including `subscription.cancelled` and `subscription.expired` — see below |
 | `data.entitlement.status` | Current status — see below |
+| `data.entitlement.expires_at` | When the current period ends. During a billing problem the meaning depends on the rail — see [Billing problems](#billing-problems) |
 | `data.entitlement.will_renew` | Whether it is set to auto-renew |
 | `data.entitlement.is_trial` | Whether the current period is a trial |
 
@@ -148,8 +193,6 @@ Subscription and trial events share one envelope:
 | `web_checkout` | Purchased through ZeroSettle web checkout |
 | `store_kit` | Purchased through Apple StoreKit (note the underscore) |
 | `play_store` | Purchased through Google Play |
-| `admin` | Granted manually from the Dashboard |
-| `system` | Granted by an automated process |
 
 During a Switch & Save migration a user can briefly be active on both web and store. In
 that window we report `web_checkout`, because that is the direction of travel.
@@ -160,14 +203,14 @@ that window we report `web_checkout`, because that is the direction of travel.
 |---|---|
 | `active` | Yes |
 | `cancelled` | **Yes** — auto-renew off, paid through period end |
-| `grace_period` | **Yes** — payment failed, retrying |
-| `past_due` | **Yes** — payment failed, in dunning |
+| `grace_period` | **Yes** — App Store payment failed, access continues until the grace end date in `expires_at` |
+| `past_due` | **Depends on the rail.** Web checkout: yes, Stripe is retrying. App Store without Billing Grace Period: no, Apple has stopped service and `expires_at` is the end of the paid period |
 | `expired` | No |
 | `paused` | No |
 
 <Warning>
-  Do not gate access on `status == "active"` alone. `cancelled`, `grace_period` and
-  `past_due` all mean the user has paid for access they still hold.
+  Do not gate access on `status == "active"` alone. `cancelled` and `grace_period` mean the
+  user holds access, and `past_due` does on web checkout. Check `expires_at` as well.
 </Warning>
 
 ## Delivery
@@ -269,6 +312,7 @@ app.post('/webhooks/zerosettle', express.raw({ type: 'application/json' }), (req
       break;
 
     case 'subscription.expired':
+      // Also sent when a full refund of the current period ends the subscription
       revokeAccess(event.data.external_user_id);
       break;
 

@@ -15,6 +15,20 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ---
 
+## October 2026
+
+<Update label="Platform" description="2026-10-06">
+### Webhook accuracy: sources, refunds and billing problems
+
+Event webhooks now report subscription state more precisely. See [Event Webhooks](/iap/event-webhooks).
+
+- **`data.source` is always the rail** — `web_checkout`, `store_kit` or `play_store`. It is now also populated on `subscription.cancelled` and `subscription.expired`. `admin` and `system` never appear in this field.
+- **Fewer, cleaner events** — an event is sent only when the status, access, auto-renew setting, expiry date, trial flag or product changed. One cancellation produces one `subscription.cancelled`, and one expiry produces one `subscription.expired`.
+- **Renewals** — `subscription.renewed` carries the new period's `expires_at`. After a failed payment you also receive `subscription.recovered`; treat both as "grant access" and do not depend on their order.
+- **Billing problems** — on web checkout the status is `past_due` and the customer keeps access while Stripe retries. On the App Store the status is `grace_period` when Billing Grace Period is enabled for the app, and `past_due` otherwise.
+- **Refunds** — a full refund of the current billing period ends the subscription and sends `subscription.expired` and `transaction.refunded`. A partial refund, or a refund of an earlier period, sends only `transaction.refunded` and leaves the subscription active.
+</Update>
+
 ## August 2026
 
 <Update label="Platform" description="2026-08-19">
