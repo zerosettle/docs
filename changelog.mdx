@@ -27,6 +27,7 @@ Event webhooks now report subscription state more precisely. See [Event Webhooks
 - **Renewals** — `subscription.renewed` carries the new period's `expires_at`. After a failed payment you also receive `subscription.recovered`; treat both as "grant access" and do not depend on their order.
 - **Billing problems** — on web checkout the status is `past_due` and the customer keeps access while Stripe retries. On the App Store the status is `grace_period` when Billing Grace Period is enabled for the app, and `past_due` otherwise.
 - **Refunds** — a full refund of the current billing period ends the subscription and sends `subscription.expired` and `transaction.refunded`. A partial refund, or a refund of an earlier period, sends only `transaction.refunded` and leaves the subscription active.
+- **Refund totals** — `transaction.refunded` now includes `data.transaction.refunded_total_cents`, the cumulative amount refunded for that payment. When a payment is refunded in more than one step you receive one event per new total. `refund_amount_cents` is still the latest refund.
 </Update>
 
 ## August 2026

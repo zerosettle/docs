@@ -125,6 +125,12 @@ until then. Billing Grace Period is opt-in, set to 3, 16 or 28 days (weekly plan
 
 The same rule, current period versus earlier period, applies to App Store refunds.
 
+If the same payment is refunded again, for example 600 of 1000 and later the remaining
+400, you receive another `transaction.refunded` with the new `refunded_total_cents`. Each
+total is sent once, so a replayed notification does not produce a duplicate. Use
+`refunded_total_cents` as the amount refunded so far, and `refund_amount_cents` as the
+latest refund.
+
 ## Payload
 
 Subscription and trial events share one envelope:
@@ -154,7 +160,7 @@ Subscription and trial events share one envelope:
 
 ```json
 {
-  "id": "evt_txn_67890",
+  "id": "evt_txn_67890_799",
   "type": "transaction.refunded",
   "created": "2026-09-10T03:22:24.728189+00:00",
   "environment": "live",
@@ -167,6 +173,7 @@ Subscription and trial events share one envelope:
       "id": 14050487,
       "amount_cents": 799,
       "refund_amount_cents": 799,
+      "refunded_total_cents": 799,
       "status": "refunded"
     }
   }
@@ -187,6 +194,8 @@ Subscription and trial events share one envelope:
 | `data.entitlement.expires_at` | When the current period ends. During a billing problem the meaning depends on the rail — see [Billing problems](#billing-problems) |
 | `data.entitlement.will_renew` | Whether it is set to auto-renew |
 | `data.entitlement.is_trial` | Whether the current period is a trial |
+| `data.transaction.refund_amount_cents` | On `transaction.refunded`, the amount of the latest refund, in the transaction's currency minor units |
+| `data.transaction.refunded_total_cents` | On `transaction.refunded`, the cumulative amount refunded so far for that payment, in the transaction's currency minor units. A further refund of the same payment sends another event with the new total |
 
 ### `source` values
 
