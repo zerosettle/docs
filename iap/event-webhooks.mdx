@@ -98,10 +98,13 @@ on the order.
 `subscription.billing_issue` means a renewal payment failed. What you see depends on the
 rail.
 
-**Web checkout.** The status is `past_due`. `expires_at` already shows the end of the new,
-unpaid period, because Stripe starts the period before it collects payment. The customer
-keeps access while Stripe retries. If payment succeeds you receive `subscription.recovered`
-and then `subscription.renewed`. If Stripe gives up you receive `subscription.expired`.
+**Web checkout.** The status is `past_due`. `expires_at` shows the end of the new billing
+period, because Stripe starts the period when it creates the renewal invoice, before the
+payment succeeds. The customer keeps access while Stripe retries. If payment succeeds you
+receive `subscription.recovered` and then `subscription.renewed`. What happens after the
+last retry is set by the failed-payment settings in your Stripe account: if it cancels the
+subscription or marks it unpaid, you receive `subscription.expired`. If it leaves the
+subscription `past_due`, no further event is sent.
 
 **App Store.** If Billing Grace Period is enabled for the app in App Store Connect, the
 status is `grace_period` and `expires_at` is Apple's grace end date, so access continues
