@@ -2321,6 +2321,14 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "live",
+              "sandbox"
+            ],
+            "description": "Which data environment the entitlement lives in. A live-key request also returns sandbox entitlements so TestFlight, Xcode and App Review purchases unlock."
           }
         }
       },

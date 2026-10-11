@@ -15,6 +15,16 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ---
 
+## October 2026
+
+<Update label="API" description="2026-10-11">
+### Apple Sandbox purchases are recorded in Sandbox, and live keys still unlock them
+
+StoreKit purchases made in Apple's Sandbox (TestFlight, Xcode, App Review) are now recorded in Sandbox even when the app uses a live key, and no longer count as live revenue. `GET /v1/iap/entitlements` with a live key also returns these sandbox entitlements, with a new `environment` field (`live` or `sandbox`) on each entitlement. The change is additive: existing fields are unchanged.
+</Update>
+
+---
+
 ## August 2026
 
 <Update label="Platform" description="2026-08-19">
