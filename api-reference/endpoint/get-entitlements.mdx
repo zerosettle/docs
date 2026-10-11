@@ -4,5 +4,5 @@ openapi: 'GET /iap/entitlements'
 ---
 
 <Note>
-  Each entitlement carries an `environment` field, `live` or `sandbox`. A request made with a live publishable key also returns the user's active sandbox entitlements, so purchases made in Apple's Sandbox (TestFlight, Xcode, App Review) unlock access. A request made with a sandbox key never returns live entitlements. When both environments hold the same product, the live entitlement is returned.
+  Each entitlement carries an `environment` field, `live` or `sandbox`. A request made with a live publishable key also returns the user's active sandbox entitlements, so purchases made in Apple's Sandbox (TestFlight and App Review) unlock access. A request made with a sandbox key never returns live entitlements. When both environments hold the same product, the live entitlement is returned.
 </Note>
