@@ -2328,7 +2328,7 @@
               "live",
               "sandbox"
             ],
-            "description": "Which data environment the entitlement lives in. A live-key request also returns sandbox entitlements so TestFlight and App Review purchases unlock."
+            "description": "Which data environment the entitlement lives in. A live-key request also returns sandbox StoreKit entitlements from TestFlight and App Review purchases synced with the live key, never sandbox web checkouts."
           }
         }
       },
