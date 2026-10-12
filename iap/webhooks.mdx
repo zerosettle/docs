@@ -81,11 +81,14 @@ curl --request GET \
       "will_renew": true,
       "is_trial": false,
       "trial_ends_at": null,
-      "cancelled_at": null
+      "cancelled_at": null,
+      "is_test_purchase": false
     }
   ]
 }
 ```
+
+`is_test_purchase` is `true` when Apple processed the purchase as a sandbox purchase (TestFlight, App Review or Xcode) but your app sent it with a live ZeroSettle key. The entitlement still grants access, so reviewers and testers are never locked out. Skip these when you count customers or revenue on your side.
 
 ### Server-Side Verification Examples
 
