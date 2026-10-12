@@ -21,6 +21,8 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 ### Apple Sandbox purchases are recorded in Sandbox, and live keys still unlock them
 
 StoreKit purchases made in Apple's Sandbox (TestFlight and App Review) are now recorded in Sandbox even when the app uses a live key, and no longer count as live revenue. `GET /v1/iap/entitlements` with a live key also returns these sandbox StoreKit entitlements (never sandbox web checkouts), with a new `environment` field (`live` or `sandbox`) on each entitlement. The change is additive: existing fields are unchanged.
+
+`POST /v1/iap/storekit-transactions` now also refuses a transaction whose bundle id does not belong to the app (`400`, `bundle_id_mismatch`) and an Xcode-signed transaction sent with a test key for an original transaction id a live build already verified (`409`, `environment_conflict`). The SDK keeps these transactions in its retry queue like any failed sync.
 </Update>
 
 ---
