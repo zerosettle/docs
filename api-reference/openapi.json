@@ -956,6 +956,26 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "The StoreKit transaction id already belongs to a different project, so it cannot be recorded here. Nothing is saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "storekit_transaction_id_conflict"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "This StoreKit transaction id already belongs to a different project."
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
