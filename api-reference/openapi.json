@@ -948,7 +948,7 @@
             }
           },
           "400": {
-            "description": "Bad request, or `bundle_id_mismatch` when the transaction's bundle id does not belong to this app (an extension or watch app id prefixed by the app's bundle id is accepted).",
+            "description": "Bad request, or `bundle_id_mismatch` when the transaction's bundle id does not belong to this app (compared case-insensitively; the maccatalyst. form is accepted; applies to sandbox-environment transactions, a Production transaction is never refused for its bundle id).",
             "content": {
               "application/json": {
                 "schema": {
