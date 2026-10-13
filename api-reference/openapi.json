@@ -668,7 +668,7 @@
       "get": {
         "operationId": "getTransactionHistory",
         "summary": "Get Transaction History",
-        "description": "Returns a paginated list of transactions for a given user, ordered by most recent first.",
+        "description": "Returns up to `limit` transactions for a given user, ordered by most recent first. Abandoned checkout sessions (status `superseded` internally) are not returned. A disputed transaction is reported as `refunded`.",
         "tags": [
           "Transactions"
         ],
@@ -2202,14 +2202,13 @@
           "status": {
             "type": "string",
             "enum": [
+              "completed",
               "pending",
               "processing",
-              "succeeded",
               "failed",
-              "refunded",
-              "disputed"
+              "refunded"
             ],
-            "description": "Transaction status."
+            "description": "Transaction status as sent to SDKs. A successful payment is `completed`, and a disputed transaction is reported as `refunded`. Abandoned checkout sessions are not returned."
           },
           "source": {
             "type": "string",

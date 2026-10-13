@@ -17,6 +17,15 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## October 2026
 
+<Update label="Platform" description="2026-10-13">
+### Transaction history no longer returns abandoned checkout sessions
+
+`GET /v1/iap/transaction-history/` now leaves out checkout sessions that were abandoned and replaced by a newer one (status `superseded` internally). Older iOS SDK versions had no case for that status and showed these rows as failed purchases. The response shape is unchanged, and `limit` now counts only the rows that are returned. See [Get Transaction History](/api-reference/endpoint/get-transaction-history).
+
+- **Statuses you can receive:** `completed`, `pending`, `processing`, `failed` and `refunded`. A disputed transaction is reported as `refunded`.
+- **API reference fix:** the status values in the reference now match what the API sends (`completed`, not `succeeded`).
+</Update>
+
 <Update label="Platform" description="2026-10-07">
 ### Webhook accuracy: sources, refunds and billing problems
 

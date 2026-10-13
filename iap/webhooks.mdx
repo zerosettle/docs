@@ -147,7 +147,7 @@ resp, err := http.DefaultClient.Do(req)
 
 ### Transaction History
 
-For a full history of all transactions (including failed, refunded, and expired), use the transaction history endpoint:
+For a full history of a user's transactions (including failed and refunded ones), use the transaction history endpoint:
 
 ```bash
 curl --request GET \
@@ -155,7 +155,7 @@ curl --request GET \
   --header 'X-ZeroSettle-Key: zs_pk_live_...'
 ```
 
-This returns all transactions regardless of status, including consumed consumables, expired subscriptions, and refunds. The `limit` parameter defaults to 50 (max 100).
+This returns the user's transactions with the statuses `completed`, `pending`, `processing`, `failed` and `refunded` (a disputed transaction is reported as `refunded`), including consumed consumables, expired subscriptions, and refunds. Abandoned checkout sessions are not returned. The `limit` parameter defaults to 50 (max 100).
 
 ## Client-Side Updates
 

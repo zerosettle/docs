@@ -2,3 +2,5 @@
 title: 'Get Transaction History'
 openapi: 'GET /iap/transaction-history'
 ---
+
+Abandoned checkout sessions are not returned. When a customer starts a checkout and later starts another for the same product, the unfinished one is closed internally and left out of this list. A disputed transaction is reported with the status `refunded`. Results are limited by `limit` (default 50, maximum 100); there is no cursor.
