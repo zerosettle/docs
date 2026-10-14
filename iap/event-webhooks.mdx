@@ -140,6 +140,7 @@ Subscription and trial events share one envelope:
     "external_user_id": "firebase-uid-or-anonymous-uuid",
     "product_id": "com.yourapp.premium.monthly",
     "source": "web_checkout",
+    "is_test_purchase": false,
     "entitlement": {
       "status": "active",
       "expires_at": "2026-10-10T03:22:24+00:00",
@@ -163,6 +164,7 @@ Subscription and trial events share one envelope:
     "external_user_id": "firebase-uid-or-anonymous-uuid",
     "product_id": "com.yourapp.premium.monthly",
     "source": "web_checkout",
+    "is_test_purchase": false,
     "transaction": {
       "id": 14050487,
       "amount_cents": 799,
@@ -183,6 +185,7 @@ Subscription and trial events share one envelope:
 | `data.external_user_id` | Whatever you passed to `identify(_:)`. For anonymous users this is a generated UUID that will not match a user in your system |
 | `data.product_id` | Your canonical product reference id |
 | `data.source` | The rail the subscription is on: `web_checkout`, `store_kit` or `play_store`. It is also set on `subscription.cancelled` and `subscription.expired`. It is `null` only for an entitlement granted manually from the dashboard that has never been on a rail — see below |
+| `data.is_test_purchase` | `true` when Apple processed the purchase as a sandbox purchase (TestFlight, App Review or Xcode) but your app sent it with a live key. Ignore these events for billing and analytics. Always present, `false` for real purchases |
 | `data.entitlement.status` | Current status — see below |
 | `data.entitlement.expires_at` | When the current period ends. During a billing problem the meaning depends on the rail — see [Billing problems](#billing-problems) |
 | `data.entitlement.will_renew` | Whether it is set to auto-renew |

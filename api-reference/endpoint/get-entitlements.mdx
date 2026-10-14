@@ -2,3 +2,5 @@
 title: 'Get Entitlements'
 openapi: 'GET /iap/entitlements'
 ---
+
+Each entry carries `is_test_purchase`. It is `true` for a TestFlight, App Review or Xcode purchase that arrived on a live key; the entitlement still grants access and is left out of revenue.

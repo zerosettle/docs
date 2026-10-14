@@ -2,3 +2,7 @@
 title: 'Sync StoreKit Transaction'
 openapi: 'POST /iap/storekit-transactions'
 ---
+
+When Apple processed the purchase as a sandbox purchase (TestFlight, App Review or Xcode) but the request used a live key, the transaction is saved in Live as a test purchase and the response carries `"is_test_purchase": true` along with the existing `environment_mismatch` warning.
+
+If the StoreKit transaction id already belongs to a different project, the request is rejected with `409` and `{"error": "storekit_transaction_id_conflict", "message": "This StoreKit transaction id already belongs to a different project."}`. Nothing is saved. Check that the app is using the publishable key of the project the purchase belongs to.

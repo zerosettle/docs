@@ -941,6 +941,10 @@
                     "status": {
                       "type": "string",
                       "example": "ok"
+                    },
+                    "is_test_purchase": {
+                      "type": "boolean",
+                      "description": "`true` when Apple processed the transaction as a sandbox purchase (TestFlight, App Review or Xcode) but the request used a live key. The purchase is saved in Live as a test purchase and is left out of revenue."
                     }
                   }
                 }
@@ -952,6 +956,26 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "The StoreKit transaction id already belongs to a different project, so it cannot be recorded here. Nothing is saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "storekit_transaction_id_conflict"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "This StoreKit transaction id already belongs to a different project."
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2321,6 +2345,10 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "is_test_purchase": {
+            "type": "boolean",
+            "description": "`true` when Apple processed this as a sandbox purchase (TestFlight, App Review or Xcode) but your app sent it with a live key. It stays in Live, still grants access, and is left out of revenue. `false` otherwise."
           }
         }
       },
