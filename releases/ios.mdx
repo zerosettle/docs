@@ -4,7 +4,7 @@ description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
 icon: 'apple'
 ---
 
-**Current version:** `1.6.1`
+**Current version:** `1.6.2`
 **Package:** Swift Package Manager / CocoaPods
 **Minimum requirements:** iOS 17.0+, Swift 6.1+, Xcode 16.3+
 
@@ -17,6 +17,21 @@ icon: 'apple'
 </Warning>
 
 ---
+
+## October 2026
+
+<Update label="1.6.2" description="2026-10-16">
+### Smaller StoreKit reconcile payload and shared-device fix
+
+Patch. Drop-in upgrade from 1.6.1 — no API changes.
+
+The StoreKit subscription-state reconcile now sends one entry per subscription (the current status transaction plus its signed renewal info) instead of every historical renewal transaction. For subscribers with long renewal histories this meaningfully reduces request size. A matching backend change is required and has been live on api.zerosettle.io since 2026-10-16.
+
+- **Improvement**: Slim reconcile payload — one entry per subscription status rather than the full `Transaction.all` history, backed by `Product.SubscriptionInfo.status(for:)` per subscription group
+- **Fix**: Fallback per original transaction ID, not per group — when `Product.SubscriptionInfo.status(for:)` omits a subscription (empty or unverified list, thrown call, or omitted original ID), the reconcile falls back to that subscription's latest `Transaction.all` entry, not an arbitrary transaction from the same group
+- **Fix**: Transactions carrying a different user's app account token are dropped from the payload, preventing shared-device scenarios from reporting one account's purchases to another
+- **Fix**: `sdkVersion` request header now reports the actual version; in 1.6.1 it still reported `1.6.0`
+</Update>
 
 ## September 2026
 
