@@ -17,6 +17,14 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## October 2026
 
+<Update label="Platform" description="2026-10-15">
+### Transaction history no longer returns abandoned checkouts
+
+`GET /v1/iap/transaction-history/` now leaves out checkout attempts that were replaced by a newer attempt before payment (internal status `superseded`). Older SDK versions showed these rows as failed purchases. Completed, pending, processing, failed and refunded transactions are returned as before, and the response shape is unchanged.
+
+Nothing changes for SDK clients except that the list is shorter and more accurate.
+</Update>
+
 <Update label="Platform" description="2026-10-12">
 ### Test purchases: TestFlight and App Review purchases no longer count as revenue
 
