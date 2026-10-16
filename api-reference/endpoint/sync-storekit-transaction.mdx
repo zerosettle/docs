@@ -6,3 +6,18 @@ openapi: 'POST /iap/storekit-transactions'
 When Apple processed the purchase as a sandbox purchase (TestFlight, App Review or Xcode) but the request used a live key, the transaction is saved in Live as a test purchase and the response carries `"is_test_purchase": true` along with the existing `environment_mismatch` warning.
 
 If the StoreKit transaction id already belongs to a different project, the request is rejected with `409` and `{"error": "storekit_transaction_id_conflict", "message": "This StoreKit transaction id already belongs to a different project."}`. Nothing is saved. Check that the app is using the publishable key of the project the purchase belongs to.
+
+## Bulk reconcile
+
+When the body has a `transactions` array instead of `jws_representation`, the request reconciles subscription state for `user_id`. Each entry carries `signed_transaction` and, optionally, `signed_renewal_info`. The response is `{"status": "ok", "processed": n, "events_emitted": n, "skipped": [{"reason": "...", "transaction_id": "..."}]}`.
+
+Only the newest entry for each original transaction id is processed. Each entry updates the entitlement row for its own product, so after a crossgrade the old plan is not revived.
+
+Skip reasons:
+
+- `jws_verification_failed`: the signed payload did not verify.
+- `app_account_token_mismatch`: the transaction's app account token does not belong to the request `user_id`.
+- `environment_mismatch`: the transaction's environment does not match the request key.
+- `cross_user_otid_skipped`: no row for this user has that original transaction id.
+- `product_row_missing`: the user has rows for that original transaction id, but none for the transaction's product. This can happen briefly during a crossgrade, before the new product's sync lands. It clears on the next reconcile.
+- `stale_signed_date`: the renewal info is older than what is already stored.

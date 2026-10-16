@@ -668,7 +668,7 @@
       "get": {
         "operationId": "getTransactionHistory",
         "summary": "Get Transaction History",
-        "description": "Returns a paginated list of transactions for a given user, ordered by most recent first.",
+        "description": "Returns a list of transactions for a given user, ordered by most recent first. Abandoned checkout attempts (a checkout that was replaced by a newer one before it was paid) are not returned.",
         "tags": [
           "Transactions"
         ],
