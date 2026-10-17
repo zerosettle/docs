@@ -18,6 +18,23 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 ## October 2026
 
 <Update label="Platform" description="2026-10-17">
+### Credits, usage limits and a server usage API (unreleased)
+
+This change is not released yet.
+
+A new server API spends credits before each AI request. It uses a secret key, not the publishable key:
+
+- `POST /v1/usage/` spends units for an action and answers `allowed`, `limit_reached` or `not_in_plan`.
+- `POST /v1/usage/{usage_id}/finish/` settles a hold for a by-usage action.
+- `POST /v1/usage/{usage_id}/undo/` gives back what a request spent.
+- `GET /v1/usage/?user_id=` reads a person's plan and balances without spending.
+
+`GET /v1/iap/entitlements/` gains a top-level `balances` key next to `plan`, `add_ons` and `features`, so an app can show what is left. The existing keys are unchanged. The app never spends; spending is a server call.
+
+A Node library, `@zerosettle/node`, wraps the server API with a 1 second timeout, one retry and a fail-open answer. It is not published yet. See [Usage limits and credits](/iap/usage-limits).
+</Update>
+
+<Update label="Platform" description="2026-10-17">
 ### Plans and features on the entitlements response (unreleased)
 
 This change is not released yet.

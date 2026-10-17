@@ -23,6 +23,10 @@
   ],
   "tags": [
     {
+      "name": "Usage",
+      "description": "Spend credits and read balances from your server with a secret key (not released yet)"
+    },
+    {
       "name": "Products",
       "description": "Fetch the product catalog for your app"
     },
@@ -792,6 +796,13 @@
                           "name": { "type": "string", "example": "Studio" },
                           "kind": { "type": "string", "enum": ["add_on"] }
                         }
+                      }
+                    },
+                    "balances": {
+                      "type": "object",
+                      "description": "Not released yet. Each currency key mapped to the person's balance, so the app can show \"318 of 500 left\". `{}` when the environment has no live currency. Omitted when the server cannot compute it; keep the last-known value. The app never spends; spending is a server call (`POST /usage`).",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/Balance"
                       }
                     },
                     "features": {
@@ -1920,10 +1931,407 @@
           }
         }
       }
+    },
+    "/usage": {
+      "post": {
+        "operationId": "spendUsage",
+        "summary": "Spend Usage",
+        "description": "This endpoint is not released yet. Spends units for one action by one person and answers whether to go ahead. Call it from your server with a secret key, before each AI request. An unknown `user_id` is created as a new person on the Free plan. A retry with the same `idempotency_key` and the same body returns the first answer and spends nothing more.",
+        "tags": [
+          "Usage"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsageRequest"
+              },
+              "example": {
+                "user_id": "user_8f21",
+                "action": "image_generation",
+                "currency": "credits",
+                "amount": 3,
+                "usage": {
+                  "prompt_tokens": 812,
+                  "completion_tokens": 240
+                },
+                "model": "gpt-4o-mini",
+                "cost": 0.0123,
+                "estimate": 40,
+                "idempotency_key": "req_7c1e"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Answered. A denied request (`limit_reached`, `not_in_plan`) is also a 200 and spends nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageResponse"
+                },
+                "example": {
+                  "status": "allowed",
+                  "usage_id": "use_01JAX9W3F8T2",
+                  "currency": {
+                    "key": "credits",
+                    "name": "Credit",
+                    "plural": "Credits",
+                    "glyph": "sparkles",
+                    "offline": "allow"
+                  },
+                  "spent": 3,
+                  "held": false,
+                  "remaining": 497,
+                  "limit": 500,
+                  "resets_at": "2026-11-03T00:00:00Z",
+                  "plan": {
+                    "key": "pro",
+                    "name": "Pro",
+                    "kind": "tier"
+                  },
+                  "add_ons": [],
+                  "upgrade_available": null,
+                  "packs": null,
+                  "test_purchase": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "One of `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_cost`, `bad_estimate` or `no_currencies`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing secret key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`idempotency_key_reused`: the same key was sent with a different body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`. The `Retry-After` header gives the seconds to wait.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "readUsage",
+        "summary": "Read Balances",
+        "description": "This endpoint is not released yet. Returns a person's plan, add-ons and the balance in each currency. Spends nothing. An unknown user gets the Free view and is not created.",
+        "tags": [
+          "Usage"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "description": "Your id for the person.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "user_8f21"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The person's plan and balances.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageReadResponse"
+                },
+                "example": {
+                  "user_id": "user_8f21",
+                  "plan": {
+                    "key": "pro",
+                    "name": "Pro",
+                    "kind": "tier"
+                  },
+                  "add_ons": [],
+                  "balances": {
+                    "credits": {
+                      "currency": {
+                        "key": "credits",
+                        "name": "Credit",
+                        "plural": "Credits",
+                        "glyph": "sparkles",
+                        "offline": "allow"
+                      },
+                      "remaining": 318,
+                      "limit": 500,
+                      "resets_at": "2026-11-03T00:00:00Z",
+                      "allowance_remaining": 300,
+                      "rolled_over": 0,
+                      "purchased": 18
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing secret key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usage/{usage_id}/finish": {
+      "post": {
+        "operationId": "finishUsage",
+        "summary": "Finish a Hold",
+        "description": "This endpoint is not released yet. Settles a hold taken by `POST /usage` for a by-usage action. Send exactly one of `amount`, `usage` with `model`, or `cost`. The difference from the hold is settled. Settling can take a balance to zero, never below; any excess is returned as `uncharged`. A second finish returns the stored result unchanged. A hold with no finish settles at its estimate 15 minutes after it was made.",
+        "tags": [
+          "Usage"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "usage_id",
+            "in": "path",
+            "required": true,
+            "description": "The `usage_id` from the spend response.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "use_01JAX9W3F8T2"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishRequest"
+              },
+              "example": {
+                "amount": 812
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Settled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinishResponse"
+                },
+                "example": {
+                  "status": "settled",
+                  "usage_id": "use_01JAX9W3F8T2",
+                  "spent": 812,
+                  "uncharged": 0,
+                  "settled_by": "finish",
+                  "currency": {
+                    "key": "credits",
+                    "name": "Credit",
+                    "plural": "Credits",
+                    "glyph": "sparkles",
+                    "offline": "allow"
+                  },
+                  "remaining": 0,
+                  "limit": 500,
+                  "resets_at": "2026-11-03T00:00:00Z"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing secret key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`not_held` (the request was not a hold) or `undone`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usage/{usage_id}/undo": {
+      "post": {
+        "operationId": "undoUsage",
+        "summary": "Undo a Request",
+        "description": "This endpoint is not released yet. Gives back what a request spent, or releases a hold, to the parts it came from, if they still exist. An allowance whose period has rolled over gets nothing back. Works within 24 hours of the request. A second undo returns the stored result.",
+        "tags": [
+          "Usage"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "usage_id",
+            "in": "path",
+            "required": true,
+            "description": "The `usage_id` from the spend response.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "use_01JAX9W3F8T2"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Given back.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UndoResponse"
+                },
+                "example": {
+                  "status": "undone",
+                  "usage_id": "use_01JAX9W3F8T2",
+                  "refunded": 3,
+                  "currency": {
+                    "key": "credits",
+                    "name": "Credit",
+                    "plural": "Credits",
+                    "glyph": "sparkles",
+                    "offline": "allow"
+                  },
+                  "remaining": 500,
+                  "limit": 500,
+                  "resets_at": "2026-11-03T00:00:00Z"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing secret key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`undo_window_passed` or `nothing_spent` (a denied request).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "securitySchemes": {
+      "SecretKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-ZeroSettle-Key",
+        "description": "Your secret key: `zs_sk_test_*` for sandbox or `zs_sk_live_*` for production. Used by the usage endpoints, from your server only. Never ship it in an app."
+      }
+    ,
       "ApiKeyAuth": {
         "type": "apiKey",
         "in": "header",
@@ -1932,6 +2340,421 @@
       }
     },
     "schemas": {
+      "UsagePlan": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "pro"
+          },
+          "name": {
+            "type": "string",
+            "example": "Pro"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "tier",
+              "add_on"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "kind"
+        ]
+      },
+      "CurrencySummary": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "credits"
+          },
+          "name": {
+            "type": "string",
+            "example": "Credit"
+          },
+          "plural": {
+            "type": "string",
+            "example": "Credits"
+          },
+          "glyph": {
+            "type": "string",
+            "description": "A Lucide icon name.",
+            "example": "sparkles"
+          },
+          "offline": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "stop"
+            ],
+            "description": "The currency's \"If ZeroSettle can't be reached\" setting. The Node library caches it to decide what to answer while offline."
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "plural",
+          "glyph",
+          "offline"
+        ]
+      },
+      "Balance": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "$ref": "#/components/schemas/CurrencySummary"
+          },
+          "remaining": {
+            "type": "integer",
+            "description": "Everything the person can spend now: `allowance_remaining + rolled_over + purchased`, minus open holds."
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "description": "This period's allowance (plan or Free, plus add-ons). `null` when the person has no allowance in this currency (packs only)."
+          },
+          "resets_at": {
+            "type": "string",
+            "nullable": true,
+            "description": "The earliest next refill among the person's allowances; `null` when none resets. ISO 8601 UTC.",
+            "example": "2026-11-03T00:00:00Z"
+          },
+          "allowance_remaining": {
+            "type": "integer"
+          },
+          "rolled_over": {
+            "type": "integer"
+          },
+          "purchased": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "remaining",
+          "limit",
+          "resets_at",
+          "allowance_remaining",
+          "rolled_over",
+          "purchased"
+        ]
+      },
+      "UsageError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Machine-readable error code.",
+            "example": "bad_action"
+          },
+          "message": {
+            "type": "string",
+            "description": "A sentence for the developer."
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "description": "Error from the usage endpoints. A 401 from a key failure keeps the existing key-resolver body (for example `{\"error\": \"Invalid secret key\"}`); treat any 401 as an auth failure."
+      },
+      "UsageRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Your id for the person. An `anon:` id is refused (`bad_user_id`)."
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The action's key, for example `image_generation`."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency key. Required only when `action` is not listed and the environment has more than one live currency."
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Units to charge. Used only by a by-usage action; ignored for fixed and unlisted actions."
+          },
+          "usage": {
+            "type": "object",
+            "description": "The provider's raw usage object, at most 16 KB. Priced with `model` for cost to serve, and converted to units for a by-usage action."
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "The model id."
+          },
+          "cost": {
+            "type": "number",
+            "minimum": 0,
+            "description": "What the call cost in USD, when the provider returned it."
+          },
+          "estimate": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The expected units of a by-usage action that is held."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "A retry with the same key and body returns the first answer and spends nothing more. The same key with a different body is `409 idempotency_key_reused`."
+          }
+        },
+        "required": [
+          "user_id",
+          "action"
+        ]
+      },
+      "UsageUpgradeOffer": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/UsagePlan"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The offered plan's allowance in this currency."
+          }
+        }
+      },
+      "UsagePack": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "example": "com.app.credits100"
+          },
+          "name": {
+            "type": "string",
+            "example": "100 credits"
+          },
+          "amount": {
+            "type": "integer",
+            "example": 100
+          }
+        }
+      },
+      "UsageResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "limit_reached",
+              "not_in_plan"
+            ],
+            "description": "`allowed`: the units are spent (or held); go ahead. `limit_reached`: not enough is left; nothing spent. `not_in_plan`: the person's plan and add-ons give none of this currency and they hold no purchased units; nothing spent."
+          },
+          "usage_id": {
+            "type": "string",
+            "description": "Use it with finish and undo. A denied request still returns one."
+          },
+          "currency": {
+            "$ref": "#/components/schemas/CurrencySummary"
+          },
+          "spent": {
+            "type": "integer",
+            "description": "Units charged, or held when `held` is true. 0 unless `status` is `allowed`."
+          },
+          "held": {
+            "type": "boolean"
+          },
+          "remaining": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true
+          },
+          "resets_at": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO 8601 UTC time, for example `2026-11-03T00:00:00Z`.",
+            "example": "2026-11-03T00:00:00Z"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/UsagePlan"
+          },
+          "add_ons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsagePlan"
+            }
+          },
+          "upgrade_available": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UsageUpgradeOffer"
+              }
+            ],
+            "nullable": true,
+            "description": "Only when the status is not `allowed` and the currency's runs-out setting resolves to the upgrade offer. Otherwise `null`."
+          },
+          "packs": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/UsagePack"
+            },
+            "description": "Only when the status is not `allowed` and the runs-out setting resolves to packs. Otherwise `null`."
+          },
+          "test_purchase": {
+            "type": "boolean",
+            "description": "True when the person's plan comes from a test purchase."
+          }
+        },
+        "required": [
+          "status",
+          "usage_id",
+          "currency",
+          "spent",
+          "held",
+          "remaining",
+          "limit",
+          "resets_at",
+          "plan",
+          "add_ons",
+          "upgrade_available",
+          "packs",
+          "test_purchase"
+        ],
+        "description": "The server never sends `offline`. The Node library adds `\"offline\": true` when it answers on its own."
+      },
+      "FinishRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "description": "The real units."
+          },
+          "usage": {
+            "type": "object",
+            "description": "The provider's raw usage object. Send with `model`."
+          },
+          "model": {
+            "type": "string"
+          },
+          "cost": {
+            "type": "number",
+            "description": "USD."
+          }
+        },
+        "description": "Send one of `amount`, `usage` with `model`, or `cost`."
+      },
+      "FinishResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "settled"
+            ]
+          },
+          "usage_id": {
+            "type": "string"
+          },
+          "spent": {
+            "type": "integer"
+          },
+          "uncharged": {
+            "type": "integer",
+            "description": "The excess when settling would take the balance below zero. Recorded, never carried as debt."
+          },
+          "settled_by": {
+            "type": "string",
+            "description": "`finish`, or `timeout` when the hold settled at its estimate."
+          },
+          "currency": {
+            "$ref": "#/components/schemas/CurrencySummary"
+          },
+          "remaining": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true
+          },
+          "resets_at": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO 8601 UTC time, for example `2026-11-03T00:00:00Z`.",
+            "example": "2026-11-03T00:00:00Z"
+          }
+        }
+      },
+      "UndoResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "undone"
+            ]
+          },
+          "usage_id": {
+            "type": "string"
+          },
+          "refunded": {
+            "type": "integer"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/CurrencySummary"
+          },
+          "remaining": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true
+          },
+          "resets_at": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO 8601 UTC time, for example `2026-11-03T00:00:00Z`.",
+            "example": "2026-11-03T00:00:00Z"
+          }
+        }
+      },
+      "UsageReadResponse": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/UsagePlan"
+          },
+          "add_ons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsagePlan"
+            }
+          },
+          "balances": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Balance"
+            }
+          }
+        },
+        "required": [
+          "user_id",
+          "plan",
+          "add_ons",
+          "balances"
+        ]
+      },
       "Product": {
         "type": "object",
         "description": "A product in the catalog.",

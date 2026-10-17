@@ -88,6 +88,7 @@
                 "pages": [
                   "iap/user-identity",
                   "iap/entitlement-ownership",
+                  "iap/usage-limits",
                   "iap/subscription-state",
                   "iap/customer-portal",
                   "iap/custom-cancel-flow",
@@ -179,6 +180,15 @@
               "api-reference/endpoint/get-entitlements",
               "api-reference/endpoint/features-checked",
               "api-reference/endpoint/claim-entitlement"
+            ]
+          },
+          {
+            "group": "Usage (server)",
+            "pages": [
+              "api-reference/endpoint/spend-usage",
+              "api-reference/endpoint/finish-usage",
+              "api-reference/endpoint/undo-usage",
+              "api-reference/endpoint/get-usage"
             ]
           },
           {

@@ -1,0 +1,291 @@
+---
+title: 'Usage Limits and Credits'
+description: 'Plans, features and currencies: check access in your app, and spend credits from your server'
+icon: 'gauge'
+---
+
+<Warning>
+  Plans, features and usage limits are not released yet. The APIs on this page may change before release.
+</Warning>
+
+Use this to gate parts of your app by plan, and to meter AI features with credits. You set the rules once in the dashboard. Your app reads what the person has. Your server spends credits before each AI request.
+
+## The model
+
+| Concept | What it is |
+|---|---|
+| **Plan** | A named set of products, for example Pro is Pro Monthly, Pro Yearly and Lifetime. Plans are ranked. Everyone is on Free until they buy. A person has exactly one plan: the highest-ranked plan among the products they hold. |
+| **Add-on** | A plan of kind `add_on`. It stacks on top of the person's plan instead of competing for rank. A person has any number of add-ons. |
+| **Feature** | Something your app checks by key, for example `custom_styles`. It is either on or off, or it has a value picked from an ordered list you type, lowest to highest (`1080p`, `4K`, `8K`). Each plan and add-on sets a value for every feature. A person gets the best value across their plan and add-ons. |
+| **Currency** | A counter you name, for example Credits. An app can have several. |
+| **Action** | What spends a currency, with a key your server sends (`image_generation`). Its cost is a fixed number or by usage. A key you haven't listed costs 1. |
+| **Source** | Where a currency comes from: a free allowance, a plan's allowance, or a purchased pack. |
+| **Balance** | What one person has left in one currency. |
+
+A person's balance adds up three parts, spent in this order: this period's allowance, then rolled-over units, then purchased units. Purchased units from a pack do not expire.
+
+## Set it up in the dashboard
+
+<Steps>
+  <Step title="Plans">
+    Open the plans page in the catalog. ZeroSettle proposes plans from your App Store subscription groups and Play subscriptions. Rename them, move products between them, and add add-ons.
+  </Step>
+  <Step title="Features">
+    Add the features your app checks. Pick on or off, or a value list. Set each feature's value for every plan and add-on. A feature's key can be edited until your app first checks it, then it is fixed.
+  </Step>
+  <Step title="Currencies">
+    Add a currency, list its actions, and add its sources. Choose what happens when someone runs out: show an upgrade offer, offer credit packs, or do nothing and let your app handle it. Choose what your server answers if ZeroSettle can't be reached: allow or stop.
+  </Step>
+</Steps>
+
+## Check access in your app
+
+The app reads the plan, features and balances with the publishable key, on the read it already makes at launch. The SDK refreshes on configure, foreground, purchase and restore, and publishes an update when something changes. The app never spends credits; balances are for display.
+
+<CodeGroup>
+```swift Swift
+if ZeroSettle.hasAccess("custom_styles") {
+    // on or off feature
+}
+
+let quality = ZeroSettle.value("export_quality")   // "4K", or nil
+let credits = ZeroSettle.balance("credits")        // remaining, limit, resetsAt
+let plan = ZeroSettle.plan                         // key and name
+
+// Observe changes
+for await access in ZeroSettle.shared.accessUpdates {
+    // update your UI
+}
+```
+
+```kotlin Kotlin
+if (ZeroSettle.hasAccess("custom_styles")) {
+    // on or off feature
+}
+
+val quality = ZeroSettle.value("export_quality")   // "4K", or null
+val credits = ZeroSettle.balance("credits")        // remaining, limit, resetsAt
+
+// Observe changes with StateFlows: access, plan, features, balances
+val plan by ZeroSettle.plan.collectAsState()
+val balances by ZeroSettle.balances.collectAsState()
+```
+</CodeGroup>
+
+- `hasAccess` is true for an on feature, and for a value feature that has a value.
+- `value` returns the value of a value feature, and `nil` or `null` for an on-or-off feature or an unknown key.
+- Display a balance as "318 of 500 left" from `remaining` and `limit`.
+
+### First launch with no connection
+
+The SDK keeps the last answer on the device. If the app has never fetched its config, such as a first launch while offline, each feature falls back to the offline default you set. A feature with no default is off. Set defaults in the configuration:
+
+<CodeGroup>
+```swift Swift
+ZeroSettle.shared.configure(.init(
+    publishableKey: "zs_pk_live_...",
+    offlineFeatureDefaults: ["custom_styles": .bool(false), "export_quality": .text("1080p")]
+))
+```
+
+```kotlin Kotlin
+ZeroSettle.configure(
+    context,
+    ZeroSettleConfig(
+        publishableKey = "zs_pk_live_…",
+        offlineFeatureDefaults = mapOf(
+            "custom_styles" to FeatureValue.Bool(false),
+            "export_quality" to FeatureValue.Text("1080p"),
+        ),
+    ),
+)
+```
+</CodeGroup>
+
+The raw data behind these reads is on the [app read endpoint](/api-reference/endpoint/get-entitlements): `plan`, `add_ons`, `features` and `balances`. Feature keys come back exactly as you named them, for example `custom_styles`.
+
+## Spend credits from your server
+
+Spending runs on your server with a **secret key** (`zs_sk_test_...` or `zs_sk_live_...`). Never ship a secret key in an app. The key picks sandbox or live, and the two never mix. The `user_id` is your own stable id for the person, the same one the app passes when it identifies the user. An unknown id is created as a new person on Free.
+
+<CodeGroup>
+```js Node
+import { ZeroSettle } from "@zerosettle/node";
+
+const zs = new ZeroSettle({ secretKey: process.env.ZEROSETTLE_SECRET_KEY });
+
+const r = await zs.use("user_8f21", "image_generation");
+if (r.status !== "allowed") {
+  return res.status(402).json({ upgrade: r.upgradeAvailable, packs: r.packs });
+}
+// run the model
+```
+
+```python Python
+import os, uuid, requests
+
+resp = requests.post(
+    "https://api.zerosettle.io/v1/usage/",
+    headers={"X-ZeroSettle-Key": os.environ["ZEROSETTLE_SECRET_KEY"]},
+    json={
+        "user_id": "user_8f21",
+        "action": "image_generation",
+        "idempotency_key": str(uuid.uuid4()),
+    },
+    timeout=1,
+)
+resp.raise_for_status()
+r = resp.json()
+if r["status"] != "allowed":
+    ...  # stop here
+```
+
+```bash curl
+curl -X POST https://api.zerosettle.io/v1/usage/ \
+  -H "X-ZeroSettle-Key: $ZEROSETTLE_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "user_8f21", "action": "image_generation", "idempotency_key": "req_7c1e"}'
+```
+</CodeGroup>
+
+A successful answer looks like this. A denied request (`limit_reached`, `not_in_plan`) is also a `200`, spends nothing, and may carry `upgrade_available` or `packs`.
+
+```json
+{
+  "status": "allowed",
+  "usage_id": "use_01JAX9W3F8T2",
+  "currency": {"key": "credits", "name": "Credit", "plural": "Credits", "glyph": "sparkles", "offline": "allow"},
+  "spent": 3,
+  "held": false,
+  "remaining": 497,
+  "limit": 500,
+  "resets_at": "2026-11-03T00:00:00Z",
+  "plan": {"key": "pro", "name": "Pro", "kind": "tier"},
+  "add_ons": [],
+  "upgrade_available": null,
+  "packs": null,
+  "test_purchase": false
+}
+```
+
+The full request and response are in [Spend Usage](/api-reference/endpoint/spend-usage). To read a balance without spending, use [Read Balances](/api-reference/endpoint/get-usage).
+
+### Idempotency and undo
+
+Send an `idempotency_key` so a retry never spends twice. The same key with the same body returns the first answer; the same key with a different body is `409 idempotency_key_reused`. The Node library generates a key for you and reuses it on its retry.
+
+If the work fails after you spent, give the units back with [Undo a Request](/api-reference/endpoint/undo-usage). It works within 24 hours.
+
+<CodeGroup>
+```js Node
+await zs.undo(r.usageId);
+```
+
+```python Python
+requests.post(
+    f"https://api.zerosettle.io/v1/usage/{r['usage_id']}/undo/",
+    headers={"X-ZeroSettle-Key": os.environ["ZEROSETTLE_SECRET_KEY"]},
+    timeout=1,
+)
+```
+
+```bash curl
+curl -X POST https://api.zerosettle.io/v1/usage/use_01JAX9W3F8T2/undo/ \
+  -H "X-ZeroSettle-Key: $ZEROSETTLE_SECRET_KEY"
+```
+</CodeGroup>
+
+## By-usage actions
+
+A by-usage action, such as a long chat, only knows its size after the AI call returns. Every by-usage field is optional, so you pick either pattern. Fixed-cost actions never need `finish`.
+
+**Report once, after the call.** Send `use` with `amount`, or with `usage` and `model`, once the call returns. It is one request and is charged exactly. The status arrives after the units are spent, so someone can go one request over their limit.
+
+**Hold, then finish.** This is the recommended pattern for by-usage actions.
+
+1. Before the AI call, send `use` with an `estimate`. ZeroSettle holds that many units and answers. A hold comes off the balance at once, so a second request while it is open sees the lower balance.
+2. After the call, send `finish` with the real usage. ZeroSettle settles the difference. Settling can take a balance to zero, never below; any excess is recorded as uncharged usage and is not carried as debt.
+3. If no finish arrives within 15 minutes, the hold settles at its estimate.
+
+<CodeGroup>
+```js Node
+const hold = await zs.use(userId, "chat", { estimate: 40 });
+if (hold.status !== "allowed") return denied(hold);
+
+const completion = await openai.chat.completions.create({ model: "gpt-4o-mini", messages });
+
+await zs.finish(hold.usageId, { usage: completion.usage, model: completion.model });
+```
+
+```python Python
+base = "https://api.zerosettle.io/v1/usage/"
+headers = {"X-ZeroSettle-Key": os.environ["ZEROSETTLE_SECRET_KEY"]}
+
+hold = requests.post(base, headers=headers, timeout=1, json={
+    "user_id": user_id, "action": "chat", "estimate": 40,
+}).json()
+if hold["status"] != "allowed":
+    ...  # stop here
+
+completion = client.chat.completions.create(model="gpt-4o-mini", messages=messages)
+
+requests.post(f"{base}{hold['usage_id']}/finish/", headers=headers, timeout=1, json={
+    "usage": completion.usage.model_dump(), "model": completion.model,
+})
+```
+
+```bash curl
+curl -X POST https://api.zerosettle.io/v1/usage/use_01JAX9W3F8T2/finish/ \
+  -H "X-ZeroSettle-Key: $ZEROSETTLE_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 812}'
+```
+</CodeGroup>
+
+See [Finish a Hold](/api-reference/endpoint/finish-usage) for the response.
+
+## What to send for each provider
+
+Send the provider's raw `usage` object and the model id. ZeroSettle maps the fields itself, so you don't convert anything. It also records what each request cost you, so the dashboard can show margin. When it can't measure the cost, the dashboard says "Not measured".
+
+| Provider | What your server sends | Notes |
+|---|---|---|
+| OpenAI, Azure OpenAI, Mistral, xAI, DeepSeek, Groq, Together, Fireworks | `response.usage` and the model | A stream sends usage only with `stream_options.include_usage`, in a final chunk. A cancelled stream may never send it, and the hold then settles at the estimate. |
+| Anthropic | `response.usage` and the model | In a stream, the usage in `message_delta` is cumulative. Send the last one. |
+| Gemini, Vertex | `usageMetadata` and the model | |
+| AWS Bedrock | The Converse `usage` and the model | |
+| OpenRouter | `usage`, which includes `cost` | ZeroSettle uses `cost` as given. |
+| Vercel AI SDK | `result.usage` | The same shape for every provider. |
+| fal, Replicate, ElevenLabs, Runway, Luma, Stability | `amount`, in the action's unit (images, seconds, characters) | Their responses have no usable usage, so cost to serve is "Not measured" unless they send `cost`. |
+
+## When ZeroSettle can't be reached
+
+Your users should not be blocked by a problem on our side. The Node library times out after 1 second per attempt and retries once with the same idempotency key. If that fails too, it answers on its own, following the currency's "If ZeroSettle can't be reached" setting:
+
+- **Allow** (the default): `{ status: "allowed", offline: true }`. The request goes ahead and nothing is recorded.
+- **Stop**: `{ status: "limit_reached", offline: true }`.
+
+The library learns each currency's setting from answers it has already received, so just after a restart it allows. Narrow the result with `offline` in TypeScript: when `r.offline` is true there is no `usageId`. Passing that null id to `finish` or `undo` does nothing. A 4xx is your bug, not an outage: the library throws a `ZeroSettleError` with the server's `code` and does not retry.
+
+If you call the API directly, set your own timeout and decide your own fallback. A `5xx` or a timeout is safe to retry with the same `idempotency_key`.
+
+## Test purchases
+
+TestFlight, Xcode and App Review buy in Apple's sandbox, often with your live key. Those purchases give the person their plan and spend balances like any other, because access must work for App Review. The usage response carries `test_purchase: true` when the person's plan comes from one. The dashboard leaves that usage out of analytics unless you turn on "Include test purchases".
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Spend Usage" icon="code" href="/api-reference/endpoint/spend-usage">
+    The server API reference.
+  </Card>
+  <Card title="Report Checked Features" icon="flag" href="/api-reference/endpoint/features-checked">
+    How the SDK tells the dashboard which feature keys your app checks.
+  </Card>
+  <Card title="Get Entitlements" icon="list" href="/api-reference/endpoint/get-entitlements">
+    The read that carries plan, features and balances to the app.
+  </Card>
+  <Card title="Testing" icon="flask" href="/iap/testing">
+    Sandbox and test purchases.
+  </Card>
+</CardGroup>

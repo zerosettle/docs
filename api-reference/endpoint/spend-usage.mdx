@@ -1,0 +1,42 @@
+---
+title: 'Spend Usage'
+openapi: 'POST /usage'
+---
+
+<Warning>
+  This endpoint is not released yet.
+</Warning>
+
+Call this from your server before each AI request. It spends units for one action by one person and answers whether to go ahead. Authenticate with a **secret key** (`zs_sk_test_...` or `zs_sk_live_...`) in the `X-ZeroSettle-Key` header. The key picks the environment; sandbox and live balances never mix. Never put a secret key in an app.
+
+The Node library wraps this call with a 1 second timeout, one retry and an offline answer. See [Usage limits and credits](/iap/usage-limits).
+
+## How units are worked out
+
+- **Fixed action:** its listed cost.
+- **Unlisted action:** 1.
+- **By-usage action with `amount`:** `amount`. `amount` is ignored for fixed and unlisted actions.
+- **By-usage action with `usage` and `model`, or `cost`, when the currency has a cost per unit:** `ceil(cost_usd / cost_per_unit)`, at least 1.
+- **By-usage action with none of those:** a hold of `estimate`, else the action's average units over the last 7 days, else 1. Settle a hold with [Finish a Hold](/api-reference/endpoint/finish-usage).
+
+## Status
+
+| Status | Meaning |
+|---|---|
+| `allowed` | The units are spent (or held). Go ahead. |
+| `limit_reached` | Not enough is left. Nothing was spent. |
+| `not_in_plan` | The person's plan and add-ons give none of this currency, and they hold no purchased units. Nothing was spent. |
+
+A denied request is still a `200` and still returns a `usage_id`. It is recorded for the live feed and analytics. When the status is not `allowed`, `upgrade_available` carries the upgrade offer or `packs` carries the credit packs, depending on the currency's runs-out setting.
+
+## Errors
+
+Errors look like `{"error": "<code>", "message": "<sentence>"}`.
+
+| Status | Codes |
+|---|---|
+| `400` | `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_cost`, `bad_estimate`, `no_currencies` |
+| `409` | `idempotency_key_reused` |
+| `429` | `rate_limited`, with a `Retry-After` header in seconds |
+
+A `401` means the key failed. Treat any `401` as an auth failure.

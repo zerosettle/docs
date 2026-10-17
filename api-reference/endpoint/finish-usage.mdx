@@ -1,0 +1,16 @@
+---
+title: 'Finish a Hold'
+openapi: 'POST /usage/{usage_id}/finish'
+---
+
+<Warning>
+  This endpoint is not released yet.
+</Warning>
+
+Settles a hold taken by [Spend Usage](/api-reference/endpoint/spend-usage) for a by-usage action. Send the real size once the AI call returns, as one of `amount`, `usage` with `model`, or `cost`. Authenticate with a secret key.
+
+- The difference from the hold is settled. Settling can take the balance to zero, never below it; the excess is returned as `uncharged`, recorded and shown in the dashboard, and never carried as debt.
+- A hold with no finish settles at its estimate 15 minutes after it was made (`settled_by` is `timeout`). A finish that arrives later still updates cost to serve, but not the charge.
+- A second finish returns the stored result unchanged.
+
+Errors: `404 not_found`, `409 not_held` (the request was not a hold), `409 undone`.
