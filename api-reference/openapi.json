@@ -2006,7 +2006,7 @@
             }
           },
           "400": {
-            "description": "One of `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_cost`, `bad_estimate` or `no_currencies`.",
+            "description": "One of `bad_json`, `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_model`, `bad_cost`, `bad_estimate`, `bad_idempotency_key` or `no_currencies`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2117,7 +2117,7 @@
             }
           },
           "400": {
-            "description": "`user_id_required`.",
+            "description": "`user_id_required` or `bad_user_id`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2135,6 +2135,24 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "`rate_limited`. The `Retry-After` header gives the seconds to wait.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
           }
         }
       }
@@ -2143,7 +2161,7 @@
       "post": {
         "operationId": "finishUsage",
         "summary": "Finish a Hold",
-        "description": "This endpoint is not released yet. Settles a hold taken by `POST /usage` for a by-usage action. Send exactly one of `amount`, `usage` with `model`, or `cost`. The difference from the hold is settled. Settling can take a balance to zero, never below; any excess is returned as `uncharged`. A second finish returns the stored result unchanged. A hold with no finish settles at its estimate 15 minutes after it was made.",
+        "description": "This endpoint is not released yet. Settles a hold taken by `POST /usage` for a by-usage action. Send one of `amount`, `usage` with `model`, or `cost`. Usage that cannot be priced (an unknown model and no cost) never errors: the hold settles at its estimate. The difference from the hold is settled. Settling can take a balance to zero, never below; any excess is returned as `uncharged`. A second finish returns the stored result unchanged. A hold with no finish settles at its estimate 15 minutes after it was made.",
         "tags": [
           "Usage"
         ],
@@ -2205,6 +2223,16 @@
               }
             }
           },
+          "400": {
+            "description": "One of `bad_json`, `bad_amount` (nothing was sent to settle with), `bad_usage`, `bad_model` or `bad_cost`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Invalid or missing secret key.",
             "content": {
@@ -2227,6 +2255,24 @@
           },
           "409": {
             "description": "`not_held` (the request was not a hold) or `undone`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`. The `Retry-After` header gives the seconds to wait.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2311,6 +2357,24 @@
           },
           "409": {
             "description": "`undo_window_passed` or `nothing_spent` (a denied request).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`. The `Retry-After` header gives the seconds to wait.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2478,16 +2542,18 @@
           },
           "currency": {
             "type": "string",
-            "description": "Currency key. Required only when `action` is not listed and the environment has more than one live currency."
+            "maxLength": 64,
+            "description": "Currency key. Required only when `action` is not listed and the environment has more than one live currency, or when the action is listed in more than one live currency (`currency_required`)."
           },
           "amount": {
             "type": "integer",
             "minimum": 1,
+            "maximum": 1000000,
             "description": "Units to charge. Used only by a by-usage action; ignored for fixed and unlisted actions."
           },
           "usage": {
             "type": "object",
-            "description": "The provider's raw usage object, at most 16 KB. Priced with `model` for cost to serve, and converted to units for a by-usage action."
+            "description": "The provider's raw usage object, at most 16 KB. Used with `model` to price the call, for cost to serve and, on a by-usage action, to work out units. Cost order: a sent `cost`, then `usage.cost`, then the catalog price for `usage` with `model`. Converting to units needs the currency's cost per unit; usage that cannot be priced (an unknown model and no cost) is held at the estimate, the 7-day average, else 1. Send `amount` or `cost` when the model may not price."
           },
           "model": {
             "type": "string",
@@ -2497,12 +2563,14 @@
           "cost": {
             "type": "number",
             "minimum": 0,
-            "description": "What the call cost in USD, when the provider returned it."
+            "maximum": 1000,
+            "description": "What the call cost in USD, when the provider returned it. It is used before `usage.cost` and the catalog price. On a by-usage action it becomes units with the currency's cost per unit."
           },
           "estimate": {
             "type": "integer",
             "minimum": 1,
-            "description": "The expected units of a by-usage action that is held."
+            "maximum": 1000000,
+            "description": "The expected units of a by-usage action that is held. A hold is all or nothing: an estimate above the units left is `limit_reached`."
           },
           "idempotency_key": {
             "type": "string",
@@ -2554,7 +2622,7 @@
               "limit_reached",
               "not_in_plan"
             ],
-            "description": "`allowed`: the units are spent (or held); go ahead. `limit_reached`: not enough is left; nothing spent. `not_in_plan`: the person's plan and add-ons give none of this currency and they hold no purchased units; nothing spent."
+            "description": "`allowed`: the units are spent (or held); go ahead. `limit_reached`: not enough is left; nothing spent. `not_in_plan`: the person's plan and add-ons give none of this currency, and they have never held purchased units in it; nothing spent. Someone whose purchased units are used up gets `limit_reached`. A report-once request on a by-usage action takes what is left and answers `allowed` with `spent` below what was reported; it answers `limit_reached` only at zero."
           },
           "usage_id": {
             "type": "string",
@@ -2636,17 +2704,22 @@
         "properties": {
           "amount": {
             "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000,
             "description": "The real units."
           },
           "usage": {
             "type": "object",
-            "description": "The provider's raw usage object. Send with `model`."
+            "description": "The provider's raw usage object. Send with `model`. Cost order: a sent `cost`, then `usage.cost`, then the catalog price for `usage` with `model`. Converting to units needs the currency's cost per unit. Usage that cannot be priced never errors: the hold settles at its estimate."
           },
           "model": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 128
           },
           "cost": {
             "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
             "description": "USD."
           }
         },
@@ -2691,7 +2764,8 @@
             "description": "ISO 8601 UTC time, for example `2026-11-03T00:00:00Z`.",
             "example": "2026-11-03T00:00:00Z"
           }
-        }
+        },
+        "required": ["status", "usage_id", "spent", "uncharged", "settled_by", "currency", "remaining", "limit", "resets_at"]
       },
       "UndoResponse": {
         "type": "object",
@@ -2724,7 +2798,8 @@
             "description": "ISO 8601 UTC time, for example `2026-11-03T00:00:00Z`.",
             "example": "2026-11-03T00:00:00Z"
           }
-        }
+        },
+        "required": ["status", "usage_id", "refunded", "currency", "remaining", "limit", "resets_at"]
       },
       "UsageReadResponse": {
         "type": "object",

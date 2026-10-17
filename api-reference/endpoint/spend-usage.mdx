@@ -16,16 +16,20 @@ The Node library wraps this call with a 1 second timeout, one retry and an offli
 - **Fixed action:** its listed cost.
 - **Unlisted action:** 1.
 - **By-usage action with `amount`:** `amount`. `amount` is ignored for fixed and unlisted actions.
-- **By-usage action with `usage` and `model`, or `cost`, when the currency has a cost per unit:** `ceil(cost_usd / cost_per_unit)`, at least 1.
-- **By-usage action with none of those:** a hold of `estimate`, else the action's average units over the last 7 days, else 1. Settle a hold with [Finish a Hold](/api-reference/endpoint/finish-usage).
+- **By-usage action with `usage` and `model`, or `cost`, that can be priced:** `ceil(cost_usd / cost_per_unit)`, at least 1. This needs the currency's cost per unit, which the dashboard requires once an action is by usage. The cost comes from a sent `cost` first, then `usage.cost`, then the catalog price for `usage` with `model`.
+- **By-usage action that can't be priced** (an unknown model and no cost): a hold of `estimate`, else the action's average units over the last 7 days, else 1. The same hold applies when no measure was sent. It is never refused. Settle a hold with [Finish a Hold](/api-reference/endpoint/finish-usage); finish with usage that still can't be priced settles at the hold.
+
+If the model may not price, send `amount` or `cost` so the charge matches the call.
 
 ## Status
 
 | Status | Meaning |
 |---|---|
 | `allowed` | The units are spent (or held). Go ahead. |
-| `limit_reached` | Not enough is left. Nothing was spent. |
-| `not_in_plan` | The person's plan and add-ons give none of this currency, and they hold no purchased units. Nothing was spent. |
+| `limit_reached` | Not enough is left. Nothing was spent. A hold is all or nothing: an estimate above the units left is `limit_reached` even when some units remain. |
+| `not_in_plan` | The person's plan and add-ons give none of this currency, and they have never held purchased units in it. Nothing was spent. Someone whose purchased units are used up gets `limit_reached`. |
+
+A by-usage request that reports `amount` or `usage` after the call takes what is left, up to the units reported, and answers `allowed` with `spent` below what was reported. The rest is recorded as uncharged and the balance never goes below zero. It answers `limit_reached` only when nothing is left.
 
 A denied request is still a `200` and still returns a `usage_id`. It is recorded for the live feed and analytics. When the status is not `allowed`, `upgrade_available` carries the upgrade offer or `packs` carries the credit packs, depending on the currency's runs-out setting.
 
@@ -35,7 +39,7 @@ Errors look like `{"error": "<code>", "message": "<sentence>"}`.
 
 | Status | Codes |
 |---|---|
-| `400` | `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_cost`, `bad_estimate`, `no_currencies` |
+| `400` | `bad_json`, `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_model`, `bad_cost`, `bad_estimate`, `bad_idempotency_key`, `no_currencies` |
 | `409` | `idempotency_key_reused` |
 | `429` | `rate_limited`, with a `Retry-After` header in seconds |
 

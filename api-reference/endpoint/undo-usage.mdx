@@ -13,4 +13,4 @@ Gives back what a request spent, or releases a hold, for example when a generati
 - Works within 24 hours of the request.
 - A second undo returns the stored result.
 
-Errors: `404 not_found`, `409 undo_window_passed`, `409 nothing_spent` (the request was denied, so nothing was spent).
+Errors: `404 not_found`, `409 undo_window_passed`, `409 nothing_spent` (the request was denied, so nothing was spent), `429 rate_limited` with a `Retry-After` header in seconds.
