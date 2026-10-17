@@ -770,6 +770,38 @@
                       "items": {
                         "$ref": "#/components/schemas/Entitlement"
                       }
+                    },
+                    "plan": {
+                      "type": "object",
+                      "description": "The person's one plan: the highest-ranked plan among the products they hold, otherwise the Free plan (`free`). Unknown users and apps that have not set up plans also get the Free plan. Omitted together with `add_ons` and `features` when the server cannot compute them; keep the last-known values.",
+                      "required": ["key", "name", "kind"],
+                      "properties": {
+                        "key": { "type": "string", "example": "pro" },
+                        "name": { "type": "string", "example": "Pro" },
+                        "kind": { "type": "string", "enum": ["tier", "add_on"] }
+                      }
+                    },
+                    "add_ons": {
+                      "type": "array",
+                      "description": "Add-on plans the person holds. They stack on top of the plan. Omitted together with `plan` and `features` when the server cannot compute them; keep the last-known values.",
+                      "items": {
+                        "type": "object",
+                        "required": ["key", "name", "kind"],
+                        "properties": {
+                          "key": { "type": "string", "example": "studio" },
+                          "name": { "type": "string", "example": "Studio" },
+                          "kind": { "type": "string", "enum": ["add_on"] }
+                        }
+                      }
+                    },
+                    "features": {
+                      "type": "object",
+                      "description": "Each feature key mapped to its value for this person, taken as the best across the plan and add-ons. On-or-off features are `true` or `false`. Value features are a string from the developer's ordered list, or `null`. Empty when the app has not set up plans. Omitted together with `plan` and `add_ons` when the server cannot compute them.",
+                      "additionalProperties": {
+                        "nullable": true,
+                        "oneOf": [{ "type": "boolean" }, { "type": "string" }]
+                      },
+                      "example": { "custom_styles": true, "export_quality": "4K" }
                     }
                   }
                 }
@@ -778,6 +810,47 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/iap/features/checked": {
+      "post": {
+        "operationId": "reportFeaturesChecked",
+        "summary": "Report Checked Features",
+        "description": "Reports which feature keys the app checks. The dashboard shows these as \"Checked from your app\", and a feature's key can no longer be renamed once the app checks it. Unknown or archived keys are ignored. The server records when a key was first and last checked, and updates last-checked at most once an hour.",
+        "tags": [
+          "Entitlements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["keys"],
+                "properties": {
+                  "keys": {
+                    "type": "array",
+                    "description": "Feature keys the app checks.",
+                    "maxItems": 50,
+                    "items": { "type": "string", "maxLength": 64 },
+                    "example": ["custom_styles", "export_quality"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Recorded. No content."
+          },
+          "400": {
+            "description": "The body is not a JSON object with a `keys` list of up to 50 strings of at most 64 characters."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"

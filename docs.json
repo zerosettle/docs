@@ -177,6 +177,7 @@
             "group": "Entitlements",
             "pages": [
               "api-reference/endpoint/get-entitlements",
+              "api-reference/endpoint/features-checked",
               "api-reference/endpoint/claim-entitlement"
             ]
           },

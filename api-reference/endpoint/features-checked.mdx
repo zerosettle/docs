@@ -1,0 +1,18 @@
+---
+title: 'Report Checked Features'
+openapi: 'POST /iap/features/checked'
+---
+
+The SDK calls this endpoint to report which feature keys your app checks. Send up to 50 keys, each at most 64 characters. Authenticate with the publishable key in the `X-ZeroSettle-Key` header, as with the other SDK endpoints.
+
+```json
+{ "keys": ["custom_styles", "export_quality"] }
+```
+
+A successful call returns `204 No Content`. A body that is not a JSON object with a `keys` list returns `400`, and a missing or invalid key returns `401`.
+
+## What it records
+
+- Unknown or archived keys are ignored.
+- For each known key, ZeroSettle records when it was first and last checked. Last-checked updates at most once an hour.
+- The dashboard shows these keys as "Checked from your app", and a feature's key can no longer be renamed once your app checks it.
