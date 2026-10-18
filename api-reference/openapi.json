@@ -1936,7 +1936,7 @@
       "post": {
         "operationId": "spendUsage",
         "summary": "Spend Usage",
-        "description": "This endpoint is not released yet. Spends units for one action by one person and answers whether to go ahead. Call it from your server with a secret key, before each AI request. An unknown `user_id` is created as a new person on the Free plan. A retry with the same `idempotency_key` and the same body returns the first answer and spends nothing more.",
+        "description": "This endpoint is not released yet. Spends units for one action by one person and answers whether to go ahead. Call it from your server with a secret key, before each AI request. An unknown `user_id` is created as a new person on the Free plan. A retry with the same `idempotency_key` within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request.",
         "tags": [
           "Usage"
         ],
@@ -2161,7 +2161,7 @@
       "post": {
         "operationId": "finishUsage",
         "summary": "Finish a Hold",
-        "description": "This endpoint is not released yet. Settles a hold taken by `POST /usage` for a by-usage action. Send one of `amount`, `usage` with `model`, or `cost`. Usage that cannot be priced (an unknown model and no cost) never errors: the hold settles at its estimate. The difference from the hold is settled. Settling can take a balance to zero, never below; any excess is returned as `uncharged`. A second finish returns the stored result unchanged. A hold with no finish settles at its estimate 15 minutes after it was made.",
+        "description": "This endpoint is not released yet. Settles a hold taken by `POST /usage` for a by-usage action. Send one of `amount`, `usage` with `model`, or `cost`. Usage that cannot be priced (an unknown model and no cost) never errors: the hold settles at its estimate. The difference from the hold is settled. Settling can take a balance to zero, never below; any excess is returned as `uncharged`. A second finish returns the stored result unchanged. A hold with no finish settles at its estimate 15 minutes after it was made (`settled_by: \"timeout\"`). A finish that arrives after that, within 24 hours of the hold, still updates cost to serve but not the charge. After 24 hours the request is gone and finish answers `404 not_found`.",
         "tags": [
           "Usage"
         ],
@@ -2244,7 +2244,7 @@
             }
           },
           "404": {
-            "description": "`not_found`.",
+            "description": "`not_found`: no request has this id, or it is more than 24 hours old.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2254,7 +2254,7 @@
             }
           },
           "409": {
-            "description": "`not_held` (the request was not a hold) or `undone`.",
+            "description": "`not_held` (the request was not a hold), `undone`, or `try_again` (the request changed while it was being processed; send the same call again).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2346,7 +2346,7 @@
             }
           },
           "404": {
-            "description": "`not_found`.",
+            "description": "`not_found`: no request has this id, or it is more than 24 hours old.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2356,7 +2356,7 @@
             }
           },
           "409": {
-            "description": "`undo_window_passed` or `nothing_spent` (a denied request).",
+            "description": "`nothing_spent` (a denied request) or `try_again` (the request changed while it was being processed; send the same call again).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2575,7 +2575,7 @@
           "idempotency_key": {
             "type": "string",
             "maxLength": 255,
-            "description": "A retry with the same key and body returns the first answer and spends nothing more. The same key with a different body is `409 idempotency_key_reused`."
+            "description": "A retry with the same key within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request. The same key within 24 hours with a different body is `409 idempotency_key_reused`."
           }
         },
         "required": [

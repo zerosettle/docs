@@ -31,6 +31,8 @@ A new server API spends credits before each AI request. It uses a secret key, no
 
 `GET /v1/iap/entitlements/` gains a top-level `balances` key next to `plan`, `add_ons` and `features`, so an app can show what is left. The existing keys are unchanged. The app never spends; spending is a server call.
 
+ZeroSettle keeps each usage request for 24 hours; after that, usage is kept as daily totals per person. Finish and undo answer `404 not_found` once a request is more than 24 hours old. A retry with the same `idempotency_key` within 24 hours returns the first answer; after 24 hours it is a new request.
+
 Three developer webhook events are added: `plan.changed`, `currency.limit_reached` and `currency.granted`. See [Event webhooks](/iap/event-webhooks#plans-and-credits-events-unreleased).
 </Update>
 

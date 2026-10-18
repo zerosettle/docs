@@ -183,9 +183,11 @@ The full request and response are in [Spend Usage](/api-reference/endpoint/spend
 
 ### Idempotency and undo
 
-Send an `idempotency_key` so a retry never spends twice. The same key with the same body returns the first answer; the same key with a different body is `409 idempotency_key_reused`. Generate a new key for each request and reuse it on a retry.
+Send an `idempotency_key` so a retry does not spend again. A retry with the same key within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request. The same key within 24 hours with a different body is `409 idempotency_key_reused`. Generate a new key for each request and reuse it on a retry.
 
-If the work fails after you spent, give the units back with [Undo a Request](/api-reference/endpoint/undo-usage). It works within 24 hours.
+If the work fails after you spent, give the units back with [Undo a Request](/api-reference/endpoint/undo-usage). It works within 24 hours of the request; after that the request is gone and undo answers `404 not_found`.
+
+**What ZeroSettle keeps.** Each request is kept for 24 hours; after that, usage is kept as daily totals per person.
 
 <CodeGroup>
 ```js Node
@@ -220,7 +222,7 @@ A by-usage action, such as a long chat, only knows its size after the AI call re
 
 1. Before the AI call, send `use` with an `estimate`. ZeroSettle holds that many units and answers. A hold comes off the balance at once, so a second request while it is open sees the lower balance.
 2. After the call, send `finish` with the real usage. ZeroSettle settles the difference. Settling can take a balance to zero, never below; any excess is recorded as uncharged usage and is not carried as debt.
-3. If no finish arrives within 15 minutes, the hold settles at its estimate.
+3. If no finish arrives within 15 minutes, the hold settles at its estimate. A finish within 24 hours of the hold still updates cost to serve but not the charge; after 24 hours finish answers `404 not_found`.
 
 <CodeGroup>
 ```js Node
@@ -304,7 +306,7 @@ Send the provider's raw `usage` object and the model id. ZeroSettle maps the fie
 Your users should not be blocked by a problem on our side, so decide what your server does when it can't reach ZeroSettle.
 
 - Set a short timeout, about 2 seconds.
-- Optionally retry once with the same `idempotency_key`. The same key never spends twice.
+- Optionally retry once with the same `idempotency_key`. A retry within 24 hours returns the first answer and spends nothing more.
 - If ZeroSettle still can't be reached (a timeout, a network error or a `5xx`), follow the currency's "If ZeroSettle can't be reached" setting from the dashboard. It is on every response as `currency.offline`.
   - **Allow** (the default): let the request go ahead.
   - **Stop**: stop the request.

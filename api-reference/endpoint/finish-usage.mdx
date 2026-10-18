@@ -12,7 +12,7 @@ Settles a hold taken by [Spend Usage](/api-reference/endpoint/spend-usage) for a
 Converting `usage` or `cost` to units needs the currency's cost per unit. The cost comes from a sent `cost` first, then `usage.cost`, then the catalog price for `usage` with `model`. Usage that can't be priced, such as an unknown model with no cost, never errors: the hold settles at its estimate and the usage is recorded. Send `amount` or `cost` when the model may not price.
 
 - The difference from the hold is settled. Settling can take the balance to zero, never below it; the excess is returned as `uncharged`, recorded and shown in the dashboard, and never carried as debt.
-- A hold with no finish settles at its estimate 15 minutes after it was made (`settled_by` is `timeout`). A finish that arrives later still updates cost to serve, but not the charge.
+- A hold with no finish settles at its estimate 15 minutes after it was made (`settled_by` is `timeout`). A finish that arrives after that, within 24 hours of the hold, still updates cost to serve but not the charge. After 24 hours the request is gone and finish answers `404 not_found`.
 - A second finish returns the stored result unchanged.
 
-Errors: `400` (`bad_json`, `bad_amount` when nothing was sent to settle with, `bad_usage`, `bad_model`, `bad_cost`), `404 not_found`, `409 not_held` (the request was not a hold), `409 undone`, `429 rate_limited` with a `Retry-After` header in seconds.
+Errors: `400` (`bad_json`, `bad_amount` when nothing was sent to settle with, `bad_usage`, `bad_model`, `bad_cost`), `404 not_found` (no request has this id, or it is more than 24 hours old), `409 not_held` (the request was not a hold), `409 undone`, `409 try_again` (the request changed while it was being processed; send the same call again), `429 rate_limited` with a `Retry-After` header in seconds.
