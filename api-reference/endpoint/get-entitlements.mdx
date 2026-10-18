@@ -7,14 +7,15 @@ Each entry carries `is_test_purchase`. It is `true` for a TestFlight, App Review
 
 ## Plan, add-ons and features
 
-The response also carries three keys next to `entitlements` and `pending_actions`. The existing keys are unchanged.
+The response also carries four keys next to `entitlements` and `pending_actions`. The existing keys are unchanged.
 
 <ResponseExample>
 ```json
 {
   "plan": { "key": "pro", "name": "Pro", "kind": "tier" },
   "add_ons": [{ "key": "studio", "name": "Studio", "kind": "add_on" }],
-  "features": { "custom_styles": true, "export_quality": "4K" }
+  "features": { "custom_styles": true, "export_quality": "4K" },
+  "balances": { "credits": { "remaining": 318, "limit": 500 } }
 }
 ```
 </ResponseExample>
@@ -22,5 +23,6 @@ The response also carries three keys next to `entitlements` and `pending_actions
 - `plan` is the person's one plan: the highest-ranked plan among the products they hold, otherwise the Free plan (`{"key": "free", "name": "Free", "kind": "tier"}`). Unknown users, and apps that have not set up plans, also get the Free plan.
 - `add_ons` lists the add-on plans the person holds. They stack on top of the plan.
 - `features` maps each feature key to its value. On-or-off features are `true` or `false`. Value features are a string from the developer's ordered list, or `null`. The value is the best across the plan and add-ons. For apps without plans, `features` is empty.
+- `balances` maps each currency key to a balance. It is `{}` when the app has no live currency.
 
-If ZeroSettle cannot compute these three fields, it leaves them out and the SDK keeps its last-known values. `entitlements` and `pending_actions` are always returned.
+If ZeroSettle cannot compute these four fields, it leaves them out together and the SDK keeps its last-known values. `entitlements` and `pending_actions` are always returned.

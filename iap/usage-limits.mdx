@@ -40,7 +40,7 @@ A person's balance adds up three parts, spent in this order: this period's allow
 
 ## Check access in your app
 
-The app reads the plan, features and balances with the publishable key. Call `identify` first: access loads for the signed-in person, and until it has, every read answers from your offline defaults. After that the SDK refreshes on return to the foreground and after a purchase or restore, and publishes an update when something changes. On iOS the foreground refresh starts once the app first reads access and runs at most once a minute. On Android the SDK also refreshes every 5 minutes while the app is in the foreground. The app never spends credits; balances are for display.
+The app reads the plan, features and balances with the publishable key. Call `identify` first: access loads for the signed-in person, and until it has, every read answers from the `offlineFeatureDefaults` you set in code. After that the SDK refreshes on return to the foreground and after a purchase or restore, and publishes an update when something changes. On iOS the foreground refresh starts once the app first reads access and runs at most once a minute. On Android the SDK also refreshes every 5 minutes while the app is in the foreground. The app never spends credits; balances are for display.
 
 <CodeGroup>
 ```swift Swift
@@ -80,7 +80,7 @@ val balances by ZeroSettle.balances.collectAsState()
 
 ### First launch with no connection
 
-The SDK keeps the last answer on the device. Until access has loaded for the signed-in person, from the cache or the network (a first launch while offline, for example), each feature falls back to the offline default you set. A feature with no default is off. Set defaults in the configuration:
+The SDK keeps the last answer on the device. Until access has loaded for the signed-in person, from the cache or the network (a first launch while offline, for example), each feature falls back to the offline default you set. A feature with no default is off. Set defaults in code, in the configuration. The dashboard has no offline setting.
 
 <CodeGroup>
 ```swift Swift
@@ -103,6 +103,8 @@ ZeroSettle.configure(
 )
 ```
 </CodeGroup>
+
+Checking a key with `hasAccess` or `value` tells ZeroSettle the app uses it, which locks the key in the dashboard.
 
 The raw data behind these reads is on the [app read endpoint](/api-reference/endpoint/get-entitlements): `plan`, `add_ons`, `features` and `balances`. Feature keys come back exactly as you named them, for example `custom_styles`.
 

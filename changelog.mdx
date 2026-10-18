@@ -17,6 +17,16 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## October 2026
 
+<Update label="Platform" description="2026-10-18">
+### Four-key read, automatic feature checks, offline defaults in code (unreleased)
+
+This change is not released yet.
+
+- `GET /v1/iap/entitlements/` returns `plan`, `add_ons`, `features` and `balances` together. If ZeroSettle cannot compute them, it leaves all four out and the SDK keeps its last-known values.
+- The SDKs report checked feature keys on their own, once per key per launch for each publishable key, batched up to 50 keys. Your app never calls `POST /v1/iap/features/checked/`.
+- The dashboard no longer has an offline setting for features. Set `offlineFeatureDefaults` in code. Until access has loaded, `hasAccess` and `value` answer from those defaults.
+</Update>
+
 <Update label="Platform" description="2026-10-17">
 ### Credits, usage limits and a server usage API (unreleased)
 

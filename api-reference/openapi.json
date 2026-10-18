@@ -807,7 +807,7 @@
                     },
                     "features": {
                       "type": "object",
-                      "description": "Each feature key mapped to its value for this person, taken as the best across the plan and add-ons. On-or-off features are `true` or `false`. Value features are a string from the developer's ordered list, or `null`. Empty when the app has not set up plans. Omitted together with `plan` and `add_ons` when the server cannot compute them.",
+                      "description": "Each feature key mapped to its value for this person, taken as the best across the plan and add-ons. On-or-off features are `true` or `false`. Value features are a string from the developer's ordered list, or `null`. Empty when the app has not set up plans. Omitted together with `plan`, `add_ons` and `balances` when the server cannot compute them.",
                       "additionalProperties": {
                         "nullable": true,
                         "oneOf": [{ "type": "boolean" }, { "type": "string" }]
@@ -2026,7 +2026,7 @@
             }
           },
           "409": {
-            "description": "`idempotency_key_reused`: the same key was sent with a different body.",
+            "description": "`idempotency_key_reused`: the same key within 24 hours with a different body, or a key in use by a concurrent request.",
             "content": {
               "application/json": {
                 "schema": {
