@@ -187,7 +187,7 @@ Send an `idempotency_key` so a retry does not spend again. A retry with the same
 
 If the work fails after you spent, give the units back with [Undo a Request](/api-reference/endpoint/undo-usage). It works within 24 hours of the request; after that the request is gone and undo answers `404 not_found`.
 
-**What ZeroSettle keeps.** Each request is kept for 24 hours; after that, usage is kept as daily totals per person.
+**What ZeroSettle keeps.** Each request can be finished, undone or retried for 24 hours. After that it is no longer available, and its usage stays only in the daily totals per person.
 
 <CodeGroup>
 ```js Node

@@ -40,7 +40,7 @@ Errors look like `{"error": "<code>", "message": "<sentence>"}`.
 | Status | Codes |
 |---|---|
 | `400` | `bad_json`, `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_model`, `bad_cost`, `bad_estimate`, `bad_idempotency_key`, `no_currencies` |
-| `409` | `idempotency_key_reused` (the same key within 24 hours with a different body) |
+| `409` | `idempotency_key_reused` (the same key within 24 hours with a different body, or a key in use by a concurrent request) |
 | `429` | `rate_limited`, with a `Retry-After` header in seconds |
 
 A retry with the same `idempotency_key` within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request.
