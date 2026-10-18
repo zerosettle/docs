@@ -777,7 +777,7 @@
                     },
                     "plan": {
                       "type": "object",
-                      "description": "The person's one plan: the highest-ranked plan among the products they hold, otherwise the Free plan (`free`). Unknown users and apps that have not set up plans also get the Free plan. Omitted together with `add_ons` and `features` when the server cannot compute them; keep the last-known values.",
+                      "description": "The person's one plan: the highest-ranked plan among the products they hold, otherwise the Free plan (`free`). Unknown users and apps that have not set up plans also get the Free plan. Omitted together with `add_ons`, `features` and `balances` when the server cannot compute them; keep the last-known values.",
                       "required": ["key", "name", "kind"],
                       "properties": {
                         "key": { "type": "string", "example": "pro" },
@@ -787,7 +787,7 @@
                     },
                     "add_ons": {
                       "type": "array",
-                      "description": "Add-on plans the person holds. They stack on top of the plan. Omitted together with `plan` and `features` when the server cannot compute them; keep the last-known values.",
+                      "description": "Add-on plans the person holds. They stack on top of the plan. Omitted together with `plan`, `features` and `balances` when the server cannot compute them; keep the last-known values.",
                       "items": {
                         "type": "object",
                         "required": ["key", "name", "kind"],
