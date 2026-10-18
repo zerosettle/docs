@@ -32,8 +32,6 @@ A new server API spends credits before each AI request. It uses a secret key, no
 `GET /v1/iap/entitlements/` gains a top-level `balances` key next to `plan`, `add_ons` and `features`, so an app can show what is left. The existing keys are unchanged. The app never spends; spending is a server call.
 
 Three developer webhook events are added: `plan.changed`, `currency.limit_reached` and `currency.granted`. See [Event webhooks](/iap/event-webhooks#plans-and-credits-events-unreleased).
-
-A Node library, `@zerosettle/node`, wraps the server API with a 1 second timeout, one retry and a fail-open answer. It is not published yet. See [Usage limits and credits](/iap/usage-limits).
 </Update>
 
 <Update label="Platform" description="2026-10-17">

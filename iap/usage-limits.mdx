@@ -112,13 +112,22 @@ Spending runs on your server with a **secret key** (`zs_sk_test_...` or `zs_sk_l
 
 <CodeGroup>
 ```js Node
-import { ZeroSettle } from "@zerosettle/node";
-
-const zs = new ZeroSettle({ secretKey: process.env.ZEROSETTLE_SECRET_KEY });
-
-const r = await zs.use("user_8f21", "image_generation");
+const resp = await fetch("https://api.zerosettle.io/v1/usage/", {
+  method: "POST",
+  headers: {
+    "X-ZeroSettle-Key": process.env.ZEROSETTLE_SECRET_KEY,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    user_id: "user_8f21",
+    action: "image_generation",
+    idempotency_key: crypto.randomUUID(),
+  }),
+  signal: AbortSignal.timeout(2000),
+});
+const r = await resp.json();
 if (r.status !== "allowed") {
-  return res.status(402).json({ upgrade: r.upgradeAvailable, packs: r.packs });
+  return res.status(402).json({ upgrade: r.upgrade_available, packs: r.packs });
 }
 // run the model
 ```
@@ -134,7 +143,7 @@ resp = requests.post(
         "action": "image_generation",
         "idempotency_key": str(uuid.uuid4()),
     },
-    timeout=1,
+    timeout=2,
 )
 resp.raise_for_status()
 r = resp.json()
@@ -174,20 +183,24 @@ The full request and response are in [Spend Usage](/api-reference/endpoint/spend
 
 ### Idempotency and undo
 
-Send an `idempotency_key` so a retry never spends twice. The same key with the same body returns the first answer; the same key with a different body is `409 idempotency_key_reused`. The Node library generates a key for you and reuses it on its retry.
+Send an `idempotency_key` so a retry never spends twice. The same key with the same body returns the first answer; the same key with a different body is `409 idempotency_key_reused`. Generate a new key for each request and reuse it on a retry.
 
 If the work fails after you spent, give the units back with [Undo a Request](/api-reference/endpoint/undo-usage). It works within 24 hours.
 
 <CodeGroup>
 ```js Node
-await zs.undo(r.usageId);
+await fetch(`https://api.zerosettle.io/v1/usage/${r.usage_id}/undo/`, {
+  method: "POST",
+  headers: { "X-ZeroSettle-Key": process.env.ZEROSETTLE_SECRET_KEY },
+  signal: AbortSignal.timeout(2000),
+});
 ```
 
 ```python Python
 requests.post(
     f"https://api.zerosettle.io/v1/usage/{r['usage_id']}/undo/",
     headers={"X-ZeroSettle-Key": os.environ["ZEROSETTLE_SECRET_KEY"]},
-    timeout=1,
+    timeout=2,
 )
 ```
 
@@ -211,19 +224,35 @@ A by-usage action, such as a long chat, only knows its size after the AI call re
 
 <CodeGroup>
 ```js Node
-const hold = await zs.use(userId, "chat", { estimate: 40 });
+const base = "https://api.zerosettle.io/v1/usage/";
+const headers = {
+  "X-ZeroSettle-Key": process.env.ZEROSETTLE_SECRET_KEY,
+  "Content-Type": "application/json",
+};
+
+const hold = await (await fetch(base, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ user_id: userId, action: "chat", estimate: 40 }),
+  signal: AbortSignal.timeout(2000),
+})).json();
 if (hold.status !== "allowed") return denied(hold);
 
 const completion = await openai.chat.completions.create({ model: "gpt-4o-mini", messages });
 
-await zs.finish(hold.usageId, { usage: completion.usage, model: completion.model });
+await fetch(`${base}${hold.usage_id}/finish/`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ usage: completion.usage, model: completion.model }),
+  signal: AbortSignal.timeout(2000),
+});
 ```
 
 ```python Python
 base = "https://api.zerosettle.io/v1/usage/"
 headers = {"X-ZeroSettle-Key": os.environ["ZEROSETTLE_SECRET_KEY"]}
 
-hold = requests.post(base, headers=headers, timeout=1, json={
+hold = requests.post(base, headers=headers, timeout=2, json={
     "user_id": user_id, "action": "chat", "estimate": 40,
 }).json()
 if hold["status"] != "allowed":
@@ -231,7 +260,7 @@ if hold["status"] != "allowed":
 
 completion = client.chat.completions.create(model="gpt-4o-mini", messages=messages)
 
-requests.post(f"{base}{hold['usage_id']}/finish/", headers=headers, timeout=1, json={
+requests.post(f"{base}{hold['usage_id']}/finish/", headers=headers, timeout=2, json={
     "usage": completion.usage.model_dump(), "model": completion.model,
 })
 ```
@@ -272,14 +301,17 @@ Send the provider's raw `usage` object and the model id. ZeroSettle maps the fie
 
 ## When ZeroSettle can't be reached
 
-Your users should not be blocked by a problem on our side. The Node library times out after 1 second per attempt and retries once with the same idempotency key. If that fails too, it answers on its own, following the currency's "If ZeroSettle can't be reached" setting:
+Your users should not be blocked by a problem on our side, so decide what your server does when it can't reach ZeroSettle.
 
-- **Allow** (the default): `{ status: "allowed", offline: true }`. The request goes ahead.
-- **Stop**: `{ status: "limit_reached", offline: true }`.
+- Set a short timeout, about 2 seconds.
+- Optionally retry once with the same `idempotency_key`. The same key never spends twice.
+- If ZeroSettle still can't be reached (a timeout, a network error or a `5xx`), follow the currency's "If ZeroSettle can't be reached" setting from the dashboard. It is on every response as `currency.offline`.
+  - **Allow** (the default): let the request go ahead.
+  - **Stop**: stop the request.
+- A `4xx` is not an outage. It is an error in the request or the key, and the body carries the error code in `error`. Fix the request and don't retry it.
+- A `429` is ZeroSettle's own rate limit. Wait for the `Retry-After` header before you retry.
 
-The library learns each currency's setting from answers it has already received, so just after a restart it allows. Narrow the result with `offline` in TypeScript: when `r.offline` is true there is no `usageId`. Passing that null id to `finish` or `undo` does nothing. The library spends nothing on its own. A 4xx other than 429 is your bug, not an outage: the library throws a `ZeroSettleError` with the server's `code` and does not retry. A 429 is ZeroSettle's own rate limit, and it never blocks your users: the library waits for `Retry-After` when that fits within the timeout and retries once, and otherwise answers `use` offline, as for an outage. `finish`, `undo` and `balances` throw `unreachable` instead.
-
-If you call the API directly, set your own timeout and decide your own fallback. A `5xx` or a timeout is safe to retry with the same `idempotency_key`.
+When ZeroSettle can't be reached, nothing was spent. Keep the setting from the last answer you received for each currency, so you have it when the next call fails.
 
 ## Test purchases
 

@@ -2455,7 +2455,7 @@
               "allow",
               "stop"
             ],
-            "description": "The currency's \"If ZeroSettle can't be reached\" setting. The Node library caches it to decide what to answer while offline."
+            "description": "The currency's \"If ZeroSettle can't be reached\" setting from the dashboard. Your server follows it when it can't reach ZeroSettle: `allow` lets the request go ahead and `stop` blocks it."
           }
         },
         "required": [
@@ -2696,8 +2696,7 @@
           "upgrade_available",
           "packs",
           "test_purchase"
-        ],
-        "description": "The server never sends `offline`. The Node library adds `\"offline\": true` when it answers on its own."
+        ]
       },
       "FinishRequest": {
         "type": "object",

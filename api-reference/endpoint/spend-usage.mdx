@@ -9,7 +9,7 @@ openapi: 'POST /usage'
 
 Call this from your server before each AI request. It spends units for one action by one person and answers whether to go ahead. Authenticate with a **secret key** (`zs_sk_test_...` or `zs_sk_live_...`) in the `X-ZeroSettle-Key` header. The key picks the environment; sandbox and live balances never mix. Never put a secret key in an app.
 
-The Node library wraps this call with a 1 second timeout, one retry and an offline answer. See [Usage limits and credits](/iap/usage-limits).
+Set a short timeout on this call and decide what to do when ZeroSettle can't be reached. See [Usage limits and credits](/iap/usage-limits).
 
 ## How units are worked out
 
