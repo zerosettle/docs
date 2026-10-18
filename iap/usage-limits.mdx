@@ -104,7 +104,7 @@ ZeroSettle.configure(
 ```
 </CodeGroup>
 
-Checking a key with `hasAccess` or `value` tells ZeroSettle the app uses it, which locks the key in the dashboard.
+Checking a key with `hasAccess` or `value` tells ZeroSettle the app uses it. When that feature exists in the dashboard for the same environment, its key is then locked so it can't be renamed by mistake. The SDK reports each key once per launch, so if you create a feature after the app already checked its key, relaunch the app.
 
 The raw data behind these reads is on the [app read endpoint](/api-reference/endpoint/get-entitlements): `plan`, `add_ons`, `features` and `balances`. Feature keys come back exactly as you named them, for example `custom_styles`.
 
