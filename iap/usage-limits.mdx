@@ -360,7 +360,7 @@ ZeroSettle can pause metering for an app, for example during an incident. Your c
 - Finish and undo on a `use_paused_` id answer `200` with `paused: true`, even after the app resumes. `currency` and `remaining` are `null`, because nothing was stored. Check for `null` before you test `remaining <= 0`: in JavaScript `null <= 0` is true.
 - A request from before the pause finishes and undoes as usual.
 - A key used while paused stores nothing, so the same key spends after the app resumes.
-- If ZeroSettle cannot read the person's plan while paused, the answer is still `allowed`, with `plan: null`, `add_ons: []` and `remaining: 0`.
+- If ZeroSettle cannot read the person's plan while paused, the answer is still `allowed`, with `plan: null`, `add_ons: []`, `remaining: 0`, `limit: null`, `resets_at: null`, `upgrade_available: null`, `packs: null` and `test_purchase: false`.
 - `GET /v1/usage/` returns balances as usual with `paused: true`. The app read, `GET /v1/iap/entitlements/`, is unchanged. Balances stop moving until the app resumes.
 
 ## Test purchases

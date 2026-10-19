@@ -25,13 +25,13 @@ If the model may not price, send `amount` or `cost` so the charge matches the ca
 
 ## Action keys
 
-The `action` key is trimmed and compared without regard to case, so `Image_Generation ` and `image_generation` are the same action. A key that is not a string is `400 bad_action`, and so is one that is empty or longer than 64 characters after trimming. Stored keys keep the trimmed, lowercase form. Dashboard keys are lowercase already, so a listed action always matches.
+The `action` key is trimmed and compared without regard to case, so `Image_Generation ` and `image_generation` are the same action. A missing or blank key is `400 action_required`. A key that is not a string, or longer than 64 characters after trimming and lowercasing, is `400 bad_action`. Stored keys keep the trimmed, lowercase form. Dashboard keys are lowercase already, so a listed action always matches.
 
 ## When the app is paused
 
 If ZeroSettle has paused metering for your app, validation still runs first. Then the answer is `200` with `status: "allowed"`, `spent: 0`, `held: false`, `paused: true` and a `usage_id` that starts with `use_paused_`. `remaining`, `limit` and `resets_at` are the person's unchanged balance. `upgrade_available` and `packs` are `null`. Nothing is written and nothing is charged, so let the request go ahead.
 
-If ZeroSettle cannot read the person's plan while paused, the answer is still `allowed`, with `plan: null`, `add_ons: []`, `remaining: 0` and `limit: null`. Do not read that `remaining: 0` as out of credits when `paused` is true.
+If ZeroSettle cannot read the person's plan while paused, the answer is still `allowed`, with `plan: null`, `add_ons: []`, `remaining: 0`, `limit: null`, `resets_at: null`, `upgrade_available: null`, `packs: null` and `test_purchase: false`. Do not read that `remaining: 0` as out of credits when `paused` is true.
 
 A key used while paused stores nothing, so the same key spends after the app resumes. A retry of a key from before the pause answers as it did.
 
