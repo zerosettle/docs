@@ -1936,7 +1936,7 @@
       "post": {
         "operationId": "spendUsage",
         "summary": "Spend Usage",
-        "description": "This endpoint is not released yet. Spends units for one action by one person and answers whether to go ahead. Call it from your server with a secret key, before each AI request. An unknown `user_id` is created as a new person on the Free plan. A retry with the same `idempotency_key` within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request.",
+        "description": "This endpoint is not released yet. Spends units for one action by one person and answers whether to go ahead. Call it from your server with a secret key, before each AI request. An unknown `user_id` is created as a new person on the Free plan. While the app is paused, the answer is `allowed` with `paused: true` and nothing is spent. A retry with the same `idempotency_key` within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request.",
         "tags": [
           "Usage"
         ],
@@ -2026,7 +2026,7 @@
             }
           },
           "409": {
-            "description": "`idempotency_key_reused`: the same key within 24 hours with a different body, or a key in use by a concurrent request.",
+            "description": "`idempotency_key_reused`: the same key within 24 hours with a different body, or a key in use by a concurrent request. `request_undone`: the key's request was undone; send a new idempotency key to spend again.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2538,7 +2538,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
-            "description": "The action's key, for example `image_generation`."
+            "description": "The action's key, for example `image_generation`. Leading and trailing spaces are removed and the key is lowercased, so `Image_Generation ` and `image_generation` are the same action. Stored keys keep the normalised form."
           },
           "currency": {
             "type": "string",
@@ -2575,7 +2575,7 @@
           "idempotency_key": {
             "type": "string",
             "maxLength": 255,
-            "description": "A retry with the same key within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request. The same key within 24 hours with a different body is `409 idempotency_key_reused`."
+            "description": "A retry with the same key within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request. The same key within 24 hours with a different body is `409 idempotency_key_reused`. The same key after its request was undone is `409 request_undone`. A key used while the app is paused stores nothing, so the same key spends after the app resumes."
           }
         },
         "required": [
@@ -2652,7 +2652,13 @@
             "example": "2026-11-03T00:00:00Z"
           },
           "plan": {
-            "$ref": "#/components/schemas/UsagePlan"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UsagePlan"
+              }
+            ],
+            "nullable": true,
+            "description": "Null only on a paused answer when the plan could not be read."
           },
           "add_ons": {
             "type": "array",
@@ -2676,6 +2682,14 @@
               "$ref": "#/components/schemas/UsagePack"
             },
             "description": "Only when the status is not `allowed` and the runs-out setting resolves to packs. Otherwise `null`."
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "True only while the app is paused. A paused answer stores nothing and spends nothing, and `usage_id` starts with `use_paused_`. It is left out otherwise."
+          },
+          "warning": {
+            "type": "string",
+            "description": "Present only as `unknown_model`: the action is by usage, you sent a token `usage` object with no `cost` and no `usage.cost`, and `model` is not in ZeroSettle's price catalog, so the call could not be priced. The request still succeeds. Send `cost` or `amount` to charge for what the call used. Cost to serve shows as Not measured."
           },
           "test_purchase": {
             "type": "boolean",
@@ -2745,17 +2759,33 @@
           },
           "settled_by": {
             "type": "string",
-            "description": "`finish`, or `timeout` when the hold settled at its estimate."
+            "description": "`finish`, `timeout` when the hold settled at its estimate, or `paused` for a `use_paused_` id."
           },
           "currency": {
-            "$ref": "#/components/schemas/CurrencySummary"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CurrencySummary"
+              }
+            ],
+            "nullable": true,
+            "description": "Null only for a `use_paused_` id."
           },
           "remaining": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true,
+            "description": "Null only for a `use_paused_` id."
           },
           "limit": {
             "type": "integer",
             "nullable": true
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "True only for a `use_paused_` id. Nothing was stored, so nothing was settled."
+          },
+          "warning": {
+            "type": "string",
+            "description": "Present only as `unknown_model`: the action is by usage, you sent a token `usage` object with no `cost` and no `usage.cost`, and `model` is not in ZeroSettle's price catalog, so the call could not be priced. The request still succeeds. Send `cost` or `amount` to charge for what the call used. Cost to serve shows as Not measured."
           },
           "resets_at": {
             "type": "string",
@@ -2782,14 +2812,26 @@
             "type": "integer"
           },
           "currency": {
-            "$ref": "#/components/schemas/CurrencySummary"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CurrencySummary"
+              }
+            ],
+            "nullable": true,
+            "description": "Null only for a `use_paused_` id."
           },
           "remaining": {
-            "type": "integer"
+            "type": "integer",
+            "nullable": true,
+            "description": "Null only for a `use_paused_` id."
           },
           "limit": {
             "type": "integer",
             "nullable": true
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "True only for a `use_paused_` id. Nothing was stored, so nothing was given back."
           },
           "resets_at": {
             "type": "string",
@@ -2807,13 +2849,23 @@
             "type": "string"
           },
           "plan": {
-            "$ref": "#/components/schemas/UsagePlan"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UsagePlan"
+              }
+            ],
+            "nullable": true,
+            "description": "Null only while the app is paused and the plan could not be read."
           },
           "add_ons": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/UsagePlan"
             }
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "True while the app is paused. Balances are read as usual and stop moving until the app is resumed."
           },
           "balances": {
             "type": "object",

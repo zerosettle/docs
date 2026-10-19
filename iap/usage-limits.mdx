@@ -24,6 +24,17 @@ Use this to gate parts of your app by plan, and to meter AI features with credit
 
 A person's balance adds up three parts, spent in this order: this period's allowance, then rolled-over units, then purchased units. Purchased units from a pack do not expire.
 
+### Pack credits and disputes
+
+A pack credits its units when the payment succeeds. A Google Play pack bought with quantity N credits N packs, and a refund of part of the quantity removes that many packs. An Apple purchase credits one pack even if the quantity is higher.
+
+- A refund takes back the units that are still unspent. Spent units stay spent.
+- A dispute (a chargeback) takes back all unspent units, as a full refund does. A dispute that is only an inquiry changes nothing, and neither does its close.
+- A won dispute returns the units. An earlier partial refund stays taken.
+- A balance never goes below zero.
+
+While a chargeback is open, the buyer cannot spend the pack's units. Nothing is taken for an inquiry, which Stripe marks with a warning status, until it escalates to a chargeback.
+
 ## Set it up in the dashboard
 
 <Steps>
@@ -187,6 +198,10 @@ The full request and response are in [Spend Usage](/api-reference/endpoint/spend
 
 Send an `idempotency_key` so a retry does not spend again. A retry with the same key within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request. The same key within 24 hours with a different body is `409 idempotency_key_reused`. Generate a new key for each request and reuse it on a retry.
 
+If you send the same key after you undid its request, the answer is `409 request_undone`. Send a new key to spend again.
+
+The `action` key is trimmed and lowercased before it is matched, so `Image_Generation ` and `image_generation` are one action. A key you have not listed costs 1.
+
 If the work fails after you spent, give the units back with [Undo a Request](/api-reference/endpoint/undo-usage). It works within 24 hours of the request; after that the request is gone and undo answers `404 not_found`.
 
 **What ZeroSettle keeps.** Each request can be finished, undone or retried for 24 hours. After that it is no longer available, and its usage stays only in the daily totals per person.
@@ -279,6 +294,8 @@ curl -X POST https://api.zerosettle.io/v1/usage/use_01JAX9W3F8T2/finish/ \
 
 See [Finish a Hold](/api-reference/endpoint/finish-usage) for the response.
 
+When the model is not in ZeroSettle's price catalog and you sent token `usage` with no `cost`, the spend and finish answers carry `"warning": "unknown_model"`. The request still succeeds. Send `cost` or `amount` for that model so the charge matches the call.
+
 ### When usage can't be priced
 
 Turning `usage` or `cost` into units needs the currency's cost per unit, plus a cost: a `cost` you send, a `cost` inside `usage`, or a model ZeroSettle can price, in that order. When the usage can't be priced, such as an unknown model with no cost:
@@ -316,6 +333,35 @@ Your users should not be blocked by a problem on our side, so decide what your s
 - A `429` is ZeroSettle's own rate limit. Wait for the `Retry-After` header before you retry.
 
 When ZeroSettle can't be reached, nothing was spent. Keep the setting from the last answer you received for each currency, so you have it when the next call fails.
+
+## When metering is paused
+
+ZeroSettle can pause metering for an app, for example during an incident. Your code does not change. A spend answers `200` with `status: "allowed"`, `spent: 0`, `paused: true` and a `usage_id` that starts with `use_paused_`. Nothing is written or charged, so go ahead with the request.
+
+```json
+{
+  "status": "allowed",
+  "usage_id": "use_paused_4f9c2a1e",
+  "currency": {"key": "credits", "name": "Credit", "plural": "Credits", "glyph": "sparkles", "offline": "allow"},
+  "spent": 0,
+  "held": false,
+  "paused": true,
+  "remaining": 318,
+  "limit": 500,
+  "resets_at": "2026-11-03T00:00:00Z",
+  "plan": {"key": "pro", "name": "Pro", "kind": "tier"},
+  "add_ons": [],
+  "upgrade_available": null,
+  "packs": null,
+  "test_purchase": false
+}
+```
+
+- Finish and undo on a `use_paused_` id answer `200` with `paused: true`, even after the app resumes. `currency` and `remaining` are `null`, because nothing was stored. Check for `null` before you test `remaining <= 0`: in JavaScript `null <= 0` is true.
+- A request from before the pause finishes and undoes as usual.
+- A key used while paused stores nothing, so the same key spends after the app resumes.
+- If ZeroSettle cannot read the person's plan while paused, the answer is still `allowed`, with `plan: null`, `add_ons: []` and `remaining: 0`.
+- `GET /v1/usage/` returns balances as usual with `paused: true`. The app read, `GET /v1/iap/entitlements/`, is unchanged. Balances stop moving until the app resumes.
 
 ## Test purchases
 

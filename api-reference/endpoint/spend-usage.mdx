@@ -21,6 +21,20 @@ Set a short timeout on this call and decide what to do when ZeroSettle can't be 
 
 If the model may not price, send `amount` or `cost` so the charge matches the call.
 
+**Unknown model warning.** When the action is by usage, you sent a token `usage` object, you sent no `cost` and no `usage.cost`, and `model` is not in ZeroSettle's price catalog, the answer carries `"warning": "unknown_model"`. The request still succeeds and is held as described above. Send `cost` or `amount` to charge for what the call used. Cost to serve shows as Not measured.
+
+## Action keys
+
+The `action` key is trimmed and compared without regard to case, so `Image_Generation ` and `image_generation` are the same action. A key that is not a string is `400 bad_action`, and so is one that is empty or longer than 64 characters after trimming. Stored keys keep the trimmed, lowercase form. Dashboard keys are lowercase already, so a listed action always matches.
+
+## When the app is paused
+
+If ZeroSettle has paused metering for your app, validation still runs first. Then the answer is `200` with `status: "allowed"`, `spent: 0`, `held: false`, `paused: true` and a `usage_id` that starts with `use_paused_`. `remaining`, `limit` and `resets_at` are the person's unchanged balance. `upgrade_available` and `packs` are `null`. Nothing is written and nothing is charged, so let the request go ahead.
+
+If ZeroSettle cannot read the person's plan while paused, the answer is still `allowed`, with `plan: null`, `add_ons: []`, `remaining: 0` and `limit: null`. Do not read that `remaining: 0` as out of credits when `paused` is true.
+
+A key used while paused stores nothing, so the same key spends after the app resumes. A retry of a key from before the pause answers as it did.
+
 ## Status
 
 | Status | Meaning |
@@ -40,9 +54,11 @@ Errors look like `{"error": "<code>", "message": "<sentence>"}`.
 | Status | Codes |
 |---|---|
 | `400` | `bad_json`, `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_model`, `bad_cost`, `bad_estimate`, `bad_idempotency_key`, `no_currencies` |
-| `409` | `idempotency_key_reused` (the same key within 24 hours with a different body, or a key in use by a concurrent request) |
+| `409` | `idempotency_key_reused` (the same key within 24 hours with a different body, or a key in use by a concurrent request), `request_undone` (the key's request was undone) |
 | `429` | `rate_limited`, with a `Retry-After` header in seconds |
 
 A retry with the same `idempotency_key` within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request.
+
+Replay checks run in this order. A different body answers `409 idempotency_key_reused`. Then a key whose request was undone answers `409 request_undone` with the message "This request was undone. Send a new idempotency key to spend again." Otherwise the first answer comes back. After an undo, send a new key to spend again.
 
 A `401` means the key failed. Treat any `401` as an auth failure.

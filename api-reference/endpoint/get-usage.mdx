@@ -9,6 +9,8 @@ openapi: 'GET /usage'
 
 Returns a person's plan, add-ons and the balance in each currency, and spends nothing. Authenticate with a secret key. An unknown user gets the Free view and is not created.
 
+While the app is paused, the answer also has `paused: true`. Balances are read as usual and stop moving until the app resumes. `plan` is `null` if the plan could not be read.
+
 Use it on your server, for example to show "318 of 500 left" in a web page. An app reads the same data with the publishable key through the SDK; see [Usage limits and credits](/iap/usage-limits).
 
 Errors: `400` (`user_id_required`, `bad_user_id`) and `429 rate_limited` with a `Retry-After` header in seconds.
