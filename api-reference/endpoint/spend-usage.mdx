@@ -21,7 +21,7 @@ Set a short timeout on this call and decide what to do when ZeroSettle can't be 
 
 If the model may not price, send `amount` or `cost` so the charge matches the call.
 
-**Unknown model warning.** When the action is by usage, you sent a token `usage` object, you sent no `cost` and no `usage.cost`, and `model` is not in ZeroSettle's price catalog, the answer carries `"warning": "unknown_model"`. The request still succeeds and is held as described above. Send `cost` or `amount` to charge for what the call used. Cost to serve shows as Not measured.
+**Unknown model warning.** When the action is by usage, you sent a token `usage` object, you sent no `cost`, no `usage.cost` and no `amount`, and `model` is not in ZeroSettle's price catalog, the answer carries `"warning": "unknown_model"`. The request still succeeds and is held as described above. Send `cost` or `amount` to charge for what the call used. Cost to serve shows as Not measured.
 
 ## Action keys
 

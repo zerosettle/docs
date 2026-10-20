@@ -294,7 +294,7 @@ curl -X POST https://api.zerosettle.io/v1/usage/use_01JAX9W3F8T2/finish/ \
 
 See [Finish a Hold](/api-reference/endpoint/finish-usage) for the response.
 
-When the model is not in ZeroSettle's price catalog and you sent token `usage` with no `cost`, the spend and finish answers carry `"warning": "unknown_model"`. The request still succeeds. Send `cost` or `amount` for that model so the charge matches the call.
+When the model is not in ZeroSettle's price catalog and you sent token `usage` with no `cost` and no `amount`, the spend and finish answers carry `"warning": "unknown_model"`. The request still succeeds. Send `cost` or `amount` for that model so the charge matches the call.
 
 ### When usage can't be priced
 

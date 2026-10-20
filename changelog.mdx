@@ -26,7 +26,7 @@ This change is not released yet.
 - `POST /v1/usage/` answers `409 request_undone` when you send the key of a request you undid. A different body is still `409 idempotency_key_reused`, and that check runs first. Send a new key to spend again.
 - Action keys are trimmed and lowercased before matching. `Image_Generation ` and `image_generation` are one action.
 - Spend and finish answers carry `warning: "unknown_model"` when a by-usage request sends token `usage` with no `cost` and the model is not in the price catalog. Send `cost` or `amount`.
-- When metering is paused for an app, spend answers `allowed` with `paused: true`, `spent: 0` and a `use_paused_` id, and writes nothing. Finish and undo on a `use_paused_` id answer `200` with `paused: true`, `currency: null` and `remaining: null`. A key used while paused spends after resume. `GET /v1/usage/` adds `paused`. `plan` is nullable in the usage responses, and `currency` and `remaining` are nullable in finish and undo.
+- When metering is paused for an app, spend answers `allowed` with `paused: true`, `spent: 0` and a `use_paused_` id, and writes nothing. Finish and undo on a `use_paused_` id answer `200` with `paused: true`, `currency: null` and `remaining: null`. A key used while paused spends after resume. `GET /v1/usage/` adds `paused`. `plan` on the spend answer is nullable (only in the paused fallback), and `currency` and `remaining` are nullable in finish and undo on a paused id.
 - A dispute takes back unspent pack units. A won dispute returns them. An inquiry changes nothing.
 - A Google Play pack with quantity N credits N packs, and a quantity refund removes that many.
 </Update>
