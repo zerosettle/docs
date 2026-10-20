@@ -383,7 +383,11 @@ ZeroSettle also handles Apple's **App Store Server Notifications V2** (ASSN v2) 
 
 ### Setting Up ASSN v2
 
-Configure the webhook URL in App Store Connect:
+<Tip>
+  The quickest way: in the Dashboard, go to **Integrations → Webhooks**, open **App Store Server Notifications v2** and choose **ZeroSettle Managed**. ZeroSettle sets the URL in App Store Connect for you with your App Store Connect API key.
+</Tip>
+
+To set it yourself, configure the webhook URL in App Store Connect:
 
 <Steps>
   <Step title="Open App Store Connect">
@@ -393,17 +397,13 @@ Configure the webhook URL in App Store Connect:
     Select **App Information** from the sidebar under **General**.
   </Step>
   <Step title="Configure the webhook URL">
-    Under **App Store Server Notifications**, set:
+    Under **App Store Server Notifications**, set both the **Production Server URL** and the **Sandbox Server URL** to:
 
-    **Production URL:**
     ```
     https://api.zerosettle.io/v1/webhooks/appstore-notifications/
     ```
 
-    **Sandbox URL:**
-    ```
-    https://api.zerosettle.io/v1/webhooks/appstore-notifications/?sandbox=true
-    ```
+    The same URL serves both: ZeroSettle reads the environment from Apple's signed notification, so the sandbox URL needs no query parameter. Use the `api.zerosettle.io` host; `zerosettle.io` does not receive notifications.
 
     Select **Version 2** for the notification version.
   </Step>
