@@ -22,6 +22,7 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 This change is not released yet.
 
+- A web checkout for a credit pack needs a user id; without one it answers `400 user_id_required`.
 - `POST /v1/usage/` answers `409 request_undone` when you send the key of a request you undid. A different body is still `409 idempotency_key_reused`, and that check runs first. Send a new key to spend again.
 - Action keys are trimmed and lowercased before matching. `Image_Generation ` and `image_generation` are one action.
 - Spend and finish answers carry `warning: "unknown_model"` when a by-usage request sends token `usage` with no `cost` and the model is not in the price catalog. Send `cost` or `amount`.

@@ -2538,7 +2538,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
-            "description": "The action's key, for example `image_generation`. Leading and trailing spaces are removed and the key is lowercased, so `Image_Generation ` and `image_generation` are the same action. Stored keys keep the normalised form."
+            "description": "The action's key, for example `image_generation`. Leading and trailing spaces are removed and the key is lowercased, so `Image_Generation ` and `image_generation` are the same action. The 64-character limit applies after trimming and lowercasing. Stored keys keep the normalised form."
           },
           "currency": {
             "type": "string",
@@ -2849,13 +2849,7 @@
             "type": "string"
           },
           "plan": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/UsagePlan"
-              }
-            ],
-            "nullable": true,
-            "description": "Null only while the app is paused and the plan could not be read."
+            "$ref": "#/components/schemas/UsagePlan"
           },
           "add_ons": {
             "type": "array",
