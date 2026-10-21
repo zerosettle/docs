@@ -30,7 +30,9 @@ Your API keys are available on the [ZeroSettle dashboard](https://app.zerosettle
 
 ## Rate Limits
 
-The API currently does not enforce rate limits, but please be reasonable with request volume. If you need high-throughput access, contact support@zerosettle.io.
+The SDK endpoints do not enforce rate limits, but please be reasonable with request volume. If you need high-throughput access, contact support@zerosettle.io.
+
+The [Data API](/api-reference/data-api) (`/v1/data/`) is limited to 600 requests a minute per credential. Over the limit it returns `429` with a `Retry-After` header.
 
 ## Error Handling
 
