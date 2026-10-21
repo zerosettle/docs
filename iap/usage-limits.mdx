@@ -29,11 +29,11 @@ A person's balance adds up three parts, spent in this order: this period's allow
 A pack credits its units when the payment succeeds. A credit pack bought on the web needs a user id: a web checkout for a pack without one answers `400 user_id_required`, so the credits always reach a known person. A Google Play pack bought with quantity N credits N packs, and a refund of part of the quantity removes that many packs. An Apple purchase credits one pack even if the quantity is higher.
 
 - A refund takes back the units that are still unspent. Spent units stay spent.
-- A dispute (a chargeback) takes back all unspent units, as a full refund does. A dispute that is only an inquiry changes nothing, and neither does its close.
-- A won dispute returns the units. An earlier partial refund stays taken.
+- A chargeback takes back all unspent units, as a full refund does, until the dispute is won. An inquiry (Stripe marks it with a warning status) keeps access and the pack units, and its payment still counts in revenue.
+- A won dispute returns the units, down to any refund already made. Several disputes on one payment are each handled.
 - A balance never goes below zero.
 
-While a chargeback is open, the buyer cannot spend the pack's units. Nothing is taken for an inquiry, which Stripe marks with a warning status, until it escalates to a chargeback.
+While a chargeback is open, the buyer cannot spend the pack's units. Nothing is taken for an inquiry until it escalates to a chargeback.
 
 ## Set it up in the dashboard
 
@@ -193,6 +193,10 @@ A successful answer looks like this. A denied request (`limit_reached`, `not_in_
 ```
 
 The full request and response are in [Spend Usage](/api-reference/endpoint/spend-usage). To read a balance without spending, use [Read Balances](/api-reference/endpoint/get-usage).
+
+### Body size
+
+Spend and finish refuse a body over 64 KB with `413 body_too_large` and the message "The body must be 64 KB or smaller." Undo takes no body.
 
 ### Idempotency and undo
 

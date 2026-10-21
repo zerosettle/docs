@@ -1932,7 +1932,7 @@
         }
       }
     },
-    "/usage": {
+    "/usage/": {
       "post": {
         "operationId": "spendUsage",
         "summary": "Spend Usage",
@@ -2017,6 +2017,16 @@
           },
           "401": {
             "description": "Invalid or missing secret key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`body_too_large`: The body must be 64 KB or smaller.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2157,7 +2167,7 @@
         }
       }
     },
-    "/usage/{usage_id}/finish": {
+    "/usage/{usage_id}/finish/": {
       "post": {
         "operationId": "finishUsage",
         "summary": "Finish a Hold",
@@ -2253,6 +2263,16 @@
               }
             }
           },
+          "413": {
+            "description": "`body_too_large`: The body must be 64 KB or smaller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageError"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`not_held` (the request was not a hold), `undone`, or `try_again` (the request changed while it was being processed; send the same call again).",
             "content": {
@@ -2284,7 +2304,7 @@
         }
       }
     },
-    "/usage/{usage_id}/undo": {
+    "/usage/{usage_id}/undo/": {
       "post": {
         "operationId": "undoUsage",
         "summary": "Undo a Request",

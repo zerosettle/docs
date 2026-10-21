@@ -353,9 +353,9 @@ ZeroSettle processes the following Stripe webhook events automatically. You do *
     | Event | What ZeroSettle Does |
     |-------|---------------------|
     | `charge.refunded` | Marks transaction as `refunded`, deactivates all linked entitlements. |
-    | `charge.dispute.created` | Marks transaction as `disputed`, revokes all linked entitlements. ZeroSettle handles evidence submission as MoR. |
-    | `charge.dispute.updated` | Logs dispute status changes. |
-    | `charge.dispute.closed` | Records dispute outcome (won/lost). |
+    | `charge.dispute.created` | A chargeback marks the transaction as `disputed` and revokes all linked entitlements. An inquiry (a `warning_*` status) keeps access and pack units, and its payment still counts in revenue. ZeroSettle handles evidence submission as MoR. |
+    | `charge.dispute.updated` | Records the dispute status. An inquiry that escalates to a chargeback revokes access then. |
+    | `charge.dispute.closed` | Records dispute outcome (won/lost). A won dispute restores access and pack units, down to any refund already made. |
     | `charge.dispute.funds_withdrawn` | Logs fund withdrawal. |
     | `charge.dispute.funds_reinstated` | Re-activates entitlements if dispute is won and funds are returned. |
   </Accordion>
