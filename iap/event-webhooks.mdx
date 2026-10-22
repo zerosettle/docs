@@ -198,7 +198,7 @@ A `<Plan>` object is `{"key", "name", "kind"}`, for example `{"key": "pro", "nam
 
 #### `plan.changed`
 
-Sent when we see a person's plan or add-ons change. We see a change on a purchase or expiry event, on an app read, or on a server spend, so the event can arrive a little after the change itself. `from` is `null` the first time ZeroSettle sees a person on a paid plan or with an add-on, after the app set up plans. That is not necessarily a new purchase:
+Sent when we see a person's plan or add-ons change. We see a change on a purchase or expiry event, on an app read, or on a server spend, so the event can arrive a little after the change itself. `from` is `null` when ZeroSettle sees a person for the first time, after the app set up plans, and they are on a paid plan or hold an add-on. That is not necessarily a new purchase:
 
 - An existing store subscriber seen for the first time sends one.
 - After an identity merge, the kept person can send one.
