@@ -19,7 +19,7 @@ ZeroSettle handles this with **reconciliation**: your server tells ZeroSettle th
     Identify the guest with `identify(.anonymous)`, or with an id your app minted on first launch (see [User Identity](/iap/user-identity)). Either way, purchases and events are recorded under that id.
   </Step>
   <Step title="Read the guest id at sign-up">
-    When the guest creates an account, send the guest id to your server along with the sign-up request. Read it from `analyticsUserId`. It is always set, even for a guest who never bought anything.
+    When the guest creates an account, send the guest id to your server along with the sign-up request. Read it from `analyticsUserId`. It is set even for a guest who never bought anything.
   </Step>
   <Step title="Reconcile from your server">
     After your server creates the account, it calls ZeroSettle with the guest id (`from`) and the account id (`into`). There are two ways: call the reconcile endpoint yourself, or mint a link token and let the app present it.
@@ -34,26 +34,26 @@ ZeroSettle handles this with **reconciliation**: your server tells ZeroSettle th
 | Moves to the account | Notes |
 |---|---|
 | Purchases and subscriptions | Transactions and entitlements. The original purchase id is kept for your records |
-| Credits and usage | Balances add together. They never conflict |
+| Purchased credits | Credit packs the guest bought move to the account and add to its balance. Plan allowances do not move: the account keeps its own |
 | Stripe customer links | The guest's Stripe customer is attached to the account, so checkout finds it |
 | Analytics and experiment rows | Paywall views, checkout events and experiment assignments move with the person, so a funnel that started as a guest finishes as the account |
 
 ZeroSettle only updates its own records. It never cancels a Stripe subscription, never changes an App Store or Google Play subscription, and never charges anyone.
 
 <Info>
-  **A guest who never bought anything still moves.** If the guest id has no purchases, only the analytics and experiment rows move. The call succeeds and reports zero transactions and zero entitlements. No `identity.reconciled` event is sent in that case.
+  **A guest who never bought anything can still move.** If the guest id has no customer record at all (no purchase, no checkout, no Stripe customer), only its analytics and experiment rows move. The call succeeds with zero counts, sends no event and sets up no forwarding. A guest who does have a customer record but no purchases takes a normal merge: zero counts, forwarding, and an `identity.reconciled` event with zeros.
 </Info>
 
 ## Old ids keep working
 
-After a reconcile, the guest id forwards to the account. A late renewal, an App Store or Google Play notification, an entitlement read or an event that still uses the old id lands on the account, and ZeroSettle does not create a new customer for it. You do not need to update ids that you have stored elsewhere.
+After a merge, the guest id forwards to the account. (An analytics-only move sets up no forwarding.) A late renewal, an App Store or Google Play notification, an entitlement read or an event that still uses the old id lands on the account, and ZeroSettle does not create a new customer for it. You do not need to update ids that you have stored elsewhere.
 
 ## Rules
 
-- **One way.** `into` always keeps the purchases. You cannot move them back.
+- **One way.** `into` keeps the purchases. You cannot move them back.
 - **Once per id.** An id that was merged away cannot be merged again. If you name an id that was merged away as the `into` side, ZeroSettle follows it to the account that kept it.
 - **Same environment.** Live and sandbox ids never mix.
-- **It refuses on conflict.** If both sides hold an active subscription (a trial counts) to the same product, ZeroSettle moves nothing. See [When a reconcile is refused](#when-a-reconcile-is-refused).
+- **It refuses on conflict.** If both customers hold a live entitlement to the same non-consumable product: a subscription (including a trial, or one cancelled but still running out its period) or a one-time unlock. Consumables never conflict, ZeroSettle moves nothing. See [When a reconcile is refused](#when-a-reconcile-is-refused).
 
 ## Option 1: your server calls the endpoint
 
@@ -309,9 +309,9 @@ try {
 
 ## When a reconcile is refused
 
-A refusal means ZeroSettle moved nothing. The most common cause is a conflict: the guest and the account each hold an active subscription (a trial counts) to the same product, and merging would leave one person paying for it twice. ZeroSettle never expires one side to resolve it, and never touches Stripe or a store.
+A refusal means ZeroSettle moved nothing. The most common cause is a conflict: both customers hold a live entitlement to the same non-consumable product: a subscription (including a trial, or one cancelled but still running out its period) or a one-time unlock. Consumables never conflict. ZeroSettle never expires one side to resolve it, and never touches Stripe or a store.
 
-To your server the refusal is always `409 reconcile_refused` (and `reconcileRefused` in the SDK). The specific reason is not in the response. It is in the dashboard, on the customer page, along with a list of refused reconciles you can act on.
+To your server a refusal is `409 reconcile_refused` (and `reconcileRefused` in the SDK). The specific reason is not in the response. It is in the dashboard, on the customer page, along with a list of refused reconciles you can act on.
 
 What to do:
 
@@ -325,7 +325,7 @@ Other refusals are rarer: the two ids are the same, the `from` id was already me
 
 ## Rate limits
 
-Reconcile calls are limited per project to 10 a minute and 1,000 a day. A link token can be presented 5 times an hour for the same guest id. A rate-limited call returns `429` with a `Retry-After` header. The [Restore Purchases](/api-reference/endpoint/restore-purchases) endpoint has its own limits.
+Server calls to the reconcile endpoint are limited per project to 10 a minute and 1,000 a day. Link-token presentations from apps are counted separately, with the same limits per project. A link token can also be presented 5 times an hour for the same guest id. A rate-limited call returns `429` with a `Retry-After` header. The [Restore Purchases](/api-reference/endpoint/restore-purchases) endpoint has its own limits.
 
 ## Webhooks
 

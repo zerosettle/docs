@@ -55,12 +55,12 @@ Gate your paywall on the second `identify()` having completed. If a user can rea
 
 ## Reading the current id
 
-The SDK exposes the id it is acting as, and an id for analytics that is always available.
+The SDK exposes the id it is acting as, and an id for analytics that is available before sign-in.
 
 | Property | What it returns |
 |---|---|
 | `currentUserId` | The id the SDK is acting as: your id after `identify(.user)`, the generated UUID after `identify(.anonymous)`. `nil` before any `identify()` and after `logout()` |
-| `analyticsUserId` | Always set. The current id when there is one, otherwise a per-device UUID that is generated and stored on first use. It is the same UUID `identify(.anonymous)` adopts later, so paywall views recorded before identify join the purchase made after it |
+| `analyticsUserId` | Set before sign-in too. The current id when there is one, otherwise a per-device UUID that is generated and stored on first use. It is the same UUID `identify(.anonymous)` adopts later, so paywall views recorded before identify join the purchase made after it |
 
 <CodeGroup>
 

@@ -164,7 +164,7 @@ If a Play purchase is already owned by a different ZeroSettle account, the SDK d
 
 ## Account tokens and `obfuscatedAccountId`
 
-The Android SDK sets `obfuscatedAccountId` on every Play purchase to an account token derived from the signed-in ZeroSettle user. If a purchase is synced while a different user is signed in, ZeroSettle attributes it to the user whose token it carries. Do not set your own `obfuscatedAccountId` when you use the ZeroSettle Android SDK.
+When a user is signed in, the Android SDK sets `obfuscatedAccountId` on the Play purchase to an account token derived from that user. If the purchase is later synced under a different signed-in user, ZeroSettle re-attributes it to the token's user only when that user has synced before and the purchase has no owner yet. Otherwise the usual claim flow applies. Do not set your own `obfuscatedAccountId` when you use the ZeroSettle Android SDK.
 
 ## One-time products you haven't linked yet
 

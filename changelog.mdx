@@ -20,7 +20,7 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 <Update label="Platform and SDKs" description="Unreleased">
 ### Guest to account: reconcile a guest's purchases onto their account
 
-Your server can now tell ZeroSettle that a guest id and an account id are the same person, and ZeroSettle moves the purchases, credits, analytics and experiment rows across. It is one way, refuses (and moves nothing) when both sides hold an active subscription to the same product, and never cancels anything in Stripe or a store. The old id keeps resolving to the account. See [Guest to Account](/iap/guest-to-account).
+Your server can now tell ZeroSettle that a guest id and an account id are the same person, and ZeroSettle moves the purchases, credits, analytics and experiment rows across. It is one way, refuses (and moves nothing) when both sides hold a live entitlement to the same non-consumable product (a subscription, including a trial or one cancelled but still running out its period, or a one-time unlock), and never cancels anything in Stripe or a store. The old id keeps resolving to the account. See [Guest to Account](/iap/guest-to-account).
 
 **New endpoints** (additive):
 - `POST /v1/identities/reconcile`, with your secret key and an `Idempotency-Key`.
@@ -29,14 +29,14 @@ Your server can now tell ZeroSettle that a guest id and an account id are the sa
 
 **New webhook:** `identity.reconciled`, sent when a reconcile moves purchases. If you subscribe to `*`, your handler will start receiving it, so make sure it tolerates an event type it does not recognise. See [Event Webhooks](/iap/event-webhooks#identity-reconciled).
 
-**Changed: `POST /v1/iap/restore-purchases/`.** The request and response shapes are the same. A restore that would put two active subscriptions to the same product on one user now restores nothing from that guest and answers `200` with `restored: 0` and a message to contact support. `target_identity_id` is always an integer when a guest matched. The endpoint is now rate limited and returns `429` with `Retry-After` when over a limit, so a restore button should treat a `429` as a failed restore. A restore now sends `identity.reconciled` instead of `subscription.purchased`.
+**Changed: `POST /v1/iap/restore-purchases/`.** The request and response shapes are the same. A restore that would put two live entitlements to the same non-consumable product on one user now restores nothing from that guest and answers `200` with `restored: 0` and a message to contact support. `target_identity_id` is an integer when a guest matched. The endpoint is now rate limited and returns `429` with `Retry-After` when over a limit, so a restore button should treat a `429` as a failed restore. A restore now sends `identity.reconciled` instead of `subscription.purchased`.
 
 **Changed: paywall events before `identify`.** Events now carry a per-device id instead of the literal `anonymous`, and iOS events include the StoreKit environment. Counts of app users and paywall viewers can rise as apps update.
 
 **SDKs (unreleased):**
 - iOS: `currentUserId` is public (read-only), new `analyticsUserId`, `reconcile(linkToken:)` returning `ReconcileResult` (with `switchedToAccount`), and new `ZeroSettleError` cases `reconcileRefused`, `invalidLinkToken` and `rateLimited(retryAfter:)`. Apps that switch exhaustively over `ZeroSettleError` need the new cases or a `default`.
 - Android: `trackEvent` (new), `analyticsUserId()`, `reconcile(linkToken)` returning `Result<ReconcileResult>`, and new `ZeroSettleError` cases `ReconcileRefused`, `InvalidLinkToken` and `RateLimited`.
-- Flutter (iOS and Android): `analyticsUserId()`, `reconcile(linkToken:)` and `trackEvent`.
+- Flutter (iOS and Android): `analyticsUserId()` and `reconcile(linkToken:)`. `trackEvent` already existed; on Android the bridge now sends events instead of dropping them.
 - All: `identify(.user)` logs a warning when one signed-in user replaces another without `logout()`.
 </Update>
 
