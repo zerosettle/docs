@@ -87,6 +87,7 @@
                 "icon": "users",
                 "pages": [
                   "iap/user-identity",
+                  "iap/guest-to-account",
                   "iap/entitlement-ownership",
                   "iap/subscription-state",
                   "iap/customer-portal",
@@ -228,6 +229,14 @@
             "group": "Customer Portal",
             "pages": [
               "api-reference/endpoint/create-customer-portal-session"
+            ]
+          },
+          {
+            "group": "Identity",
+            "pages": [
+              "api-reference/endpoint/reconcile-identities",
+              "api-reference/endpoint/create-link-token",
+              "api-reference/endpoint/present-link-token"
             ]
           },
           {

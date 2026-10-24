@@ -69,6 +69,10 @@
     {
       "name": "Restore",
       "description": "Restore purchases for a user"
+    },
+    {
+      "name": "Identity",
+      "description": "Move a guest's purchases to their account (reconcile two ids)"
     }
   ],
   "paths": {
@@ -1740,11 +1744,15 @@
                   },
                   "user_id": {
                     "type": "string",
-                    "description": "The user's external ID."
+                    "description": "The user's external ID. Before `identify`, SDKs send a per-device UUID (the SDK's `analyticsUserId`), the same one `identify(.anonymous)` adopts later, instead of the literal `anonymous`. A guest-to-account reconcile moves these events to the account."
                   },
                   "product_id": {
                     "type": "string",
                     "description": "The product related to this event, if applicable."
+                  },
+                  "environment": {
+                    "type": "string",
+                    "description": "Optional. The StoreKit environment the device is running in (`Production`, `Sandbox` or `Xcode`), sent by the iOS SDK. A non-production environment sent with a live key marks the event as a test event. Omitted when unknown, and an omitted value is never treated as a test event."
                   },
                   "screen_name": {
                     "type": "string",
@@ -1790,7 +1798,7 @@
       "post": {
         "operationId": "restorePurchases",
         "summary": "Restore Purchases",
-        "description": "Restores purchases for a user by linking entitlements from a previous identity (matched by email) to the current user ID. Useful when a user reinstalls the app or signs in on a new device.",
+        "description": "Moves purchases made by an anonymous (email-only) customer to the current user ID, matched by email. Useful when a user reinstalls the app or signs in on a new device.\n\nEach matching guest identity is moved through the same reconcile core as Reconcile Identities. If a guest and the target both hold an active subscription (a trial counts) to the same product, that guest is refused and **nothing is restored from it**. The response is still `200`, with `restored` of `0` for it and a `message` telling the person to contact support. Purchases never move on a conflict.\n\nA move that happens sends an `identity.reconciled` webhook (not `subscription.purchased`). The guest's Stripe links and profile are not moved by this endpoint.\n\nRate limited per IP (10 an hour), per email and app (5 an hour) and per app (6,000 a minute). Over a limit, the response is `429` with a `Retry-After` header. A restore button should treat a `429` as a failed restore and offer a retry later.",
         "tags": [
           "Restore"
         ],
@@ -1820,19 +1828,45 @@
         },
         "responses": {
           "200": {
-            "description": "Purchases restored",
+            "description": "Processed. Check `restored` and `message`.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {
-                      "type": "string",
-                      "example": "ok"
-                    },
-                    "restored_count": {
+                    "restored": {
                       "type": "integer",
-                      "description": "Number of entitlements restored."
+                      "description": "Number of entitlements restored. `0` when nothing matched or every match was refused."
+                    },
+                    "target_identity_id": {
+                      "type": "integer",
+                      "description": "The ZeroSettle identity id of the user that was restored to. Always an integer, including when a conflict refused the restore. Absent only when no guest purchases matched the email."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "A short human-readable result. On a refused conflict: `Some purchases could not be restored automatically. Contact support.`"
+                    }
+                  }
+                },
+                "examples": {
+                  "restored": {
+                    "value": {
+                      "restored": 1,
+                      "target_identity_id": 9124,
+                      "message": "Restored 1 entitlement(s)"
+                    }
+                  },
+                  "conflict": {
+                    "value": {
+                      "restored": 0,
+                      "target_identity_id": 9124,
+                      "message": "Some purchases could not be restored automatically. Contact support."
+                    }
+                  },
+                  "nothing_found": {
+                    "value": {
+                      "restored": 0,
+                      "message": "No anonymous purchases found for this email"
                     }
                   }
                 }
@@ -1844,6 +1878,398 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "description": "Too many restore attempts.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Too many restore attempts. Try again later."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/identities/reconcile": {
+      "post": {
+        "operationId": "reconcileIdentities",
+        "summary": "Reconcile Identities",
+        "description": "Moves one id's purchases, credits, analytics and experiment rows onto another id, from your server. Call it when a guest signs up and you know the guest id and the account id are the same person.\n\nAuthenticated with your **secret key** (`zs_sk_*`), sent in `X-ZeroSettle-Key` or as `Authorization: Bearer`. Never call it from an app. A publishable key is refused.\n\nThe merge is one way, and an id that has been merged away cannot be merged again. If both ids hold an active subscription (a trial counts) to the same product, the call is refused and nothing moves. Stripe and the stores are never changed. If `from` has no purchases, its analytics rows move and the call succeeds with zero counts.\n\nSend an `Idempotency-Key`. A repeat of a successful call with the same key and ids within 24 hours returns the stored response. The same key with different ids returns `422`. Refusals are not stored.\n\nA successful merge that moved purchases sends an `identity.reconciled` webhook. Limits: 10 calls a minute and 1,000 a day per project.",
+        "tags": [
+          "Identity"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A unique key for this reconcile, 1 to 255 characters. Reuse it when retrying the same call.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "from",
+                  "into"
+                ],
+                "properties": {
+                  "from": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "The id to merge away, usually the guest id."
+                  },
+                  "into": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "The id that keeps the purchases, usually the account id. If this id was merged away earlier, ZeroSettle follows it to the id that kept it."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Optional note stored on the reconciliation record."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The ids were reconciled (or the replay of an earlier success).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing `Idempotency-Key`, or a malformed body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "idempotency_key_required",
+                    "message": "Send an Idempotency-Key header of 1 to 255 characters."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or non-secret key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Refused. Nothing moved. The reason is on the customer page in the dashboard, not in this response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "reconcile_refused",
+                    "message": "The ids could not be reconciled. See the dashboard for details."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The `Idempotency-Key` was already used with different ids.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "idempotency_mismatch",
+                    "message": "This Idempotency-Key was already used with different ids."
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many reconcile calls.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "rate_limited",
+                    "message": "Too many reconcile calls. Retry later."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/identities/link-token": {
+      "post": {
+        "operationId": "createIdentityLinkToken",
+        "summary": "Create Link Token",
+        "description": "Mints a short-lived link token for an app to present with its publishable key (see Present Link Token). Use it when you want the app to finish the move instead of calling Reconcile Identities yourself.\n\nAuthenticated with your **secret key** (`zs_sk_*`). The token names one `from` and one `into`, expires after 10 minutes, and can be used once. You can also sign tokens yourself with no network call, see the Guest to Account guide for the exact format.",
+        "tags": [
+          "Identity"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "from",
+                  "into"
+                ],
+                "properties": {
+                  "from": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "The id to merge away, usually the guest id."
+                  },
+                  "into": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "The id that keeps the purchases, usually the account id."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "description": "The signed link token. Pass it to the SDK's `reconcile(linkToken:)`."
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "When the token expires."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_request",
+                    "message": "Send a JSON body with \"from\" and \"into\" ids of at most 255 characters."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or non-secret key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/identities/reconcile": {
+      "post": {
+        "operationId": "presentIdentityLinkToken",
+        "summary": "Present Link Token",
+        "description": "Called by the SDK (`reconcile(linkToken:)`) to finish a guest-to-account move with a link token your server signed. Authenticated with the publishable key.\n\nThe token is single use. It is spent when presented, even if the reconcile is refused. A `429` does not spend it. Limits: the project reconcile limits, and 5 presentations an hour for the same `from` id.",
+        "tags": [
+          "Identity"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "link_token"
+                ],
+                "properties": {
+                  "link_token": {
+                    "type": "string",
+                    "description": "The token from Create Link Token or your own signing."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The ids were reconciled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing `link_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_request",
+                    "message": "Send a JSON body with a \"link_token\" string."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid publishable key, or the token is invalid, expired, already used or for another environment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_link_token",
+                    "message": "That link token is not valid."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Refused. Nothing moved and the token is spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "reconcile_refused",
+                    "message": "The ids could not be reconciled. See the dashboard for details."
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. The token is not spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityError"
+                },
+                "example": {
+                  "error": {
+                    "code": "rate_limited",
+                    "message": "Too many presentations for this id. Retry later."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           }
         }
       }
@@ -1856,9 +2282,61 @@
         "in": "header",
         "name": "X-ZeroSettle-Key",
         "description": "Your publishable API key. Use `zs_pk_test_*` for sandbox or `zs_pk_live_*` for production."
+      },
+      "SecretKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-ZeroSettle-Key",
+        "description": "Your secret API key, for server-to-server calls only. Use `zs_sk_test_*` for sandbox or `zs_sk_live_*` for production. `Authorization: Bearer <key>` is also accepted. Never ship it in an app."
       }
     },
     "schemas": {
+      "IdentityError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ReconcileResponse": {
+        "type": "object",
+        "properties": {
+          "reconciliation_id": {
+            "type": "integer",
+            "description": "The id of the reconciliation record."
+          },
+          "from": {
+            "type": "string",
+            "description": "The id that was merged away."
+          },
+          "into": {
+            "type": "string",
+            "description": "The id that kept the purchases."
+          },
+          "moved": {
+            "type": "object",
+            "properties": {
+              "transactions": {
+                "type": "integer",
+                "description": "Transactions moved. `0` when only analytics moved."
+              },
+              "entitlements": {
+                "type": "integer",
+                "description": "Entitlements moved. `0` when only analytics moved."
+              }
+            }
+          }
+        }
+      },
       "Product": {
         "type": "object",
         "description": "A product in the catalog.",

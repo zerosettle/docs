@@ -71,6 +71,11 @@ sync, trigger emails, or notify your team, without polling our API.
 
     See [Switch & Save](/iap/switch-and-save) for the flow these describe.
   </Accordion>
+  <Accordion title="Identity">
+    | Event | When it fires |
+    |---|---|
+    | `identity.reconciled` | Purchases moved from one customer id to another, by your server, a link token, a support merge or restore purchases. See [Identity reconciled](#identity-reconciled) |
+  </Accordion>
 </AccordionGroup>
 
 <Tip>
@@ -174,6 +179,43 @@ Subscription and trial events share one envelope:
   }
 }
 ```
+
+### Identity reconciled
+
+`identity.reconciled` fires when a reconcile moves purchases from one id to another, see [Guest to Account](/iap/guest-to-account). It fires once per merge. A reconcile that only moves a guest's analytics (no purchases) does not send it, and neither does a refused one.
+
+```json
+{
+  "event_type": "identity.reconciled",
+  "project_id": 85,
+  "is_sandbox": false,
+  "fired_at": "2026-10-23T14:05:11.402918+00:00",
+  "data": {
+    "reconciliation_id": 4821,
+    "from_user_id": "3f1c9c52-8f5e-4a52-9d9c-0f0b6f1a7c11",
+    "into_user_id": "user_8472",
+    "actor": "secret_key",
+    "moved": {
+      "transactions": 2,
+      "entitlements": 1
+    }
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `data.reconciliation_id` | The id of the reconciliation record. Same as `reconciliation_id` in the endpoint response |
+| `data.from_user_id` | The id that was merged away. Later events and reads under it forward to `into_user_id`. `null` when the source had no external id (an email-only restore) |
+| `data.into_user_id` | The id that kept the purchases |
+| `data.actor` | Who asked for the merge: `secret_key`, `link_token`, `restore_purchases` or `dashboard_user`. Tolerate other values |
+| `data.moved` | Counts of `transactions` and `entitlements` that moved |
+
+<Note>
+  This event's envelope matches the Switch & Save eligibility events (`event_type`, `fired_at`, `is_sandbox`), not the subscription envelope above. Because there is no `type` field, branch on the `X-ZeroSettle-Event-Type` header, which is always set, before reading `event.type` in a handler like the one below. No email address is ever included.
+</Note>
+
+On this event, update your own records so the old id points at the new one, and do not treat the move as a new purchase. No `subscription.purchased` is sent for the moved subscription.
 
 ### Field reference
 
