@@ -36,7 +36,7 @@ Your server can now tell ZeroSettle that a guest id and an account id are the sa
 **SDKs (unreleased):**
 - iOS: `currentUserId` is public (read-only), new `analyticsUserId`, `reconcile(linkToken:)` returning `ReconcileResult` (with `switchedToAccount`), and new `ZeroSettleError` cases `reconcileRefused`, `invalidLinkToken` and `rateLimited(retryAfter:)`. Apps that switch exhaustively over `ZeroSettleError` need the new cases or a `default`.
 - Android: `trackEvent` (new), `analyticsUserId()`, `reconcile(linkToken)` returning `Result<ReconcileResult>`, and new `ZeroSettleError` cases `ReconcileRefused`, `InvalidLinkToken` and `RateLimited`.
-- Flutter: `analyticsUserId()` and `reconcile(linkToken:)`.
+- Flutter (iOS and Android): `analyticsUserId()`, `reconcile(linkToken:)` and `trackEvent`.
 - All: `identify(.user)` logs a warning when one signed-in user replaces another without `logout()`.
 </Update>
 

@@ -302,7 +302,6 @@ try {
   When the SDK was acting as the guest id, `reconcile` continues as the account for you on every platform. Swift and Flutter report it in `switchedToAccount`. The Android result does not have that field, so read `currentUserId` if you need to know.
 </Note>
 
-{/* Verify before release: Flutter analyticsUserId() and reconcile() are iOS-only in the current Flutter branch; Android wiring was pending. Remove this note when Android lands. */}
 
 <Warning>
   A link token is spent the moment it is presented, **even if the reconcile is refused**. The one exception is a `429` rate limit, which does not spend it. After a refusal, have your server mint a new token for the retry.

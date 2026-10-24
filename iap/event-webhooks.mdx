@@ -186,10 +186,11 @@ Subscription and trial events share one envelope:
 
 ```json
 {
-  "event_type": "identity.reconciled",
+  "id": "evt_reconciled_4821",
+  "type": "identity.reconciled",
+  "created": "2026-10-23T14:05:11.402918+00:00",
+  "environment": "live",
   "project_id": 85,
-  "is_sandbox": false,
-  "fired_at": "2026-10-23T14:05:11.402918+00:00",
   "data": {
     "reconciliation_id": 4821,
     "from_user_id": "3f1c9c52-8f5e-4a52-9d9c-0f0b6f1a7c11",
@@ -211,11 +212,7 @@ Subscription and trial events share one envelope:
 | `data.actor` | Who asked for the merge: `secret_key`, `link_token`, `restore_purchases` or `dashboard_user`. Tolerate other values |
 | `data.moved` | Counts of `transactions` and `entitlements` that moved |
 
-<Note>
-  This event's envelope matches the Switch & Save eligibility events (`event_type`, `fired_at`, `is_sandbox`), not the subscription envelope above. Because there is no `type` field, branch on the `X-ZeroSettle-Event-Type` header, which is always set, before reading `event.type` in a handler like the one below. No email address is ever included.
-</Note>
-
-On this event, update your own records so the old id points at the new one, and do not treat the move as a new purchase. No `subscription.purchased` is sent for the moved subscription.
+Uses the same envelope as the subscription events. On this event, update your own records so the old id points at the new one, and do not treat the move as a new purchase. No `subscription.purchased` is sent for the moved subscription.
 
 ### Field reference
 
