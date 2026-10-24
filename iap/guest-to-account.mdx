@@ -325,7 +325,7 @@ Other refusals are rarer: the two ids are the same, the `from` id was already me
 
 ## Rate limits
 
-Server calls to the reconcile endpoint are limited per project to 10 a minute and 1,000 a day. Link-token presentations from apps are counted separately, with the same limits per project. A link token can also be presented 5 times an hour for the same guest id. A rate-limited call returns `429` with a `Retry-After` header. The [Restore Purchases](/api-reference/endpoint/restore-purchases) endpoint has its own limits.
+Server calls to the reconcile endpoint are limited per project to 300 a minute and 50,000 a day. Link-token presentations from apps are counted separately, with the same limits per project. A link token can also be presented 5 times an hour for the same guest id. A rate-limited call returns `429` with a `Retry-After` header. The [Restore Purchases](/api-reference/endpoint/restore-purchases) endpoint has its own limits.
 
 ## Webhooks
 
