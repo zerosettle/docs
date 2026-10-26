@@ -1,0 +1,217 @@
+---
+title: 'Data API'
+description: 'Read your transactions, customers and revenue over HTTP'
+icon: 'chart-line'
+---
+
+The Data API is read-only. Use it to pull your ZeroSettle data into your own reports, warehouse or scripts. Every endpoint is a `GET` under `https://api.zerosettle.io/v1/data/`.
+
+It is separate from the SDK endpoints. The SDK uses a publishable key (`zs_pk_`); the Data API refuses publishable keys.
+
+## Pick a credential
+
+| Credential | Covers | Environment | Sent as |
+|---|---|---|---|
+| Secret key (`zs_sk_live_...`, `zs_sk_test_...`) | One app | From the key | `X-ZeroSettle-Key: <key>` or `Authorization: Bearer <key>` |
+| Access token (`zs_pat_...`) | Every app in your workspace | `?environment=live\|test`, default `live` | `Authorization: Bearer <token>` |
+
+With a secret key, the app and environment come from the key. You can send `?app=` or `?environment=`, but they must match the key, or the request fails with `app_mismatch` or `environment_mismatch`.
+
+With an access token, every request must name the app with `?app=<app id>`. An app from another workspace returns `app_not_found`.
+
+Create an access token in the dashboard under **API keys > Access tokens**. The token is shown once. Tokens are read-only and expire after 90 days by default. You can choose 30, 90 or 365 days, or never.
+
+## Examples
+
+Secret key, one app:
+
+```bash
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/transactions/?status=succeeded&limit=50"
+```
+
+Access token, naming the app:
+
+```bash
+curl -H "Authorization: Bearer zs_pat_..." \
+  "https://api.zerosettle.io/v1/data/transactions/?app=<app id>"
+```
+
+### Transactions
+
+```bash
+# List. Filters: created_from, created_to, status, product, customer, source
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/transactions/?created_from=2026-10-01&source=web"
+
+# One transaction, by its id
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/transactions/zs_txn_.../"
+```
+
+### Customers
+
+Customers are the people your app named with a user id. Buyers known only by email are not listed.
+
+```bash
+# List. Filter: email (exact, case-insensitive)
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/customers/?email=person@example.com"
+
+# One customer, by your user id
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/customers/user_123/"
+
+# What the customer can use
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/customers/user_123/access/"
+
+# Merges and refused merges that involve the customer
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/customers/user_123/merges/"
+```
+
+The id in the path is matched without regard to case. An id that contains `/` cannot go in the path; use the `email` filter on the list instead.
+
+The single-customer response also has `merged_ids`: your old user ids that now resolve to this customer. The list does not include it.
+
+### Merges
+
+When two of your user ids are combined (a guest who signs in, for example), the merge is recorded. `merges` lists every merge and every refused merge for the customer, newest first. The id in the path can be an old id; it resolves to the customer that kept it.
+
+Each row has `outcome` (`merged`, `refused` or `analytics_moved`), `from_user_id`, `into_user_id`, `merged_by` (`server`, `app`, `support`, `restore` or `system`), `refusal_code`, `moved` (`transactions` and `entitlements` counts) and `created_at`. `from_user_id` is `null` when the source was an email label.
+
+A refused merge is listed under the id that was merged away, not under the id that was meant to keep the data. If a guest's merge into `user_123` was refused, look for it under the guest's id. `refusal_code` is one of `invalid_id`, `same_identity`, `from_not_found`, `already_reconciled`, `into_reconciled`, `environment_mismatch` or `conflict`.
+
+### Revenue
+
+Gross, refunds and net, in the app's display currency. These are the same series as the dashboard's Revenue charts.
+
+```bash
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/metrics/revenue/?from=2026-09-01&to=2026-09-30&interval=week"
+```
+
+`from` and `to` are inclusive dates in UTC. The default range is the last 30 days. `interval` is `day`, `week` or `month`. Add `source=app_store|play|web` to count one source only. The longest range is 366 days for `day`, about 3 years for `week` and about 10 years for `month`. Every bucket in the range is returned, zeros included.
+
+## Formats
+
+- JSON with snake_case names.
+- Money is a whole integer in minor units (cents), always next to a currency.
+- Times are ISO 8601 UTC with a `Z` suffix. Dates are `YYYY-MM-DD`.
+- Abandoned checkouts (pending, failed, superseded) are never returned. Returned statuses are `succeeded`, `refunded`, `disputed` and `processing`.
+- Fields are only added, never renamed, retyped or removed.
+
+## Paging
+
+List endpoints return newest first:
+
+```json
+{ "data": [ ... ], "next_cursor": "..." }
+```
+
+`limit` defaults to 100 and is at most 500. To get the next page, pass `next_cursor` back as `cursor`, unchanged. The cursor is opaque. `next_cursor` is `null` on the last page. Rows that arrive while you page do not cause repeats or gaps.
+
+### Paging loop
+
+Keep calling until `next_cursor` is `null`.
+
+<CodeGroup>
+
+```bash curl
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/data/transactions/?limit=500"
+# then repeat with &cursor=<next_cursor> until it is null
+```
+
+```javascript Node
+const base = "https://api.zerosettle.io/v1/data/transactions/";
+const headers = { "X-ZeroSettle-Key": process.env.ZEROSETTLE_SECRET_KEY };
+
+async function* allTransactions() {
+  let cursor = null;
+  do {
+    const url = new URL(base);
+    url.searchParams.set("limit", "500");
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const res = await fetch(url, { headers });
+    if (res.status === 429) {
+      const wait = Number(res.headers.get("Retry-After") ?? 1);
+      await new Promise((r) => setTimeout(r, wait * 1000));
+      continue;
+    }
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    const page = await res.json();
+    yield* page.data;
+    cursor = page.next_cursor;
+  } while (cursor);
+}
+
+for await (const txn of allTransactions()) console.log(txn.id, txn.amount);
+```
+
+```python Python
+import os
+import time
+import requests
+
+BASE = "https://api.zerosettle.io/v1/data/transactions/"
+HEADERS = {"X-ZeroSettle-Key": os.environ["ZEROSETTLE_SECRET_KEY"]}
+
+
+def all_transactions():
+    cursor = None
+    while True:
+        params = {"limit": 500}
+        if cursor:
+            params["cursor"] = cursor
+        res = requests.get(BASE, headers=HEADERS, params=params)
+        if res.status_code == 429:
+            time.sleep(int(res.headers.get("Retry-After", 1)))
+            continue
+        res.raise_for_status()
+        page = res.json()
+        yield from page["data"]
+        cursor = page["next_cursor"]
+        if not cursor:
+            return
+
+
+for txn in all_transactions():
+    print(txn["id"], txn["amount"])
+```
+
+</CodeGroup>
+
+The customer access list is not paged. Merges are paged like the other lists.
+
+## Test purchases
+
+Test purchases are StoreKit sandbox purchases (TestFlight, Xcode, App Review) that arrived on a live key. They are hidden by default. Set `test_purchases=show` to include them, or `test_purchases=only` to see just them. The revenue endpoint accepts `hide` and `show`. The dashboard's include-test-purchases switch does not apply to the Data API.
+
+## Rate limit
+
+600 requests a minute per credential. Over the limit, the API returns `429` with code `rate_limited` and a `Retry-After` header in seconds.
+
+## Errors
+
+```json
+{ "error": { "code": "invalid_parameter", "message": "..." } }
+```
+
+| Status | Code | When |
+|---|---|---|
+| 401 | `missing_credential` | No key or token sent |
+| 401 | `invalid_credential` | Unknown key, or an unknown, revoked or expired token, or a token without read access |
+| 401 | `publishable_key_refused` | A `zs_pk_` key |
+| 401 | `unsupported_credential` | Not a `zs_sk_` key or `zs_pat_` token, including a connected-app sign-in |
+| 400 | `app_required` | Access token without `?app=` |
+| 404 | `app_not_found` | `?app=` is not an app in the token's workspace |
+| 400 | `app_mismatch` | Secret key with a different `?app=` |
+| 400 | `invalid_environment` | `environment` is not `live` or `test` |
+| 400 | `environment_mismatch` | Secret key with the other environment |
+| 400 | `invalid_parameter` | A bad filter, limit, date, interval or range |
+| 400 | `invalid_cursor` | A cursor this API did not return |
+| 404 | `not_found` | No such transaction or customer in this app and environment |
+| 405 | `method_not_allowed` | Anything but `GET` |
+| 429 | `rate_limited` | Over 600 requests a minute |

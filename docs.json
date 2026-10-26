@@ -158,6 +158,19 @@
             ]
           },
           {
+            "group": "Data API",
+            "pages": [
+              "api-reference/data-api",
+              "api-reference/endpoint/data-list-transactions",
+              "api-reference/endpoint/data-get-transaction",
+              "api-reference/endpoint/data-list-customers",
+              "api-reference/endpoint/data-get-customer",
+              "api-reference/endpoint/data-get-customer-access",
+              "api-reference/endpoint/data-list-customer-merges",
+              "api-reference/endpoint/data-get-revenue"
+            ]
+          },
+          {
             "group": "Products",
             "pages": [
               "api-reference/endpoint/get-products"

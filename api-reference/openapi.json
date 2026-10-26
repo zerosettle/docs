@@ -69,6 +69,10 @@
     {
       "name": "Restore",
       "description": "Restore purchases for a user"
+    },
+    {
+      "name": "Data API",
+      "description": "Read-only access to your transactions, customers and revenue"
     }
   ],
   "paths": {
@@ -2685,6 +2689,785 @@
           }
         }
       }
+    },
+    "/data/transactions/": {
+      "get": {
+        "operationId": "dataListTransactions",
+        "summary": "List transactions",
+        "description": "Transactions for one app and environment, newest first by `created_at`. Only `succeeded`, `refunded`, `disputed` and `processing` transactions are returned.",
+        "tags": [
+          "Data API"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          },
+          {
+            "DataBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "The app id. Required with an access token (`zs_pat_`). A secret key already identifies its app; if sent it must match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "`live` or `test`. Access tokens default to `live`. A secret key already fixes the environment; if sent it must match.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "test"
+              ]
+            }
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive lower bound on `created_at`. ISO 8601 date or datetime; no offset means UTC.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "required": false,
+            "description": "Exclusive upper bound on `created_at`. ISO 8601 date or datetime; no offset means UTC.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Filter by status.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "succeeded",
+                "refunded",
+                "disputed",
+                "processing"
+              ]
+            }
+          },
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Product reference id, exact match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "customer",
+            "in": "query",
+            "required": false,
+            "description": "Your user id, exact match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Filter by source.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "app_store",
+                "play",
+                "web"
+              ]
+            }
+          },
+          {
+            "name": "test_purchases",
+            "in": "query",
+            "required": false,
+            "description": "Test purchases are StoreKit sandbox purchases that arrived on a live key. Default `hide`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hide",
+                "show",
+                "only"
+              ],
+              "default": "hide"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Default 100, maximum 500.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "The `next_cursor` from the previous page, passed back unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataTransactionList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/DataBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/DataUnauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/DataNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/DataMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/DataRateLimited"
+          }
+        }
+      }
+    },
+    "/data/transactions/{id}/": {
+      "get": {
+        "operationId": "dataGetTransaction",
+        "summary": "Get a transaction",
+        "description": "One transaction by its `id`. Test purchases are found by id.",
+        "tags": [
+          "Data API"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          },
+          {
+            "DataBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The transaction `id`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "The app id. Required with an access token (`zs_pat_`). A secret key already identifies its app; if sent it must match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "`live` or `test`. Access tokens default to `live`. A secret key already fixes the environment; if sent it must match.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "test"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataTransaction"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/DataBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/DataUnauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/DataNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/DataMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/DataRateLimited"
+          }
+        }
+      }
+    },
+    "/data/customers/": {
+      "get": {
+        "operationId": "dataListCustomers",
+        "summary": "List customers",
+        "description": "Customers your app named (they have your user id), newest first by `created_at`. Email-only anonymous buyers are not listed.",
+        "tags": [
+          "Data API"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          },
+          {
+            "DataBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "The app id. Required with an access token (`zs_pat_`). A secret key already identifies its app; if sent it must match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "`live` or `test`. Access tokens default to `live`. A secret key already fixes the environment; if sent it must match.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "test"
+              ]
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive exact match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "test_purchases",
+            "in": "query",
+            "required": false,
+            "description": "Test purchases are StoreKit sandbox purchases that arrived on a live key. Default `hide`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hide",
+                "show",
+                "only"
+              ],
+              "default": "hide"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Default 100, maximum 500.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "The `next_cursor` from the previous page, passed back unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataCustomerList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/DataBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/DataUnauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/DataNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/DataMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/DataRateLimited"
+          }
+        }
+      }
+    },
+    "/data/customers/{customer}/": {
+      "get": {
+        "operationId": "dataGetCustomer",
+        "summary": "Get a customer",
+        "description": "One customer by your user id, matched without regard to case. Includes `merged_ids`. Ids that contain `/` cannot be used in the path; filter the list instead.",
+        "tags": [
+          "Data API"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          },
+          {
+            "DataBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer",
+            "in": "path",
+            "required": true,
+            "description": "Your user id. Matched case-insensitively. Ids containing `/` cannot be addressed here; use the list filters.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "The app id. Required with an access token (`zs_pat_`). A secret key already identifies its app; if sent it must match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "`live` or `test`. Access tokens default to `live`. A secret key already fixes the environment; if sent it must match.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "test"
+              ]
+            }
+          },
+          {
+            "name": "test_purchases",
+            "in": "query",
+            "required": false,
+            "description": "Test purchases are StoreKit sandbox purchases that arrived on a live key. Default `hide`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hide",
+                "show",
+                "only"
+              ],
+              "default": "hide"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataCustomerDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/DataBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/DataUnauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/DataNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/DataMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/DataRateLimited"
+          }
+        }
+      }
+    },
+    "/data/customers/{customer}/access/": {
+      "get": {
+        "operationId": "dataGetCustomerAccess",
+        "summary": "Get a customer's access",
+        "description": "Every product the customer has ever held, newest purchase first. Not paged.",
+        "tags": [
+          "Data API"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          },
+          {
+            "DataBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer",
+            "in": "path",
+            "required": true,
+            "description": "Your user id. Matched case-insensitively. Ids containing `/` cannot be addressed here; use the list filters.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "The app id. Required with an access token (`zs_pat_`). A secret key already identifies its app; if sent it must match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "`live` or `test`. Access tokens default to `live`. A secret key already fixes the environment; if sent it must match.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "test"
+              ]
+            }
+          },
+          {
+            "name": "test_purchases",
+            "in": "query",
+            "required": false,
+            "description": "Test purchases are StoreKit sandbox purchases that arrived on a live key. Default `hide`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hide",
+                "show",
+                "only"
+              ],
+              "default": "hide"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataAccessList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/DataBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/DataUnauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/DataNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/DataMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/DataRateLimited"
+          }
+        }
+      }
+    },
+    "/data/metrics/revenue/": {
+      "get": {
+        "operationId": "dataGetRevenue",
+        "summary": "Get revenue",
+        "description": "Gross, refunds and net revenue in buckets, in the app's display currency. These are the series behind the dashboard's Revenue charts. Every bucket in range is present. Maximum span: 366 days for `day`, about 3 years for `week`, about 10 years for `month`.",
+        "tags": [
+          "Data API"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          },
+          {
+            "DataBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "The app id. Required with an access token (`zs_pat_`). A secret key already identifies its app; if sent it must match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "`live` or `test`. Access tokens default to `live`. A secret key already fixes the environment; if sent it must match.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "test"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "First day, inclusive, UTC. Default: 30 days before `to`.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Last day, inclusive, UTC. Default: today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "interval",
+            "in": "query",
+            "required": false,
+            "description": "Bucket size. Weeks start Monday, months on the 1st.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ],
+              "default": "day"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Filter by source.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "app_store",
+                "play",
+                "web"
+              ]
+            }
+          },
+          {
+            "name": "test_purchases",
+            "in": "query",
+            "required": false,
+            "description": "Test purchases are StoreKit sandbox purchases that arrived on a live key. Default `hide`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hide",
+                "show"
+              ],
+              "default": "hide"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataRevenue"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/DataBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/DataUnauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/DataNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/DataMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/DataRateLimited"
+          }
+        }
+      }
+    },
+    "/data/customers/{customer}/merges/": {
+      "get": {
+        "operationId": "dataListCustomerMerges",
+        "summary": "List customer merges",
+        "description": "Merges and refused merges that involve the customer, as the kept or the merged-away user id, newest first. `{customer}` may be an old user id: it resolves to the customer that kept it. A refused merge is listed under the id that was merged away (a guest id, for example), not under the kept id.",
+        "tags": [
+          "Data API"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          },
+          {
+            "DataBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "customer",
+            "in": "path",
+            "required": true,
+            "description": "Your user id. Matched case-insensitively. Ids containing `/` cannot be addressed here; use the list filters.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "description": "The app id. Required with an access token (`zs_pat_`). A secret key already identifies its app; if sent it must match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "`live` or `test`. Access tokens default to `live`. A secret key already fixes the environment; if sent it must match.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "test"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Default 100, maximum 500.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "The `next_cursor` from the previous page, passed back unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataMergeList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/DataBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/DataUnauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/DataNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/DataMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/DataRateLimited"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2700,6 +3483,11 @@
         "in": "header",
         "name": "X-ZeroSettle-Key",
         "description": "Your secret API key (`zs_sk_test_*` or `zs_sk_live_*`). Server-side only: never ship a secret key in an app. Only the endpoints that say so accept it."
+      },
+      "DataBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "`Authorization: Bearer zs_sk_...` (secret key) or `Authorization: Bearer zs_pat_...` (access token, whole workspace, read-only). Pass `?app=` with an access token."
       }
     },
     "schemas": {
@@ -4673,6 +5461,570 @@
             "type": "integer"
           }
         }
+      },
+      "DataTransaction": {
+        "type": "object",
+        "description": "One transaction. Abandoned checkouts (pending, failed, superseded) are never returned.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ZeroSettle id (`zs_txn_...`) when the transaction has one, otherwise `txn_<n>`. Use it in the detail URL."
+          },
+          "status": {
+            "type": "string",
+            "description": "Transaction status.",
+            "enum": [
+              "succeeded",
+              "refunded",
+              "disputed",
+              "processing"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the purchase happened.",
+            "enum": [
+              "app_store",
+              "play",
+              "web"
+            ]
+          },
+          "purchase_type": {
+            "type": "string",
+            "description": "Kind of purchase.",
+            "nullable": true,
+            "enum": [
+              "new",
+              "trial_start",
+              "trial_converted",
+              "renewal",
+              "plan_change",
+              "one_time"
+            ]
+          },
+          "product": {
+            "type": "string",
+            "description": "Product reference id."
+          },
+          "product_name": {
+            "type": "string",
+            "description": "Product display name.",
+            "nullable": true
+          },
+          "customer": {
+            "type": "string",
+            "description": "Your user id.",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "description": "Customer email.",
+            "nullable": true
+          },
+          "amount": {
+            "type": "integer",
+            "description": "Charged amount in minor units of `currency`."
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 code, upper case."
+          },
+          "amount_usd": {
+            "type": "integer",
+            "description": "The same amount in USD cents. Null until a rate is known.",
+            "nullable": true
+          },
+          "tax_amount": {
+            "type": "integer",
+            "description": "Tax in minor units of `currency`."
+          },
+          "platform_fee": {
+            "type": "integer",
+            "description": "Platform fee in minor units of `currency`."
+          },
+          "refund_amount": {
+            "type": "integer",
+            "description": "Total refunded, in minor units of `currency`.",
+            "nullable": true
+          },
+          "refunded_at": {
+            "type": "string",
+            "description": "When the refund happened.",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "country": {
+            "type": "string",
+            "description": "Billing country, otherwise storefront country.",
+            "nullable": true
+          },
+          "is_test_purchase": {
+            "type": "boolean",
+            "description": "True for StoreKit sandbox purchases that arrived on a live key."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation time, UTC.",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "description": "Completion time, UTC.",
+            "nullable": true,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "source",
+          "purchase_type",
+          "product",
+          "product_name",
+          "customer",
+          "email",
+          "amount",
+          "currency",
+          "amount_usd",
+          "tax_amount",
+          "platform_fee",
+          "refund_amount",
+          "refunded_at",
+          "country",
+          "is_test_purchase",
+          "created_at",
+          "completed_at"
+        ]
+      },
+      "DataCustomer": {
+        "type": "object",
+        "description": "A customer your app named (it has your user id).",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Your user id."
+          },
+          "email": {
+            "type": "string",
+            "description": "Customer email.",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "description": "Customer name.",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation time, UTC.",
+            "format": "date-time"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "description": "Last activity, UTC.",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "transaction_count": {
+            "type": "integer",
+            "description": "Number of paid transactions."
+          },
+          "total_amount_usd": {
+            "type": "integer",
+            "description": "Sum of the customer's `amount_usd`, in USD cents."
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "created_at",
+          "last_seen_at",
+          "transaction_count",
+          "total_amount_usd"
+        ]
+      },
+      "DataAccess": {
+        "type": "object",
+        "description": "One product the customer holds or has held.",
+        "properties": {
+          "product": {
+            "type": "string",
+            "description": "Product reference id."
+          },
+          "product_type": {
+            "type": "string",
+            "description": "Product type, for example `auto_renewable`."
+          },
+          "active": {
+            "type": "boolean",
+            "description": "True when the customer is entitled right now: an entitled status and not past `expires_at`."
+          },
+          "status": {
+            "type": "string",
+            "description": "Entitlement status.",
+            "enum": [
+              "active",
+              "cancelled",
+              "grace_period",
+              "past_due",
+              "paused",
+              "expired"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the purchase happened.",
+            "nullable": true,
+            "enum": [
+              "app_store",
+              "play",
+              "web"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "When access ends, UTC.",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "will_renew": {
+            "type": "boolean",
+            "description": "Whether the entitlement renews.",
+            "nullable": true
+          },
+          "is_trial": {
+            "type": "boolean",
+            "description": "True while in a trial."
+          },
+          "trial_ends_at": {
+            "type": "string",
+            "description": "Trial end, UTC.",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "purchased_at": {
+            "type": "string",
+            "description": "Purchase time, UTC.",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "is_test_purchase": {
+            "type": "boolean",
+            "description": "True for a test purchase."
+          }
+        },
+        "required": [
+          "product",
+          "product_type",
+          "active",
+          "status",
+          "source",
+          "expires_at",
+          "will_renew",
+          "is_trial",
+          "trial_ends_at",
+          "purchased_at",
+          "is_test_purchase"
+        ]
+      },
+      "DataTransactionList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataTransaction"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Pass back unchanged as `cursor` for the next page. Null on the last page.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "data",
+          "next_cursor"
+        ]
+      },
+      "DataCustomerList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataCustomer"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Pass back unchanged as `cursor` for the next page. Null on the last page.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "data",
+          "next_cursor"
+        ]
+      },
+      "DataAccessList": {
+        "type": "object",
+        "properties": {
+          "customer": {
+            "type": "string",
+            "description": "Your user id."
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataAccess"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Always null. This list is not paged.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "customer",
+          "data",
+          "next_cursor"
+        ]
+      },
+      "DataRevenueBucket": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "description": "First day of the bucket, `YYYY-MM-DD`.",
+            "format": "date"
+          },
+          "gross": {
+            "type": "integer",
+            "description": "Succeeded, refunded and disputed sales, dated by completion. Minor units of `currency`."
+          },
+          "refunds": {
+            "type": "integer",
+            "description": "Money refunded, dated by the refund. Minor units of `currency`."
+          },
+          "net": {
+            "type": "integer",
+            "description": "After refunds, disputes (added back if won) and the fees and tax the ledger can see. Minor units of `currency`."
+          }
+        },
+        "required": [
+          "start",
+          "gross",
+          "refunds",
+          "net"
+        ]
+      },
+      "DataRevenue": {
+        "type": "object",
+        "properties": {
+          "interval": {
+            "type": "string",
+            "description": "Bucket size.",
+            "enum": [
+              "day",
+              "week",
+              "month"
+            ]
+          },
+          "from": {
+            "type": "string",
+            "description": "First day, inclusive.",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "description": "Last day, inclusive.",
+            "format": "date"
+          },
+          "currency": {
+            "type": "string",
+            "description": "The app's display currency (ISO 4217)."
+          },
+          "test_purchases": {
+            "type": "string",
+            "description": "The `test_purchases` setting used.",
+            "enum": [
+              "hide",
+              "show"
+            ]
+          },
+          "data": {
+            "type": "array",
+            "description": "Every bucket in range, zeros included.",
+            "items": {
+              "$ref": "#/components/schemas/DataRevenueBucket"
+            }
+          }
+        },
+        "required": [
+          "interval",
+          "from",
+          "to",
+          "currency",
+          "test_purchases",
+          "data"
+        ]
+      },
+      "DataError": {
+        "type": "object",
+        "description": "Data API error.",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Machine-readable code."
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable message."
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "DataCustomerDetail": {
+        "description": "One customer, with the old user ids that now resolve to it.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataCustomer"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "merged_ids": {
+                "type": "array",
+                "description": "Your old user ids that now resolve to this customer, oldest first.",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "merged_ids"
+            ]
+          }
+        ]
+      },
+      "DataMerge": {
+        "type": "object",
+        "description": "One merge, or one refused merge, of two of your user ids.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Merge record id."
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "merged",
+              "refused",
+              "analytics_moved"
+            ],
+            "description": "`merged`: the customers were combined. `refused`: the merge was not done; see `refusal_code`. `analytics_moved`: the id had no customer yet, so only its analytics rows moved."
+          },
+          "from_user_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The user id that was merged away. Null when the source was an email label."
+          },
+          "into_user_id": {
+            "type": "string",
+            "description": "The user id that kept the data."
+          },
+          "merged_by": {
+            "type": "string",
+            "enum": [
+              "server",
+              "app",
+              "support",
+              "restore",
+              "system"
+            ],
+            "description": "What asked for the merge: your server (secret key), the app (link token or identity link), ZeroSettle support in the dashboard, a restore purchases call, or ZeroSettle itself."
+          },
+          "refusal_code": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "invalid_id",
+              "same_identity",
+              "from_not_found",
+              "already_reconciled",
+              "into_reconciled",
+              "environment_mismatch",
+              "conflict",
+              null
+            ],
+            "description": "Why a refused merge was refused. Null otherwise."
+          },
+          "moved": {
+            "type": "object",
+            "description": "What the merge moved.",
+            "properties": {
+              "transactions": {
+                "type": "integer"
+              },
+              "entitlements": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "transactions",
+              "entitlements"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it happened, UTC."
+          }
+        },
+        "required": [
+          "id",
+          "outcome",
+          "from_user_id",
+          "into_user_id",
+          "merged_by",
+          "refusal_code",
+          "moved",
+          "created_at"
+        ]
+      },
+      "DataMergeList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataMerge"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Pass back unchanged as `cursor` for the next page. Null on the last page."
+          }
+        },
+        "required": [
+          "data",
+          "next_cursor"
+        ]
       }
     },
     "responses": {
@@ -4722,6 +6074,64 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "DataBadRequest": {
+        "description": "Bad request. Codes: `app_required`, `app_mismatch`, `invalid_environment`, `environment_mismatch`, `invalid_parameter`, `invalid_cursor`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DataError"
+            }
+          }
+        }
+      },
+      "DataUnauthorized": {
+        "description": "Credential problem. Codes: `missing_credential`, `invalid_credential`, `publishable_key_refused`, `unsupported_credential`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DataError"
+            }
+          }
+        }
+      },
+      "DataNotFound": {
+        "description": "Not found. Codes: `app_not_found` (the `app` is not an app of the token's workspace), `not_found` (no such transaction or customer in this app and environment).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DataError"
+            }
+          }
+        }
+      },
+      "DataMethodNotAllowed": {
+        "description": "Only GET is allowed. Code: `method_not_allowed`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DataError"
+            }
+          }
+        }
+      },
+      "DataRateLimited": {
+        "description": "Over 600 requests a minute for this credential. Code: `rate_limited`.",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before retrying.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DataError"
             }
           }
         }
