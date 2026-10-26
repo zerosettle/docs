@@ -279,7 +279,7 @@ lifecycleScope.launch {
             showSuccessMessage()
         }
         .onFailure { error ->
-            // ZeroSettleError.UserCancelled when the user backs out
+            // ZeroSettleError.PurchaseCancelled when the user backs out
             showError(error.message ?: "Checkout failed")
         }
 }

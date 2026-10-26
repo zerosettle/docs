@@ -73,15 +73,21 @@ Products are fetched by the SDK via `fetchProducts()` and returned as a `Product
 let catalog = try await ZeroSettle.shared.fetchProducts()
 
 for product in catalog.products {
-    print("\(product.displayName): \(product.webPrice.formatted)")
+    print("\(product.displayName): \(product.webPrice?.formatted ?? "n/a")")
 }
 ```
 
 ```kotlin Kotlin
 val catalog = ZeroSettle.fetchProducts().getOrThrow()
 
+// Price has amountCents and currencyCode only, so format it yourself
+fun Price.display(): String =
+    NumberFormat.getCurrencyInstance().apply {
+        currency = Currency.getInstance(currencyCode)
+    }.format(amountCents / 100.0)
+
 for (product in catalog.products) {
-    println("${product.displayName}: ${product.webPrice?.formatted}")
+    println("${product.displayName}: ${product.webPrice?.display()}")
 }
 ```
 
@@ -89,7 +95,7 @@ for (product in catalog.products) {
 const catalog = await ZeroSettleKit.fetchProducts(user.id);
 
 for (const product of catalog.products) {
-    console.log(`${product.displayName}: ${product.webPrice.formatted}`);
+    console.log(`${product.displayName}: ${product.webPrice?.formatted}`);
 }
 ```
 
@@ -97,7 +103,7 @@ for (const product of catalog.products) {
 final catalog = await ZeroSettle.instance.fetchProducts();
 
 for (final product in catalog.products) {
-    print('${product.displayName}: ${product.webPrice.formatted}');
+    print('${product.displayName}: ${product.webPrice?.formatted}');
 }
 ```
 </CodeGroup>
@@ -107,8 +113,8 @@ for (final product in catalog.products) {
 Web prices are set independently from store prices. This lets you pass platform fee savings on to customers (or keep the margin). The SDK provides both prices so you can show a comparison in your paywall:
 
 - `product.webPrice` — the web checkout price you set on the dashboard
-- `product.storeKitPrice` — the App Store price, fetched from StoreKit on-device (iOS)
-- `product.playStorePrice` — the Google Play price (Android)
+- `product.storeKitPrice` — the App Store price, fetched from StoreKit on-device (iOS and Flutter on iOS)
+- `product.appStorePrice` — the App Store price from the catalog, on every platform. On Android `product.playStorePrice` exists but the backend does not populate it yet
 
 ## Checkout Configuration
 
@@ -131,6 +137,10 @@ Choose one of three checkout modes:
 | **Payment Sheet** | `webview` | Embedded `WKWebView` inside your app. Best conversion rates. |
 | **In-App Safari** | `safari_vc` | `SFSafariViewController` within your app. |
 | **External Safari** | `safari` | Opens the user's default browser. Requires [universal links](/iap/universal-links). |
+
+<Note>
+  Native Apple Pay checkout (`native_pay`) is not supported for new integrations. Web view checkout is the default.
+</Note>
 
 ### Jurisdiction Overrides
 
@@ -163,23 +173,24 @@ if ZeroSettle.shared.isWebCheckoutEnabled {
 // The SDK handles this automatically — no code needed.
 // Just configure it on the dashboard.
 
-// In your app, check before showing web checkout UI:
-if (ZeroSettle.isWebCheckoutEnabled) {
-    // Show web checkout button
-} else {
-    // Fall back to Play Store
-}
+// Android has no isWebCheckoutEnabled. purchase() returns a Result,
+// so fall back to Play Billing when it fails.
+ZeroSettle.purchase(activity = activity, productId = product.id)
+    .onFailure { /* Fall back to Play Billing */ }
 ```
 
 ```tsx React Native
 // The SDK handles this automatically — no code needed.
 // Just configure it on the dashboard.
 
-// In your app, check before showing web checkout UI:
-if (ZeroSettle.isWebCheckoutEnabled) {
-    // Show web checkout button
-} else {
-    // Fall back to native store
+// React Native has no isWebCheckoutEnabled. purchase() rejects with
+// this code when web checkout is off for the user's jurisdiction:
+try {
+    await ZeroSettleKit.purchase(product.id, user.id);
+} catch (error) {
+    if (error.code === 'web_checkout_disabled_for_jurisdiction') {
+        // Fall back to StoreKit
+    }
 }
 ```
 
@@ -187,8 +198,11 @@ if (ZeroSettle.isWebCheckoutEnabled) {
 // The SDK handles this automatically — no code needed.
 // Just configure it on the dashboard.
 
-// In your app, check before showing web checkout UI:
-if (ZeroSettle.instance.isWebCheckoutEnabled) {
+// Flutter has no isWebCheckoutEnabled. Read the global setting from
+// the remote config. This is the global setting; per-jurisdiction
+// overrides are in config.checkout.jurisdictions:
+final config = await ZeroSettle.instance.getRemoteConfig();
+if (config?.checkout.isEnabled ?? true) {
     // Show web checkout button
 } else {
     // Fall back to native store
@@ -198,7 +212,7 @@ if (ZeroSettle.instance.isWebCheckoutEnabled) {
 
 ### Enable / Disable
 
-You can disable web checkout entirely (globally or per jurisdiction) from the dashboard. When disabled, `isWebCheckoutEnabled` returns `false` and calling `purchase()` throws `webCheckoutDisabledForJurisdiction`. Use this to gracefully fall back to StoreKit.
+You can disable web checkout entirely (globally or per jurisdiction) from the dashboard. When disabled, iOS `isWebCheckoutEnabled` returns `false`, and the checkout sheet fails with `webCheckoutDisabledForJurisdiction` (Flutter: `ZSWebCheckoutDisabledException`, React Native: `web_checkout_disabled_for_jurisdiction`). Use this to gracefully fall back to StoreKit.
 
 ## Promotions
 
@@ -213,18 +227,12 @@ Each promotion has:
 | **Promotional price** | The discounted price during the promotion |
 | **Expiration** | Optional expiry date (nil = no expiration) |
 
-Access promotions via the product:
+Access promotions via the product (the Android `Product` has no `promotion` field):
 
 <CodeGroup>
 ```swift Swift
 if let promo = product.promotion {
     print("\(promo.displayName): \(promo.promotionalPrice.formatted)")
-}
-```
-
-```kotlin Kotlin
-product.promotion?.let { promo ->
-    println("${promo.displayName}: ${promo.promotionalPrice?.formatted}")
 }
 ```
 
@@ -278,12 +286,9 @@ if let migration = catalog.config?.migration {
 ```
 
 ```kotlin Kotlin
-val catalog = ZeroSettle.fetchProducts().getOrThrow()
-
-catalog.config?.migration?.let { migration ->
-    // Show migration prompt to eligible users
-    println("${migration.title}: ${migration.discountPercent}% off")
-}
+// Android's ProductCatalog has no config. Use the offer manager instead.
+val mgr = ZeroSettle.offerManager()
+mgr.evaluate()
 ```
 
 ```tsx React Native
@@ -311,23 +316,24 @@ After a successful migration purchase, track the conversion:
 
 <CodeGroup>
 ```swift Swift
-try await ZeroSettle.shared.trackMigrationConversion(userId: user.id)
+try await ZeroSettle.shared.trackMigrationConversion()
 ```
 
 ```kotlin Kotlin
-ZeroSettle.trackMigrationConversion(userId = user.id)
+// Pass the storefront the original subscription came from
+ZeroSettle.trackMigrationConversion(source = UserOffer.SourceStorefront.STORE_KIT)
 ```
 
 ```tsx React Native
-await ZeroSettle.trackMigrationConversion(user.id);
+await ZeroSettleKit.trackMigrationConversion(user.id);
 ```
 
 ```dart Flutter
-await ZeroSettle.instance.trackMigrationConversion(userId: user.id);
+await ZeroSettle.instance.trackMigrationConversion();
 ```
 </CodeGroup>
 
-See [StoreKit Integration](/iap/storekit-integration) for the full migration guide.
+See [Switch & Save](/iap/switch-and-save) for the full guide.
 
 For detailed dashboard configuration options — rollout percentage, eligibility targeting, and analytics — see [Campaigns & Offers](/iap/campaigns).
 
