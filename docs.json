@@ -221,7 +221,8 @@
           {
             "group": "Migration",
             "pages": [
-              "api-reference/endpoint/migration-converted"
+              "api-reference/endpoint/migration-converted",
+              "api-reference/endpoint/migration-cohort"
             ]
           },
           {

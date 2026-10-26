@@ -14,6 +14,10 @@
     {
       "url": "https://api.zerosettle.io/v1",
       "description": "Production"
+    },
+    {
+      "url": "https://api-staging.zerosettle.io/v1",
+      "description": "Staging"
     }
   ],
   "security": [
@@ -72,11 +76,11 @@
     }
   ],
   "paths": {
-    "/iap/products": {
+    "/iap/products/": {
       "get": {
         "operationId": "getProducts",
         "summary": "Get Products",
-        "description": "Fetches the product catalog for your app, including web and StoreKit prices, checkout configuration, trial eligibility, and any active migration campaign. Pass `user_id` to get per-user trial eligibility.",
+        "description": "Fetches the product catalog for your app, including web, StoreKit and Google Play prices, trial details, checkout configuration and any active Switch & Save or upgrade offer for the user. Pass `user_id` to get per-user trial eligibility and offers.",
         "tags": [
           "Products"
         ],
@@ -91,13 +95,25 @@
             }
           },
           {
+            "name": "storefront",
+            "in": "query",
+            "required": false,
+            "description": "Two-letter storefront country code (for example `US`). Send it so the displayed price, routing and trial match what checkout will charge for region-specific pricing and experiments.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "demo",
             "in": "query",
             "required": false,
             "description": "**Debug-only.** Surfaces a dashboard-configured campaign as if the requesting user were eligible for it, regardless of their real subscription state. Lets developers preview their tip UI without crafting a specific test account.\n\n- `migration` returns the configured `MigrationCampaign` (Switch & Save) on `config.migration` (and `config.offer` mirror with `flow_type=migration`).\n- `upgrade` returns the configured `UpgradeOfferConfig` (Upgrade & Save) on `config.offer` with `flow_type=upgrade`. Uses the first `upgrade_paths` entry as the preview source/target. `savings_percent` is `0` for demo previews — accurate proration requires a real billing cycle.\n- Honored **only** on test-mode publishable keys (`zs_pk_test_*`). Live keys silently ignore the flag. Impressions are NOT counted on demo requests. Any other value (including the legacy `true`) drops the bypass and the normal user-state resolver runs.",
             "schema": {
               "type": "string",
-              "enum": ["migration", "upgrade"]
+              "enum": [
+                "migration",
+                "upgrade"
+              ]
             }
           }
         ],
@@ -108,10 +124,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "products",
-                    "checkout_config"
-                  ],
                   "properties": {
                     "products": {
                       "type": "array",
@@ -119,49 +131,56 @@
                         "$ref": "#/components/schemas/Product"
                       }
                     },
-                    "checkout_config": {
-                      "$ref": "#/components/schemas/CheckoutConfig"
-                    },
-                    "migration_campaign": {
-                      "description": "Active Switch & Save migration campaign, or null if none is configured.",
-                      "allOf": [
-                        {
-                          "$ref": "#/components/schemas/MigrationCampaign"
-                        }
-                      ],
-                      "nullable": true
-                    },
-                    "offer": {
-                      "description": "Unified offer for the current user. Null if the user is not eligible for any offer. New SDKs prefer this over migration_campaign.",
-                      "nullable": true,
-                      "oneOf": [
-                        {
-                          "$ref": "#/components/schemas/Offer"
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "checkout": {
+                          "$ref": "#/components/schemas/CheckoutConfig"
                         },
-                        {
-                          "type": "null"
+                        "migration": {
+                          "description": "Active Switch & Save campaign for this user, or null when the user is anonymous or not eligible.",
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/MigrationCampaign"
+                            }
+                          ],
+                          "nullable": true
+                        },
+                        "offer": {
+                          "description": "Unified offer for this user (Switch & Save or upgrade), or null when the user is anonymous or not eligible. New SDKs prefer this over `migration`.",
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/Offer"
+                            }
+                          ],
+                          "nullable": true
                         }
-                      ]
+                      },
+                      "required": [
+                        "checkout"
+                      ],
+                      "description": "Remote configuration for the SDK."
                     }
-                  }
+                  },
+                  "required": [
+                    "products",
+                    "config"
+                  ]
                 }
               }
             }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
           }
         }
       }
     },
-    "/iap/payment-intents": {
+    "/iap/payment-intents/": {
       "post": {
         "operationId": "createPaymentIntent",
         "summary": "Create Payment Intent",
-        "description": "Creates a Stripe PaymentIntent for native checkout (Apple Pay / Google Pay payment sheet). Returns a `client_secret` for confirming the payment on the client side and a `checkout_url` for fallback browser checkout.",
+        "description": "Creates a Stripe PaymentIntent (or SetupIntent for free trials) for web checkout. Returns the `client_secret` and a `checkout_url` for the hosted checkout page. SDK 1.3.0 and later send `X-ZS-SDK-Version` and get `410 use_checkout_configs` here: the SDK uses a different endpoint for those versions and handles it itself, so you only call this endpoint directly from a custom integration.",
         "tags": [
           "Checkout"
         ],
@@ -208,17 +227,13 @@
                     "type": "string",
                     "description": "Optional customer email to attach to the Stripe customer for this checkout. Also accepts the camelCase alias `customerEmail`."
                   },
-                  "checkout_domain": {
-                    "type": "string",
-                    "description": "Verified custom subdomain for the app's checkout (e.g., `checkout.example.com`). Configure via the dashboard — see the Custom Checkout Domains guide."
-                  },
                   "checkout_mode": {
                     "type": "string",
                     "enum": [
                       "native",
                       "browser"
                     ],
-                    "description": "Preferred checkout mode. `native` uses the in-app payment sheet; `browser` opens a web checkout page."
+                    "description": "`native` (default) returns a `checkout_url` for the embedded checkout page shown in the SDK web view. `browser` returns a URL for the same checkout opened in a browser."
                   },
                   "storekit_subscription_end": {
                     "type": "string",
@@ -236,6 +251,18 @@
                   "ios_version": {
                     "type": "string",
                     "description": "iOS version of the checkout client (e.g., '26.4.1'). Used for JP MSCA regime gating, which requires iOS 26+. Optional."
+                  },
+                  "storefront": {
+                    "type": "string",
+                    "description": "Two-letter storefront country code. Used for region-specific pricing and experiments."
+                  },
+                  "rc_app_user_id": {
+                    "type": "string",
+                    "description": "RevenueCat app user ID, if using the RevenueCat integration."
+                  },
+                  "play_purchase_token": {
+                    "type": "string",
+                    "description": "Google Play purchase token for the subscription being migrated (Android Switch & Save)."
                   }
                 }
               }
@@ -254,18 +281,92 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Invalid request. Includes `code` values `customer_conflict` and `invalid_customer` (bad `stripe_customer_id`) and `stripe_account_restricted` (connected Stripe account setup is incomplete).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "description": "`code` is `tenant_disabled` (merchant account disabled) or `not_whitelisted` (live key on an account not yet approved for live transactions). A routing experiment can also return 403 `Web checkout is not available for this user`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`already_entitled`: the user already has an active entitlement for this one-time product. Or `in_flight`: a checkout for this user and product is being prepared; retry after `retry_after` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`use_checkout_configs`: the request carried `X-ZS-SDK-Version` 1.3.0 or later. SDKs of that version use a different endpoint and handle this themselves.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkout_domain_not_configured`: the server has no checkout domain configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "502": {
-            "$ref": "#/components/responses/UpstreamError"
+            "description": "Stripe error. `code` is `stripe_error`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`migration_unavailable` (Switch & Save is unavailable right now) or server busy with `retry_after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/payment-intents/batch": {
+    "/iap/payment-intents/batch/": {
       "post": {
         "operationId": "createPaymentIntentBatch",
         "summary": "Create Payment Intent Batch",
@@ -332,7 +433,7 @@
                       "native",
                       "browser"
                     ],
-                    "description": "Preferred checkout mode."
+                    "description": "`native` (default) or `browser`. See Create Payment Intent."
                   },
                   "stripe_customer_id": {
                     "type": "string",
@@ -345,6 +446,14 @@
                   "customer_email": {
                     "type": "string",
                     "description": "Optional customer email to attach to the Stripe customer for this batch. Also accepts the camelCase alias `customerEmail`."
+                  },
+                  "storefront": {
+                    "type": "string",
+                    "description": "Two-letter storefront country code."
+                  },
+                  "rc_app_user_id": {
+                    "type": "string",
+                    "description": "RevenueCat app user ID, if using the RevenueCat integration."
                   }
                 }
               }
@@ -443,7 +552,31 @@
                           },
                           "error": {
                             "type": "string",
-                            "description": "Error message. Present when this product failed validation."
+                            "description": "Error code or message. Present when this product failed, for example `in_flight` or `already_entitled`."
+                          },
+                          "callback_url": {
+                            "type": "string",
+                            "description": "URL the checkout page returns to after payment. Present on success."
+                          },
+                          "charge_amount": {
+                            "type": "integer",
+                            "description": "Cents the intent charges or holds now. Present for trial checkouts."
+                          },
+                          "intent_type": {
+                            "type": "string",
+                            "enum": [
+                              "setup",
+                              "payment"
+                            ],
+                            "description": "Which Stripe confirm method to call. Present on success."
+                          },
+                          "message": {
+                            "type": "string",
+                            "description": "Detail for an error entry."
+                          },
+                          "retry_after": {
+                            "type": "integer",
+                            "description": "Seconds to wait before retrying. Sent with an `in_flight` error entry."
                           }
                         }
                       }
@@ -454,18 +587,62 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Invalid request, or Stripe account setup incomplete (`code` `stripe_account_restricted`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "description": "`tenant_disabled` or `not_whitelisted`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkout_domain_not_configured`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "502": {
-            "$ref": "#/components/responses/UpstreamError"
+            "description": "Stripe error. `code` is `stripe_error`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server busy, with `retry_after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/checkout-sessions": {
+    "/iap/checkout-sessions/": {
       "post": {
         "operationId": "createCheckoutSession",
         "summary": "Create Checkout Session",
@@ -511,6 +688,23 @@
                   "rc_app_user_id": {
                     "type": "string",
                     "description": "RevenueCat app user ID, if using RevenueCat integration."
+                  },
+                  "storefront": {
+                    "type": "string",
+                    "description": "Two-letter storefront country code. Used for region-specific pricing and experiments."
+                  },
+                  "play_purchase_token": {
+                    "type": "string",
+                    "description": "Google Play purchase token for the subscription being migrated (Android Switch & Save)."
+                  },
+                  "storekit_subscription_end": {
+                    "type": "string",
+                    "description": "ISO 8601 expiry of the StoreKit subscription being migrated.",
+                    "format": "date-time"
+                  },
+                  "storekit_original_transaction_id": {
+                    "type": "string",
+                    "description": "Original transaction ID of the StoreKit subscription being migrated."
                   }
                 }
               }
@@ -529,22 +723,86 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Invalid request (missing `product_id` or user id, or `stripe_customer_id` not starting with `cus_`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "description": "`code` is `tenant_disabled` (merchant account disabled) or `not_whitelisted` (live key on an account not yet approved for live transactions). A routing experiment can also return 403 `Web checkout is not available for this user`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`already_entitled`: the user already has an active entitlement for this one-time product. Or `in_flight`: a checkout for this user and product is being prepared; retry after `retry_after` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`checkout_domain_not_configured`: the server has no checkout domain configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "502": {
-            "$ref": "#/components/responses/UpstreamError"
+            "description": "Stripe error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server busy, with `retry_after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/transactions/{transaction_id}": {
+    "/iap/transactions/{transaction_id}/": {
       "get": {
         "operationId": "getTransaction",
         "summary": "Get Transaction",
-        "description": "Retrieves the status and details of a specific transaction by its ID.",
+        "description": "Retrieves the status of a transaction by the `transaction_id` returned from checkout. Poll this after a checkout to confirm the payment settled.",
         "tags": [
           "Transactions"
         ],
@@ -579,13 +837,13 @@
         }
       }
     },
-    "/iap/transactions/{transaction_id}/storekit-status": {
+    "/iap/transactions/{transaction_id}/storekit-status/": {
       "patch": {
         "operationId": "updateStorekitStatus",
         "summary": "Update StoreKit Status",
         "description": "Reports a StoreKit subscription state change for a migration transaction. As of 2026-04-27, this is a *trigger to verify* endpoint: when the SDK reports `storekit_status=2` (anything other than active), the backend queries Apple's App Store Server API itself and persists what Apple reports onto the transaction's `storekit_apple_status` and `storekit_subscription_end` fields. Billing-relevant data is never sourced from the client.",
         "tags": [
-          "Transactions"
+          "StoreKit"
         ],
         "parameters": [
           {
@@ -639,21 +897,27 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string",
-                      "description": "The transaction ID."
-                    },
-                    "storekit_status": {
-                      "type": "integer",
-                      "description": "The updated StoreKit status."
+                    "ok": {
+                      "type": "boolean",
+                      "description": "Always `true`."
                     }
-                  }
+                  },
+                  "required": [
+                    "ok"
+                  ]
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`storekit_status` is not 1 or 2, or the body is not valid JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -664,11 +928,11 @@
         }
       }
     },
-    "/iap/transaction-history": {
+    "/iap/transaction-history/": {
       "get": {
         "operationId": "getTransactionHistory",
         "summary": "Get Transaction History",
-        "description": "Returns a list of transactions for a given user, ordered by most recent first. Abandoned checkout attempts (a checkout that was replaced by a newer one before it was paid) are not returned.",
+        "description": "Returns up to `limit` transactions for a user, most recent first. There is no cursor. Abandoned checkout sessions (a checkout replaced by a newer one for the same product) are not returned, and a disputed transaction is reported as `refunded`. Look a user up by `user_id`, or by `email` for legacy email-only checkouts.",
         "tags": [
           "Transactions"
         ],
@@ -676,8 +940,17 @@
           {
             "name": "user_id",
             "in": "query",
-            "required": true,
-            "description": "The user's external ID.",
+            "required": false,
+            "description": "The user's external ID. Send either `user_id` or `email`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "description": "Customer email. Matches only transactions recorded with that email (legacy email-only checkouts). Prefer `user_id`; email-only lookups are deprecated.",
             "schema": {
               "type": "string"
             }
@@ -717,7 +990,14 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Neither `user_id` nor `email` was sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -725,11 +1005,11 @@
         }
       }
     },
-    "/iap/entitlements": {
+    "/iap/entitlements/": {
       "get": {
         "operationId": "getEntitlements",
         "summary": "Get Entitlements",
-        "description": "Returns all entitlements for a user, including active subscriptions, one-time purchases, and expired items. Use this to determine what the user has access to.",
+        "description": "Returns the entitlements a user currently has access to: active subscriptions and one-time purchases. Entitlements that have expired or are paused are not returned. Use this to decide what the user can access.",
         "tags": [
           "Entitlements"
         ],
@@ -748,7 +1028,7 @@
             "in": "query",
             "required": false,
             "deprecated": true,
-            "description": "The user's email address. Deprecated -- use `user_id` instead.",
+            "description": "The user's email address. Deprecated: use `user_id`. An email lookup matches only legacy email-only checkouts (identities with no external user id), so a user your app identified with a user id is never found by email.",
             "schema": {
               "type": "string"
             }
@@ -761,17 +1041,25 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "entitlements"
-                  ],
                   "properties": {
                     "entitlements": {
                       "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/Entitlement"
                       }
+                    },
+                    "pending_actions": {
+                      "type": "array",
+                      "description": "Follow-up actions for the app to show, for example cancelling an old store subscription after Switch & Save. Empty when there are none.",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
                     }
-                  }
+                  },
+                  "required": [
+                    "entitlements"
+                  ]
                 }
               }
             }
@@ -789,7 +1077,7 @@
       "post": {
         "operationId": "claimEntitlement",
         "summary": "Claim Entitlement",
-        "description": "Transfers an existing StoreKit entitlement to the calling user. Used when an Apple ID's StoreKit subscription is owned by a different ZeroSettle account and needs to be moved to the current account (account migration, support flows, sandbox testing). The backend verifies the supplied JWS, revokes the entitlement from the previous owner, and grants it to `user_id` in a single atomic transaction.",
+        "description": "Transfers an existing StoreKit entitlement to the calling user. Used when an Apple ID's StoreKit subscription is owned by a different ZeroSettle account and needs to be moved to the current account (account migration, support flows, sandbox testing). The backend verifies the supplied JWS, revokes the entitlement from the previous owner, and grants it to `user_id` in a single atomic transaction. The bundle id in the JWS is checked and logged on claim but does not refuse the request, unlike Sync StoreKit Transaction.",
         "tags": [
           "Entitlements"
         ],
@@ -813,6 +1101,10 @@
                     "description": "The external user ID that should receive the entitlement."
                   }
                 }
+              },
+              "example": {
+                "jws_representation": "<StoreKit 2 JWS>",
+                "user_id": "user_123"
               }
             }
           }
@@ -844,6 +1136,18 @@
                     "original_transaction_id": {
                       "type": "string",
                       "description": "StoreKit `originalTransactionId` of the claimed entitlement. Present when `claimed` is true."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "`Already owned by this account` when nothing moved. Present when `claimed` is false."
+                    },
+                    "entitlement_states_transferred": {
+                      "type": "integer",
+                      "description": "Number of entitlement rows moved to the user. Present when `claimed` is true."
+                    },
+                    "transactions_reassigned": {
+                      "type": "integer",
+                      "description": "Number of transactions reassigned to the user. Present when `claimed` is true."
                     }
                   }
                 }
@@ -851,7 +1155,7 @@
             }
           },
           "400": {
-            "description": "Bad request — missing required field, or the entitlement is a consumable and cannot be claimed.",
+            "description": "Bad request. The error is one of: `Invalid JSON body`; `jws_representation is required`; `user_id is required`; `Cannot claim entitlement to a synthetic identity` (a `user_id` starting with `apple_otid:`); `Consumable products cannot be claimed`; `Missing productId in JWS payload`; `No originalTransactionId in JWS`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -861,7 +1165,7 @@
             }
           },
           "401": {
-            "description": "JWS verification failed against Apple's root certificate chain, or API key invalid.",
+            "description": "Invalid API key, or JWS verification failed: `JWS signature verification failed`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -871,7 +1175,7 @@
             }
           },
           "404": {
-            "description": "No entitlement to claim — the JWS does not correspond to a known ZeroSettle entitlement.",
+            "description": "`No entitlement found for this transaction`: nothing is recorded for the JWS `originalTransactionId`, so there is nothing to claim.",
             "content": {
               "application/json": {
                 "schema": {
@@ -883,7 +1187,7 @@
         }
       }
     },
-    "/iap/storekit-transactions": {
+    "/iap/storekit-transactions/": {
       "post": {
         "operationId": "syncStorekitTransaction",
         "summary": "Sync StoreKit Transaction",
@@ -898,7 +1202,6 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "jws_representation",
                   "user_id"
                 ],
                 "properties": {
@@ -924,15 +1227,39 @@
                       "in_grace_period",
                       "revoked"
                     ]
+                  },
+                  "transactions": {
+                    "type": "array",
+                    "description": "Bulk reconcile mode: send this instead of `jws_representation`. Each entry has `signed_transaction` and optionally `signed_renewal_info`. See the notes on this page.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "signed_transaction": {
+                          "type": "string"
+                        },
+                        "signed_renewal_info": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "customer_name": {
+                    "type": "string",
+                    "description": "Optional. Used to fill the customer name when none is recorded. Also accepts `customerName`."
+                  },
+                  "customer_email": {
+                    "type": "string",
+                    "description": "Optional. Used to fill the customer email when none is recorded. Also accepts `customerEmail`."
                   }
-                }
+                },
+                "description": "Send either `jws_representation` (a single transaction) or `transactions` (bulk reconcile). `user_id` is always required."
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Transaction synced successfully",
+            "description": "Transaction synced successfully, or a conflict was reported. If `owned` is `false` with `conflict: true`, another user already owns this Apple subscription: nothing was granted, and `claim_available` tells the app it can offer Claim Entitlement.",
             "content": {
               "application/json": {
                 "schema": {
@@ -940,22 +1267,82 @@
                   "properties": {
                     "status": {
                       "type": "string",
+                      "description": "Always `ok`.",
                       "example": "ok"
+                    },
+                    "owned": {
+                      "type": "boolean",
+                      "description": "`true` when the entitlement now belongs to `user_id`. `false` when another user owns it (see `conflict`)."
+                    },
+                    "original_transaction_id": {
+                      "type": "string",
+                      "description": "Apple `originalTransactionId` of the subscription or purchase."
+                    },
+                    "resolved_via": {
+                      "type": "string",
+                      "description": "How an ownership change was resolved on the server: `none` for an ordinary sync, or a value such as `apple_verified_ownership_change` or `orphan_auto_resolve`. Informational."
                     },
                     "is_test_purchase": {
                       "type": "boolean",
                       "description": "`true` when Apple processed the transaction as a sandbox purchase (TestFlight, App Review or Xcode) but the request used a live key. The purchase is saved in Live as a test purchase and is left out of revenue."
+                    },
+                    "conflict": {
+                      "type": "boolean",
+                      "description": "`true` when another user owns this Apple subscription. Present only on a conflict."
+                    },
+                    "claim_available": {
+                      "type": "boolean",
+                      "description": "Present on a conflict: the app can offer Claim Entitlement."
+                    },
+                    "existing_owner_hint": {
+                      "type": "string",
+                      "description": "Present on a conflict: a short non-reversible hash that identifies the other owner without revealing it."
+                    },
+                    "warning": {
+                      "type": "string",
+                      "enum": [
+                        "environment_mismatch"
+                      ],
+                      "description": "Present when the Apple environment does not match the key."
+                    },
+                    "warning_message": {
+                      "type": "string",
+                      "description": "Human-readable detail for `warning`."
                     }
-                  }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "example": {
+                  "status": "ok",
+                  "owned": true,
+                  "original_transaction_id": "2000000123456789",
+                  "resolved_via": "none",
+                  "is_test_purchase": false
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Bad request. `error` is `Invalid JSON body`, `jws_representation is required`, `user_id is required` or `Missing productId in JWS payload`. With `code` `bundle_id_mismatch`: the JWS `bundleId` does not belong to this app (see below).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "description": "Invalid API key, or JWS verification failed: `JWS signature verification failed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "409": {
             "description": "The StoreKit transaction id already belongs to a different project, so it cannot be recorded here. Nothing is saved.",
@@ -980,7 +1367,7 @@
         }
       }
     },
-    "/iap/storekit-subscription-status": {
+    "/iap/storekit-subscription-status/": {
       "get": {
         "operationId": "getStorekitSubscriptionStatus",
         "summary": "Get StoreKit Subscription Status",
@@ -1010,20 +1397,37 @@
               }
             }
           },
+          "400": {
+            "description": "`original_transaction_id` query parameter is missing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
+          "502": {
+            "description": "The lookup against Apple failed or returned nothing (`Failed to query Apple subscription status`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/user-offer": {
+    "/iap/user-offer/": {
       "get": {
         "operationId": "getUserOffer",
         "summary": "Get User Offer",
-        "description": "Canonical offer + subscription-state resolver (SDK 1.2+). Returns the user's current subscription variant plus exactly one offer decision (`no_action`, `migrate_storekit_to_web`, `upgrade_storekit_to_web`, or `upgrade_web_to_web`). Replaces the overlapping `/iap/products/` offer config, `/iap/upgrade-offer/`, and ad-hoc status parsing with a single typed contract. Legacy endpoints remain supported for older SDKs.",
+        "description": "Canonical offer + subscription-state resolver (SDK 1.2+). Returns the user's current subscription variant plus exactly one offer decision (`no_action`, `migrate_storekit_to_web`, `migrate_play_to_web`, `upgrade_storekit_to_web`, or `upgrade_web_to_web`). Replaces the overlapping `/iap/products/` offer config, `/iap/upgrade-offer/`, and ad-hoc status parsing with a single typed contract. Legacy endpoints remain supported for older SDKs.",
         "tags": [
           "User Offer"
         ],
@@ -1061,11 +1465,11 @@
         }
       }
     },
-    "/iap/migration-converted": {
+    "/iap/migration-converted/": {
       "post": {
         "operationId": "migrationConverted",
         "summary": "Report Migration Conversion",
-        "description": "Reports that a Switch & Save migration was shown or converted. Used to track migration campaign analytics.",
+        "description": "Records that a Switch & Save migration was completed. It counts a conversion on the campaign. It does not record impressions.",
         "tags": [
           "Migration"
         ],
@@ -1079,6 +1483,15 @@
                   "variant_id": {
                     "type": "integer",
                     "description": "The experiment variant ID, if the migration campaign is part of an A/B test."
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "store_kit",
+                      "play_store"
+                    ],
+                    "default": "store_kit",
+                    "description": "The storefront the user migrated away from. Defaults to `store_kit`."
                   }
                 }
               }
@@ -1106,17 +1519,37 @@
               }
             }
           },
+          "400": {
+            "description": "`source` is not `store_kit` or `play_store`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "`No migration campaign found` for this environment and variant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/subscriptions/cancel": {
+    "/iap/subscriptions/cancel/": {
       "post": {
         "operationId": "cancelSubscription",
         "summary": "Cancel Subscription",
-        "description": "Cancels a user's active web checkout subscription. By default, access continues until the end of the current billing period (`immediate: false`). Set `immediate: true` to revoke access immediately.",
+        "description": "Cancels a user's web checkout (Stripe) subscription. By default access continues until the end of the current billing period. Set `immediate: true` to cancel now. A Switch & Save migration trial is always cancelled immediately. App Store and Google Play subscriptions cannot be cancelled here: they return 400 `No Stripe subscription linked`.",
         "tags": [
           "Subscriptions"
         ],
@@ -1144,6 +1577,10 @@
                     "description": "If `true`, cancels immediately and revokes access. If `false`, cancels at end of billing period."
                   }
                 }
+              },
+              "example": {
+                "user_id": "user_123",
+                "immediate": false
               }
             }
           }
@@ -1155,27 +1592,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CancelResponse"
+                },
+                "example": {
+                  "success": true,
+                  "status": "cancelled",
+                  "cancelled_at": "2026-10-26T12:00:00+00:00"
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`user_id is required`, `Invalid JSON body`, or `No Stripe subscription linked` (the subscription was not bought through web checkout).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "description": "`No active subscription found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Stripe returned an error (`Stripe error: ...`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/subscriptions/pause": {
+    "/iap/subscriptions/pause/": {
       "post": {
         "operationId": "pauseSubscription",
         "summary": "Pause Subscription",
-        "description": "Pauses a user's active web checkout subscription. The subscription will automatically resume after the pause duration expires.",
+        "description": "Pauses a user's web checkout (Stripe) subscription. With `pause_duration_days` it resumes automatically after that many days; without it the pause is indefinite until Resume Subscription is called.",
         "tags": [
           "Subscriptions"
         ],
@@ -1199,7 +1665,7 @@
                   },
                   "pause_duration_days": {
                     "type": "integer",
-                    "description": "Number of days to pause the subscription. If omitted, uses the default configured in the cancel flow."
+                    "description": "Number of days to pause. If omitted or 0, the subscription is paused until you resume it."
                   }
                 }
               }
@@ -1218,18 +1684,42 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`user_id is required`, `Invalid JSON body`, or `No Stripe subscription linked`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "description": "`No active subscription found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Stripe returned an error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/subscriptions/resume": {
+    "/iap/subscriptions/resume/": {
       "post": {
         "operationId": "resumeSubscription",
         "summary": "Resume Subscription",
@@ -1272,24 +1762,48 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`user_id is required`, `Invalid JSON body`, or `No Stripe subscription linked`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "description": "`No paused subscription found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Stripe returned an error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/customer-portal-sessions": {
+    "/iap/customer-portal-sessions/": {
       "post": {
         "operationId": "createCustomerPortalSession",
         "summary": "Create Customer Portal Session",
         "description": "Creates a Stripe Customer Portal session URL. The portal lets users manage their subscriptions, update payment methods, and view billing history.",
         "tags": [
-          "Subscriptions"
+          "Customer Portal"
         ],
         "requestBody": {
           "required": true,
@@ -1338,16 +1852,33 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "description": "`No billing record found for this user`. Only web checkout subscribers have a billing portal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Stripe returned an error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/cancel-flow": {
+    "/iap/cancel-flow/": {
       "get": {
         "operationId": "getCancelFlow",
         "summary": "Get Cancel Flow",
-        "description": "Returns the configured cancel flow for the app, including survey questions, retention offers, and pause options. The SDK uses this to render a multi-step cancellation experience.",
+        "description": "Returns the cancel flow configured in your dashboard: survey questions, a retention offer, pause options and, on current SDKs, deflection and downgrade blocks. When the flow is disabled or not configured the response is `{\"enabled\": false}`. The shape depends on the SDK: see the notes on this page.",
         "tags": [
           "Cancel Flow"
         ],
@@ -1357,6 +1888,15 @@
             "in": "query",
             "required": false,
             "description": "The user's external ID. Used to personalize offers.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "storefront",
+            "in": "query",
+            "required": false,
+            "description": "Two-letter storefront country code, used for geo-targeted experiments.",
             "schema": {
               "type": "string"
             }
@@ -1379,7 +1919,7 @@
         }
       }
     },
-    "/iap/cancel-flow/respond": {
+    "/iap/cancel-flow/respond/": {
       "post": {
         "operationId": "submitCancelFlowResponse",
         "summary": "Submit Cancel Flow Response",
@@ -1437,8 +1977,8 @@
                     "description": "Number of days the user chose to pause, if applicable."
                   },
                   "last_step_seen": {
-                    "type": "string",
-                    "description": "The last step of the cancel flow the user saw."
+                    "type": "integer",
+                    "description": "Index of the last cancel flow step the user saw. Defaults to 0."
                   },
                   "variant_id": {
                     "type": "integer",
@@ -1446,18 +1986,24 @@
                   },
                   "answers": {
                     "type": "array",
+                    "description": "Survey answers.",
                     "items": {
                       "type": "object",
                       "properties": {
                         "question_id": {
-                          "type": "string"
+                          "type": "integer",
+                          "description": "ID of the question, from Get Cancel Flow."
                         },
-                        "answer": {
-                          "type": "string"
+                        "selected_option_id": {
+                          "type": "integer",
+                          "description": "ID of the chosen option, from Get Cancel Flow."
+                        },
+                        "free_text": {
+                          "type": "string",
+                          "description": "Free-text answer, if the question allows one."
                         }
                       }
-                    },
-                    "description": "Array of survey question answers."
+                    }
                   }
                 }
               }
@@ -1472,11 +2018,24 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {
-                      "type": "string",
-                      "example": "ok"
+                    "success": {
+                      "type": "boolean",
+                      "description": "Always `true`."
                     }
-                  }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`Invalid JSON body`, `user_id is required`, or `outcome must be cancelled, retained, dismissed, or paused`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1487,11 +2046,11 @@
         }
       }
     },
-    "/iap/cancel-flow/accept-offer": {
+    "/iap/cancel-flow/accept-offer/": {
       "post": {
         "operationId": "acceptCancelFlowOffer",
         "summary": "Accept Cancel Flow Offer",
-        "description": "Accepts the retention offer shown during the cancel flow, applying a discount to the user's subscription.",
+        "description": "Accepts the retention offer from the cancel flow and applies it to the user's Stripe subscription: a percentage discount for a number of months, or a free period. Calling it again for a subscription that already carries the offer returns the offer that is applied.",
         "tags": [
           "Cancel Flow"
         ],
@@ -1515,6 +2074,10 @@
                     "description": "The product the offer applies to."
                   }
                 }
+              },
+              "example": {
+                "user_id": "user_123",
+                "product_id": "com.example.pro.monthly"
               }
             }
           }
@@ -1527,36 +2090,74 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {
+                    "message": {
                       "type": "string",
-                      "example": "ok"
+                      "description": "Human-readable summary, for example `20% off for 3 months`."
                     },
-                    "discount_applied": {
-                      "type": "boolean",
-                      "description": "Whether the discount was successfully applied."
+                    "discount_percent": {
+                      "type": "integer",
+                      "description": "Percent discount applied. Null for a free-period offer.",
+                      "nullable": true
+                    },
+                    "duration_months": {
+                      "type": "integer",
+                      "description": "Months the discount lasts. Null for a free-period offer or a forever discount.",
+                      "nullable": true
                     }
-                  }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                },
+                "example": {
+                  "message": "20% off for 3 months",
+                  "discount_percent": 20,
+                  "duration_months": 3
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`user_id is required`, `product_id is required`, `Save offer is not enabled`, `No Stripe subscription linked`, or `Invalid offer configuration`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "description": "`Cancel flow not configured`, or `No active subscription found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Stripe returned an error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/upgrade-offer": {
+    "/iap/upgrade-offer/": {
       "get": {
         "operationId": "getUpgradeOffer",
         "summary": "Get Upgrade Offer",
-        "description": "Checks if a user is eligible for a subscription upgrade and returns available upgrade options.",
+        "description": "Checks whether a user can be offered a subscription upgrade and returns the offer. `available` is `false` with a `reason` when there is no offer.",
         "tags": [
           "Upgrade Offers"
         ],
@@ -1591,17 +2192,27 @@
               }
             }
           },
+          "400": {
+            "description": "`user_id query parameter is required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
     },
-    "/iap/upgrade-offer/execute": {
+    "/iap/upgrade-offer/execute/": {
       "post": {
         "operationId": "executeUpgradeOffer",
         "summary": "Execute Upgrade Offer",
-        "description": "Executes a subscription upgrade, creating a new payment intent or checkout session for the target product. The old subscription is cancelled with proration when the new payment succeeds.",
+        "description": "Starts the upgrade. For a web subscription (`web_to_web`) the existing Stripe subscription is changed to the target plan in place, with proration, and the response carries the new entitlement. There is no client secret. For an App Store subscriber (`storekit_to_web`) the response tells the app which product to check out: call Create Checkout Session or Create Payment Intent for `target_product_id`, then show the cancel instructions.",
         "tags": [
           "Upgrade Offers"
         ],
@@ -1630,38 +2241,64 @@
                     "description": "The reference ID of the product to upgrade to."
                   }
                 }
+              },
+              "example": {
+                "user_id": "user_123",
+                "current_product_id": "com.example.pro.monthly",
+                "target_product_id": "com.example.pro.annual"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Upgrade initiated",
+            "description": "Upgrade processed",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpgradeExecuteResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/UpgradeExecuteResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UpgradeExecuteStorekitResponse"
+                    }
+                  ]
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`user_id`, `current_product_id` or `target_product_id` is missing, or the upgrade could not be performed (the message is in `error`, for example `Target product not found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "description": "`No active subscription found` for `current_product_id`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/iap/upgrade-offer/respond": {
+    "/iap/upgrade-offer/respond/": {
       "post": {
         "operationId": "respondUpgradeOffer",
         "summary": "Respond to Upgrade Offer",
-        "description": "Records the user's response to an upgrade offer for analytics purposes.",
+        "description": "Records that the user declined or dismissed an upgrade offer, for analytics. Accepting an offer is recorded by Execute Upgrade Offer, not here.",
         "tags": [
           "Upgrade Offers"
         ],
@@ -1672,22 +2309,43 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "user_id"
+                  "user_id",
+                  "outcome",
+                  "current_product_id",
+                  "target_product_id"
                 ],
                 "properties": {
                   "user_id": {
                     "type": "string",
                     "description": "The user's external ID."
                   },
-                  "accepted": {
-                    "type": "boolean",
-                    "description": "Whether the user accepted the upgrade offer."
-                  },
                   "variant_id": {
                     "type": "integer",
                     "description": "Experiment variant ID, if the upgrade offer is part of an A/B test."
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "declined",
+                      "dismissed"
+                    ],
+                    "description": "What the user did with the offer."
+                  },
+                  "current_product_id": {
+                    "type": "string",
+                    "description": "Reference ID of the user's current product."
+                  },
+                  "target_product_id": {
+                    "type": "string",
+                    "description": "Reference ID of the offered product."
                   }
                 }
+              },
+              "example": {
+                "user_id": "user_123",
+                "outcome": "declined",
+                "current_product_id": "com.example.pro.monthly",
+                "target_product_id": "com.example.pro.annual"
               }
             }
           }
@@ -1700,11 +2358,24 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {
-                      "type": "string",
-                      "example": "ok"
+                    "success": {
+                      "type": "boolean",
+                      "description": "Always `true`."
                     }
-                  }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`Invalid JSON body`, `user_id is required`, `outcome must be 'declined' or 'dismissed'`, or `current_product_id and target_product_id are required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1715,11 +2386,11 @@
         }
       }
     },
-    "/iap/events": {
+    "/iap/events/": {
       "post": {
         "operationId": "trackEvent",
         "summary": "Track Event",
-        "description": "Tracks an analytics event from the SDK. Used for funnel analysis, screen views, and custom events.",
+        "description": "Tracks a funnel event from the SDK. `event_type` must be one of `paywall_viewed`, `checkout_started` or `checkout_abandoned`. `event_type`, `user_id` and `product_id` are all required.",
         "tags": [
           "Events"
         ],
@@ -1731,12 +2402,18 @@
                 "type": "object",
                 "required": [
                   "event_type",
-                  "user_id"
+                  "user_id",
+                  "product_id"
                 ],
                 "properties": {
                   "event_type": {
                     "type": "string",
-                    "description": "The event type identifier (e.g., `paywall_shown`, `purchase_started`, `checkout_completed`)."
+                    "enum": [
+                      "paywall_viewed",
+                      "checkout_started",
+                      "checkout_abandoned"
+                    ],
+                    "description": "The funnel event type. Any other value returns 400."
                   },
                   "user_id": {
                     "type": "string",
@@ -1744,7 +2421,7 @@
                   },
                   "product_id": {
                     "type": "string",
-                    "description": "The product related to this event, if applicable."
+                    "description": "The product the event relates to. Required."
                   },
                   "screen_name": {
                     "type": "string",
@@ -1756,6 +2433,12 @@
                     "description": "Additional key-value metadata for the event."
                   }
                 }
+              },
+              "example": {
+                "event_type": "paywall_viewed",
+                "user_id": "user_123",
+                "product_id": "com.example.pro.monthly",
+                "screen_name": "home_paywall"
               }
             }
           }
@@ -1773,12 +2456,22 @@
                       "example": "ok"
                     }
                   }
+                },
+                "example": {
+                  "status": "ok"
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`Invalid JSON body`; `event_type, user_id, and product_id are required`; or `Invalid event_type. Must be one of: ...`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1786,7 +2479,7 @@
         }
       }
     },
-    "/iap/restore-purchases": {
+    "/iap/restore-purchases/": {
       "post": {
         "operationId": "restorePurchases",
         "summary": "Restore Purchases",
@@ -1814,36 +2507,185 @@
                     "description": "The user's current external ID to restore purchases to."
                   }
                 }
+              },
+              "example": {
+                "email": "person@example.com",
+                "user_id": "user_123"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Purchases restored",
+            "description": "Restore processed",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {
-                      "type": "string",
-                      "example": "ok"
+                    "restored": {
+                      "type": "boolean",
+                      "description": "`true` when entitlements were linked to `user_id`."
                     },
-                    "restored_count": {
+                    "target_identity_id": {
                       "type": "integer",
-                      "description": "Number of entitlements restored."
+                      "description": "ID of the identity the entitlements now belong to.",
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human-readable result."
                     }
-                  }
+                  },
+                  "required": [
+                    "restored"
+                  ]
+                },
+                "example": {
+                  "restored": true,
+                  "target_identity_id": 4821,
+                  "message": "Purchases restored"
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "`Invalid JSON body`, or `email and user_id are required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/iap/migration-cohort/": {
+      "get": {
+        "operationId": "getMigrationCohort",
+        "summary": "Get Migration Cohort",
+        "tags": [
+          "Migration"
+        ],
+        "description": "Server-to-server. Lists the users who are currently eligible for your Switch & Save offer, so your backend can target them (for example with email or push). Authenticate with your **secret** key, never the publishable key. The environment (sandbox or live) comes from the key. This is an enumeration: it does not count impressions. Eligibility follows the same rules as the offer the SDK shows. When no campaign is enabled the list is empty.",
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Pagination cursor: the `next_cursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Default 100, maximum 500. Values below 1 are raised to 1.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of eligible users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "external_user_id": {
+                            "type": "string",
+                            "description": "The user ID your app passed to `identify`."
+                          },
+                          "product_id": {
+                            "type": "string",
+                            "description": "The product the user subscribes to."
+                          },
+                          "subscription_started_at": {
+                            "type": "string",
+                            "description": "When the subscription started.",
+                            "format": "date-time"
+                          },
+                          "eligible_since": {
+                            "type": "string",
+                            "description": "When the user became eligible: the start plus the campaign minimum subscription days.",
+                            "format": "date-time"
+                          },
+                          "is_currently_eligible": {
+                            "type": "boolean",
+                            "description": "Always `true`: only eligible users are listed."
+                          }
+                        }
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Pass as `cursor` to get the next page. Null on the last page. A page can hold fewer users than `limit` only on the last page."
+                    },
+                    "campaign": {
+                      "type": "object",
+                      "properties": {
+                        "is_enabled": {
+                          "type": "boolean",
+                          "description": "Whether the Switch & Save campaign is enabled."
+                        },
+                        "rollout_percent": {
+                          "type": "integer",
+                          "description": "Percentage of eligible users the campaign rolls out to."
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "users",
+                    "next_cursor",
+                    "campaign"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`Invalid cursor`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The `X-ZeroSettle-Key` header is missing, or the key is not a valid secret key (`Invalid secret key`). A publishable key is rejected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1856,6 +2698,12 @@
         "in": "header",
         "name": "X-ZeroSettle-Key",
         "description": "Your publishable API key. Use `zs_pk_test_*` for sandbox or `zs_pk_live_*` for production."
+      },
+      "SecretKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-ZeroSettle-Key",
+        "description": "Your secret API key (`zs_sk_test_*` or `zs_sk_live_*`). Server-side only: never ship a secret key in an app. Only the endpoints that say so accept it."
       }
     },
     "schemas": {
@@ -1904,33 +2752,37 @@
             "nullable": true
           },
           "subscription_group_id": {
-            "description": "The subscription group this product belongs to, or null for non-subscription products.",
+            "description": "ID of the subscription family this product belongs to, or null for non-subscription products.",
             "type": "integer",
             "nullable": true
           },
           "free_trial_duration": {
-            "description": "ISO 8601 duration for the free trial period (e.g., `P7D` for 7 days), or null if no trial is configured.",
+            "description": "Free trial length as a ZeroSettle duration token (for example `1_week`, `3_days`, `1_month`), or null if no trial is configured. This is not an ISO 8601 duration.",
             "type": "string",
             "nullable": true
           },
           "is_trial_eligible": {
-            "description": "Whether the current user is eligible for a free trial on this product. Null if `user_id` was not provided in the request.",
+            "description": "Whether the user is eligible for a free trial on this product. Null when `user_id` was not sent, or when the product has no trial or is not in a subscription family.",
             "type": "boolean",
             "nullable": true
           },
           "trial": {
-            "description": "Trial mode details for this product. Present only for `auto_renewable_subscription` products that have a free trial configured AND whose trial eligibility was resolved (i.e., `user_id` was included in the request and the user is trial-eligible). Absent for non-subscription products, products without a trial, and anonymous requests.",
+            "description": "Trial mode details. Present for `auto_renewable_subscription` products that have a free trial configured whenever `user_id` is sent, whether or not the user is trial-eligible (check `is_trial_eligible` for that). Absent otherwise.",
             "nullable": true,
             "type": "object",
             "properties": {
               "mode": {
                 "type": "string",
-                "enum": ["free", "paid", "auth_hold"],
+                "enum": [
+                  "free",
+                  "paid",
+                  "auth_hold"
+                ],
                 "description": "How the trial is collected. `free`: no charge during the trial period; the payment method is saved and billed at trial end. `paid`: a real upfront charge of `upfront_amount_cents` is collected immediately and kept; the full subscription price is billed at trial end. `auth_hold`: a temporary authorization hold of `hold_amount_cents` is placed (shown as a pending charge); released when the subscription converts or is cancelled."
               },
               "duration": {
                 "type": "string",
-                "description": "Duration token for the trial period (e.g., `1_week`, `3_days`, `1_month`). This is a ZeroSettle token, not an ISO 8601 duration. The app should map this to its own display copy."
+                "description": "Duration token for the trial period (for example `1_week`, `3_days`, `1_month`), the same value as `free_trial_duration`. This is a ZeroSettle token, not an ISO 8601 duration."
               },
               "upfront_amount_cents": {
                 "type": "integer",
@@ -1945,6 +2797,86 @@
                 "description": "`true` for `paid` and `auth_hold` modes (a real or pending charge verifies the card); `false` for `free` mode."
               }
             }
+          },
+          "storekit_product_id": {
+            "type": "string",
+            "description": "The App Store Connect product identifier to use for StoreKit purchases, when it differs from `id`.",
+            "nullable": true
+          },
+          "synced_to_asc": {
+            "type": "boolean",
+            "description": "Whether the product has been synced to App Store Connect."
+          },
+          "play_store_price": {
+            "description": "The Google Play price, or null if the product has no active Play link.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Price"
+              }
+            ],
+            "nullable": true
+          },
+          "play_product_id": {
+            "type": "string",
+            "description": "The Google Play product ID, or null.",
+            "nullable": true
+          },
+          "play_base_plan_id": {
+            "type": "string",
+            "description": "The Google Play base plan ID for subscriptions, or null.",
+            "nullable": true
+          },
+          "regional_pricing": {
+            "type": "object",
+            "nullable": true,
+            "description": "Present when regional pricing is configured for the buyer. When `applied` is true, `web_price` already reflects the regional amount.",
+            "properties": {
+              "applied": {
+                "type": "boolean"
+              },
+              "base_price_cents": {
+                "type": "integer",
+                "description": "The un-regionalized list price in cents."
+              },
+              "tier": {
+                "description": "Regional pricing tier ID."
+              },
+              "country": {
+                "type": "string"
+              }
+            }
+          },
+          "promotion": {
+            "nullable": true,
+            "description": "Reserved. Currently always null."
+          },
+          "family_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "ID of the product family the product belongs to, or null."
+          },
+          "family_name": {
+            "type": "string",
+            "description": "Name of the product family.",
+            "nullable": true
+          },
+          "family_kind": {
+            "type": "string",
+            "description": "Kind of product family (for example `subscription`).",
+            "nullable": true
+          },
+          "billing_interval": {
+            "type": "string",
+            "description": "Billing interval for recurring products, or null.",
+            "nullable": true
+          },
+          "checkout_route": {
+            "type": "string",
+            "enum": [
+              "web",
+              "store"
+            ],
+            "description": "Where the SDK should route this purchase. `web` is the default. `store` means a routing experiment assigned this user to the store checkout, so do not offer web checkout."
           }
         }
       },
@@ -1970,9 +2902,11 @@
             "type": "string",
             "enum": [
               "webview",
-              "native"
+              "safari_vc",
+              "safari",
+              "native_pay"
             ],
-            "description": "Default checkout presentation: `native` for Apple Pay / Google Pay payment sheet, `webview` for embedded web checkout."
+            "description": "Default checkout presentation (the US configuration, kept for older SDKs). `webview` is the default and the supported choice. `native_pay` is not supported for new integrations."
           },
           "is_enabled": {
             "type": "boolean",
@@ -2008,9 +2942,11 @@
             "type": "string",
             "enum": [
               "webview",
-              "native"
+              "safari_vc",
+              "safari",
+              "native_pay"
             ],
-            "description": "Checkout presentation type for this jurisdiction."
+            "description": "Checkout presentation for this jurisdiction. `webview` is the default and the supported choice. `native_pay` is not supported for new integrations."
           },
           "is_enabled": {
             "type": "boolean",
@@ -2067,23 +3003,27 @@
         "properties": {
           "client_secret": {
             "type": "string",
-            "description": "Stripe PaymentIntent client secret. Use this to confirm the payment on the client side."
-          },
-          "payment_intent_id": {
-            "type": "string",
-            "description": "Stripe PaymentIntent ID."
+            "description": "Stripe client secret. Confirm the intent named by `intent_type` with it."
           },
           "transaction_id": {
             "type": "string",
             "description": "ZeroSettle transaction ID. Use this to poll for transaction status."
           },
-          "amount_cents": {
+          "amount": {
             "type": "integer",
-            "description": "The charge amount in cents."
+            "description": "The full amount in cents, or the recurring price for a subscription. See `charge_amount` for what the intent charges or holds now."
+          },
+          "original_amount": {
+            "type": "integer",
+            "description": "The original price in cents before discounts, trials or prorations."
+          },
+          "charge_amount": {
+            "type": "integer",
+            "description": "Cents the intent charges or holds now. Present for trial checkouts. Differs from `amount` for paid and auth-hold trials."
           },
           "currency": {
             "type": "string",
-            "description": "ISO 4217 currency code (e.g., `usd`)."
+            "description": "ISO 4217 currency code (for example `usd`)."
           },
           "product_name": {
             "type": "string",
@@ -2091,15 +3031,43 @@
           },
           "checkout_url": {
             "type": "string",
-            "description": "Fallback URL for browser-based checkout."
+            "description": "URL of the hosted checkout page. The client secret is in the URL fragment."
+          },
+          "callback_url": {
+            "type": "string",
+            "description": "URL the checkout page returns to after payment."
+          },
+          "publishable_key": {
+            "type": "string",
+            "description": "Stripe publishable key to use with `client_secret`."
+          },
+          "app_id": {
+            "type": "integer",
+            "description": "Project ID. Same value as `project_id`; kept for older SDKs."
+          },
+          "project_id": {
+            "type": "integer",
+            "description": "Project ID."
+          },
+          "stripe_account": {
+            "type": "string",
+            "description": "Connected Stripe account ID for BYOS projects. Omitted for ZeroSettle-managed Stripe."
           },
           "merchant_country": {
             "type": "string",
-            "description": "ISO 3166-1 alpha-2 country code of the merchant's Stripe account. Required for Apple Pay `paymentRequest()` country parameter."
+            "description": "ISO 3166-1 alpha-2 country code of the merchant Stripe account. Omitted when unknown."
           },
-          "original_amount_cents": {
-            "type": "integer",
-            "description": "The original price before any discounts or prorations."
+          "is_subscription": {
+            "type": "boolean",
+            "description": "`true` for subscriptions. Omitted for one-time purchases."
+          },
+          "subscription_interval": {
+            "type": "string",
+            "description": "Billing interval (for example `month`, `week`). Present for subscriptions."
+          },
+          "stripe_subscription_id": {
+            "type": "string",
+            "description": "Stripe subscription ID. Present for subscription checkouts."
           },
           "trial_type": {
             "type": "string",
@@ -2107,47 +3075,63 @@
               "free_trial",
               "migration"
             ],
-            "nullable": true,
-            "description": "The type of trial applied to this checkout. `free_trial` for standard free trials, `migration` for Switch & Save aligned trials. Omitted when no trial is active."
+            "description": "Type of trial applied. `free_trial` for standard trials, `migration` for Switch & Save aligned trials. Omitted when no trial is active."
           },
           "trial_end": {
             "type": "integer",
-            "nullable": true,
-            "description": "Unix timestamp when the trial period ends. Only present when a trial is active."
+            "description": "Unix timestamp when the trial ends. Only present when a trial is active."
           },
           "pending_amount": {
             "type": "integer",
-            "nullable": true,
-            "description": "The charge amount in cents that will be billed when the trial ends. Only present when a trial is active."
+            "description": "Cents billed when the trial ends. Only present when a trial is active."
           },
           "intent_type": {
             "type": "string",
-            "enum": ["setup", "payment"],
-            "description": "Discriminator for which Stripe confirm method the client must call. `setup`: confirms a SetupIntent (free trial — card saved, no immediate charge); `payment`: confirms a PaymentIntent (paid/auth_hold trial upfront charge, or any normal charge). Also returned by `POST /iap/payment-intents/{transaction_id}/finalize/` with the same semantics."
+            "enum": [
+              "setup",
+              "payment"
+            ],
+            "description": "Which Stripe confirm method the client must call. `setup` confirms a SetupIntent (free trial, card saved, no immediate charge). `payment` confirms a PaymentIntent (paid or auth-hold trial, or a normal charge)."
+          },
+          "checkout_presentation": {
+            "type": "string",
+            "description": "How the SDK should present checkout, from your dashboard checkout default. Translated per platform using `X-ZS-SDK-Platform`."
           }
-        }
+        },
+        "required": [
+          "client_secret",
+          "transaction_id",
+          "amount",
+          "currency",
+          "checkout_url"
+        ]
       },
       "CheckoutSessionResponse": {
         "type": "object",
         "description": "Response from creating a checkout session.",
         "properties": {
-          "checkout_session_id": {
+          "session_id": {
             "type": "string",
             "description": "Stripe Checkout Session ID."
           },
-          "url": {
+          "checkout_url": {
             "type": "string",
-            "description": "URL to redirect the user to for checkout."
-          },
-          "client_secret": {
-            "type": "string",
-            "description": "Client secret for embedded checkout."
+            "description": "Stripe-hosted URL to send the user to."
           },
           "transaction_id": {
             "type": "string",
             "description": "ZeroSettle transaction ID."
+          },
+          "checkout_presentation": {
+            "type": "string",
+            "description": "How the SDK should present checkout, from your dashboard checkout default. Translated per platform using `X-ZS-SDK-Platform`."
           }
-        }
+        },
+        "required": [
+          "session_id",
+          "checkout_url",
+          "transaction_id"
+        ]
       },
       "Transaction": {
         "type": "object",
@@ -2166,20 +3150,21 @@
             "enum": [
               "pending",
               "processing",
-              "succeeded",
+              "completed",
               "failed",
               "refunded",
-              "disputed"
+              "superseded"
             ],
-            "description": "Current transaction status."
+            "description": "Transaction status as sent to SDKs. A successful payment is `completed`. A disputed transaction is reported as `refunded`. `superseded` is an abandoned checkout that a newer checkout for the same product replaced."
           },
           "source": {
             "type": "string",
             "enum": [
               "web_checkout",
-              "store_kit"
+              "store_kit",
+              "play_store"
             ],
-            "description": "Where the transaction originated."
+            "description": "Where the transaction originated. `play_store` is sent only to Android clients (`X-ZS-SDK-Platform: android`); other clients get `web_checkout` for Google Play transactions."
           },
           "purchased_at": {
             "type": "string",
@@ -2187,29 +3172,23 @@
             "description": "ISO 8601 timestamp of when the purchase was made."
           },
           "storekit_status": {
-            "description": "StoreKit finish status: `1` = active (finished), `2` = anything-not-active (cancelled, expired, billing retry, grace period, revoked). Null for web checkout transactions. This is a coarse SDK-reported flag; consult `storekit_apple_status` for Apple's full state.",
+            "description": "StoreKit finish status: `1` = active (finished), `2` = anything-not-active (cancelled, expired, billing retry, grace period, revoked). Null for web checkout transactions.",
             "type": "integer",
             "nullable": true
-          },
-          "storekit_apple_status": {
-            "description": "Apple's full subscription status code from the App Store Server API. `1` = Active, `2` = Expired, `3` = BillingRetry, `4` = GracePeriod, `5` = Revoked. Null when no Apple-verified state has been recorded (e.g., before the SDK has reported a state change, or when ASC credentials are not configured for the tenant).",
-            "type": "integer",
-            "nullable": true,
-            "enum": [
-              1,
-              2,
-              3,
-              4,
-              5
-            ]
           },
           "expires_at": {
-            "description": "ISO 8601 expiry timestamp for subscription transactions. Null for one-time purchases.",
+            "description": "ISO 8601 expiry timestamp of the entitlement this transaction created, for subscriptions. Omitted (not null) when there is none.",
             "type": "string",
-            "format": "date-time",
-            "nullable": true
+            "format": "date-time"
           }
-        }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "status",
+          "source",
+          "purchased_at"
+        ]
       },
       "TransactionHistoryItem": {
         "type": "object",
@@ -2226,22 +3205,17 @@
           "status": {
             "type": "string",
             "enum": [
+              "completed",
               "pending",
               "processing",
-              "succeeded",
               "failed",
-              "refunded",
-              "disputed"
+              "refunded"
             ],
-            "description": "Transaction status."
+            "description": "Transaction status as sent to SDKs. A successful payment is `completed`. A disputed transaction is reported as `refunded`. Abandoned checkout sessions are not returned."
           },
           "source": {
             "type": "string",
-            "enum": [
-              "web_checkout",
-              "store_kit"
-            ],
-            "description": "Transaction source."
+            "description": "Transaction source: `web_checkout`, `store_kit`, or another raw source value such as `play_billing`."
           },
           "purchased_at": {
             "type": "string",
@@ -2261,9 +3235,14 @@
             "description": "Display name of the product."
           },
           "expires_at": {
-            "description": "Subscription expiry timestamp, or null.",
+            "description": "Always null. Expiry is tracked on entitlements, not transactions: use Get Entitlements.",
             "type": "string",
             "format": "date-time",
+            "nullable": true
+          },
+          "storekit_status": {
+            "description": "StoreKit finish status: `1` = active, `2` = anything-not-active. Null for web checkout transactions.",
+            "type": "integer",
             "nullable": true
           }
         }
@@ -2285,10 +3264,11 @@
             "enum": [
               "consumable",
               "non_consumable",
-              "non_renewing_subscription",
-              "auto_renewable_subscription"
+              "non_renewing",
+              "auto_renewable",
+              "subscription"
             ],
-            "description": "The type of product."
+            "description": "The product type as stored: `consumable`, `non_consumable`, `non_renewing` or `auto_renewable`. Some older rows carry the legacy value `subscription`."
           },
           "source": {
             "type": "string",
@@ -2297,26 +3277,24 @@
               "store_kit",
               "play_store"
             ],
-            "description": "Where the entitlement originated."
+            "description": "Where the entitlement currently comes from, using the precedence web checkout, then StoreKit, then Play. `play_store` is sent only to Android clients (`X-ZS-SDK-Platform: android`); other clients get `web_checkout` for Google Play entitlements."
           },
           "status": {
             "type": "string",
             "enum": [
               "active",
-              "expired",
               "cancelled",
               "grace_period",
-              "past_due",
-              "paused"
+              "past_due"
             ],
-            "description": "Current entitlement status. `active`, `cancelled`, `grace_period` and `past_due` all mean the user still has access — `cancelled` means auto-renew is off but the paid period has not ended. Only `expired` and `paused` mean access has stopped."
+            "description": "Current status. Only entitlements that still grant access are returned, so this is one of `active`, `cancelled` (auto-renew is off but the paid period has not ended), `grace_period` or `past_due`."
           },
           "is_active": {
             "type": "boolean",
             "description": "Whether the user currently has access to this product."
           },
           "expires_at": {
-            "description": "When the entitlement expires, or null for lifetime purchases.",
+            "description": "When the entitlement expires, or null for lifetime purchases and consumables.",
             "type": "string",
             "format": "date-time",
             "nullable": true
@@ -2324,7 +3302,8 @@
           "purchased_at": {
             "type": "string",
             "format": "date-time",
-            "description": "When the entitlement was originally purchased."
+            "description": "When the entitlement was originally purchased.",
+            "nullable": true
           },
           "will_renew": {
             "type": "boolean",
@@ -2349,8 +3328,49 @@
           "is_test_purchase": {
             "type": "boolean",
             "description": "`true` when Apple processed this as a sandbox purchase (TestFlight, App Review or Xcode) but your app sent it with a live key. It stays in Live, still grants access, and is left out of revenue. `false` otherwise."
+          },
+          "grace_period_ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "End of the billing grace period. Present only while in grace."
+          },
+          "paused_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the subscription was paused. Present only when paused."
+          },
+          "pause_resumes_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When a paused subscription resumes. Present only when paused."
+          },
+          "subscription_group_id": {
+            "type": "string",
+            "description": "ID of the subscription family, as a string. Present for subscription products."
+          },
+          "family_id": {
+            "type": "integer",
+            "description": "ID of the product family. Present when the product belongs to one."
+          },
+          "family_name": {
+            "type": "string",
+            "description": "Name of the product family.",
+            "nullable": true
+          },
+          "family_kind": {
+            "type": "string",
+            "description": "Kind of product family.",
+            "nullable": true
           }
-        }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "product_type",
+          "source",
+          "status",
+          "is_active"
+        ]
       },
       "StorekitSubscriptionStatus": {
         "type": "object",
@@ -2388,19 +3408,19 @@
         "type": "object",
         "description": "Response from cancelling a subscription.",
         "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Always `true`."
+          },
           "status": {
             "type": "string",
-            "description": "Result status."
+            "description": "The entitlement status after the call: `cancelled` when it cancels at the end of the billing period, `expired` when it cancels immediately."
           },
           "cancelled_at": {
             "type": "string",
-            "format": "date-time",
-            "description": "When the cancellation was processed."
-          },
-          "access_until": {
-            "type": "string",
-            "format": "date-time",
-            "description": "When the user will lose access (end of billing period for non-immediate cancellations)."
+            "description": "When the cancellation was processed.",
+            "nullable": true,
+            "format": "date-time"
           }
         }
       },
@@ -2408,19 +3428,25 @@
         "type": "object",
         "description": "Response from pausing a subscription.",
         "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Always `true`."
+          },
           "status": {
             "type": "string",
-            "description": "Result status."
+            "description": "Always `paused`."
           },
           "paused_at": {
             "type": "string",
-            "format": "date-time",
-            "description": "When the subscription was paused."
+            "description": "When the subscription was paused.",
+            "nullable": true,
+            "format": "date-time"
           },
           "resumes_at": {
             "type": "string",
-            "format": "date-time",
-            "description": "When the subscription will automatically resume."
+            "description": "When the subscription resumes automatically. Null for an indefinite pause.",
+            "nullable": true,
+            "format": "date-time"
           }
         }
       },
@@ -2428,14 +3454,13 @@
         "type": "object",
         "description": "Response from resuming a subscription.",
         "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Always `true`."
+          },
           "status": {
             "type": "string",
-            "description": "Result status."
-          },
-          "resumed_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "When the subscription was resumed."
+            "description": "Always `active`."
           }
         }
       },
@@ -2445,17 +3470,17 @@
         "properties": {
           "enabled": {
             "type": "boolean",
-            "description": "Whether the cancel flow is enabled for this app."
+            "description": "`false` when no cancel flow is active. When `false`, no other field is sent."
           },
           "questions": {
             "type": "array",
-            "description": "Survey questions to show during the cancel flow.",
+            "description": "Survey questions.",
             "items": {
               "$ref": "#/components/schemas/CancelFlowQuestion"
             }
           },
           "offer": {
-            "description": "Retention offer to show, or null if none is configured.",
+            "description": "Retention offer, or null if none is enabled.",
             "allOf": [
               {
                 "$ref": "#/components/schemas/CancelFlowOffer"
@@ -2464,7 +3489,7 @@
             "nullable": true
           },
           "pause": {
-            "description": "Pause option configuration, or null if pause is not enabled.",
+            "description": "Pause option, or null if pause is not enabled.",
             "allOf": [
               {
                 "$ref": "#/components/schemas/CancelFlowPause"
@@ -2472,50 +3497,114 @@
             ],
             "nullable": true
           },
+          "deflect": {
+            "type": "object",
+            "nullable": true,
+            "description": "Deflection block, or null. Sent only to SDKs on the full shape (iOS 1.6.0+, Android 1.3.0+, Flutter 1.8.0+).",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "order": {
+                      "type": "integer"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "action_type": {
+                      "type": "string"
+                    },
+                    "action_value": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "downgrade": {
+            "type": "object",
+            "nullable": true,
+            "description": "Downgrade block, or null. Sent only to SDKs on the full shape.",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              },
+              "cta_text": {
+                "type": "string"
+              },
+              "target_product_id": {
+                "type": "string"
+              }
+            }
+          },
           "variant_id": {
-            "description": "Experiment variant ID if the cancel flow is part of an A/B test.",
             "type": "integer",
+            "description": "Experiment variant ID when the cancel flow is part of an A/B test.",
             "nullable": true
           }
-        }
+        },
+        "required": [
+          "enabled"
+        ]
       },
       "CancelFlowQuestion": {
         "type": "object",
         "description": "A survey question in the cancel flow.",
         "properties": {
           "id": {
-            "type": "string",
-            "description": "Question identifier."
+            "type": "integer",
+            "description": "Question ID. Send it back in the `answers` of Submit Cancel Flow Response."
           },
-          "text": {
-            "type": "string",
-            "description": "Question text to display."
+          "order": {
+            "type": "integer",
+            "description": "Display order."
           },
-          "type": {
+          "question_text": {
             "type": "string",
-            "enum": [
-              "single_choice",
-              "multiple_choice",
-              "free_text"
-            ],
-            "description": "Question type."
+            "description": "The question to show."
+          },
+          "question_type": {
+            "type": "string",
+            "description": "The question type, for example single choice or free text."
+          },
+          "is_required": {
+            "type": "boolean",
+            "description": "Whether the user must answer."
           },
           "options": {
             "type": "array",
+            "description": "Answer options. Objects on every SDK except legacy Android (before 1.3.0), which receives plain label strings.",
             "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "description": "Option identifier."
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/CancelFlowOption"
                 },
-                "text": {
-                  "type": "string",
-                  "description": "Option text."
+                {
+                  "type": "string"
                 }
-              }
-            },
-            "description": "Available answer options (for choice questions)."
+              ]
+            }
           }
         }
       },
@@ -2523,29 +3612,36 @@
         "type": "object",
         "description": "A retention offer in the cancel flow.",
         "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "discount",
-              "extension"
-            ],
-            "description": "Type of retention offer."
-          },
-          "discount_percent": {
-            "type": "integer",
-            "description": "Discount percentage (for discount-type offers)."
-          },
-          "duration_months": {
-            "type": "integer",
-            "description": "How many billing cycles the discount lasts."
+          "enabled": {
+            "type": "boolean",
+            "description": "Always `true` when the object is present."
           },
           "title": {
-            "type": "string",
-            "description": "Offer title text."
+            "type": "string"
           },
-          "message": {
+          "body": {
+            "type": "string"
+          },
+          "cta_text": {
             "type": "string",
-            "description": "Offer body text."
+            "description": "Button text."
+          },
+          "type": {
+            "type": "string",
+            "description": "Offer type: a percentage discount or a free period."
+          },
+          "value": {
+            "type": "string",
+            "description": "Offer value: the percent for a discount, or the length for a free period."
+          },
+          "duration": {
+            "type": "integer",
+            "description": "How long the offer lasts, in `duration_unit`. For a free period this is the free length.",
+            "nullable": true
+          },
+          "duration_unit": {
+            "type": "string",
+            "description": "Unit for `duration`. Sent only on the full shape."
           }
         }
       },
@@ -2555,92 +3651,224 @@
         "properties": {
           "enabled": {
             "type": "boolean",
-            "description": "Whether the pause option is available."
-          },
-          "duration_days": {
-            "type": "integer",
-            "description": "Default pause duration in days."
-          },
-          "max_duration_days": {
-            "type": "integer",
-            "description": "Maximum allowed pause duration."
+            "description": "Always `true` when the object is present."
           },
           "title": {
-            "type": "string",
-            "description": "Pause option title text."
+            "type": "string"
           },
-          "message": {
+          "body": {
+            "type": "string"
+          },
+          "cta_text": {
             "type": "string",
-            "description": "Pause option body text."
+            "description": "Button text."
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "order": {
+                  "type": "integer"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "duration_type": {
+                  "type": "string",
+                  "description": "How the pause length is defined."
+                },
+                "duration_days": {
+                  "type": "integer",
+                  "description": "Pause length in days.",
+                  "nullable": true
+                },
+                "resume_date": {
+                  "type": "string",
+                  "description": "Fixed resume date.",
+                  "nullable": true,
+                  "format": "date"
+                }
+              }
+            }
           }
         }
       },
       "UpgradeOffer": {
         "type": "object",
-        "description": "Upgrade offer eligibility and options.",
+        "description": "Upgrade offer for a user. When `available` is false only `reason` (and possibly `variant_id`) is sent.",
+        "required": [
+          "available"
+        ],
         "properties": {
-          "eligible": {
+          "available": {
             "type": "boolean",
-            "description": "Whether the user is eligible for an upgrade."
+            "description": "Whether an upgrade offer exists for the user."
           },
-          "current_product_id": {
+          "reason": {
             "type": "string",
-            "description": "The user's current subscription product ID."
+            "description": "Why no offer is available. Present when `available` is false. Values include `no_active_subscription`, `subscription_not_active`, `upgrade_offer_disabled`, `too_early`, `no_upgrade_path` and `no_price_data`."
           },
-          "eligible_upgrades": {
-            "type": "array",
-            "description": "Products the user can upgrade to.",
-            "items": {
-              "type": "object",
-              "properties": {
-                "product_id": {
-                  "type": "string",
-                  "description": "The upgrade target product's reference ID."
-                },
-                "display_name": {
-                  "type": "string",
-                  "description": "Product display name."
-                },
-                "price": {
-                  "$ref": "#/components/schemas/Price"
-                },
-                "savings_percent": {
-                  "type": "integer",
-                  "description": "Percentage savings compared to the current plan (annualized)."
-                }
+          "current_product": {
+            "type": "object",
+            "properties": {
+              "reference_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "price_cents": {
+                "type": "integer"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "duration_days": {
+                "type": "integer"
+              },
+              "billing_label": {
+                "type": "string",
+                "description": "`weekly`, `monthly`, `quarterly`, `semi-annual` or `yearly`."
+              }
+            },
+            "description": "The user's current plan. Present when available."
+          },
+          "target_product": {
+            "type": "object",
+            "properties": {
+              "reference_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "price_cents": {
+                "type": "integer"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "duration_days": {
+                "type": "integer"
+              },
+              "billing_label": {
+                "type": "string"
+              },
+              "monthly_equivalent_cents": {
+                "type": "integer"
+              }
+            },
+            "description": "The plan being offered. Present when available."
+          },
+          "savings_percent": {
+            "type": "integer",
+            "description": "Annualized saving of the target plan over the current one."
+          },
+          "upgrade_type": {
+            "type": "string",
+            "enum": [
+              "storekit_to_web",
+              "web_to_web"
+            ],
+            "description": "`web_to_web` modifies an existing web subscription. `storekit_to_web` moves an App Store subscriber to web checkout."
+          },
+          "proration": {
+            "type": "object",
+            "nullable": true,
+            "description": "Proration preview. Present for `web_to_web`; null when it could not be computed.",
+            "properties": {
+              "proration_amount_cents": {
+                "type": "integer"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "next_billing_date": {
+                "type": "integer",
+                "nullable": true,
+                "description": "Unix timestamp of the next billing attempt."
               }
             }
           },
+          "display": {
+            "type": "object",
+            "description": "Copy for the offer card from your dashboard settings.",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              },
+              "cta_text": {
+                "type": "string"
+              },
+              "dismiss_text": {
+                "type": "string"
+              },
+              "storekit_migration_body": {
+                "type": "string",
+                "description": "Only for `storekit_to_web`."
+              },
+              "storekit_cancel_instructions": {
+                "type": "string",
+                "description": "Only for `storekit_to_web`."
+              }
+            }
+          },
+          "checkout_presentation": {
+            "type": "string",
+            "description": "How the SDK presents checkout, when configured."
+          },
           "variant_id": {
-            "description": "Experiment variant ID if the upgrade offer is part of an A/B test.",
             "type": "integer",
+            "description": "Experiment variant ID when the offer is part of an A/B test.",
             "nullable": true
           }
         }
       },
       "UpgradeExecuteResponse": {
         "type": "object",
-        "description": "Response from executing an upgrade.",
+        "description": "Result of a web to web upgrade.",
+        "required": [
+          "success",
+          "upgrade_type"
+        ],
         "properties": {
-          "type": {
+          "success": {
+            "type": "boolean",
+            "description": "Always `true`."
+          },
+          "upgrade_type": {
             "type": "string",
             "enum": [
-              "web_to_web",
-              "storekit_to_web"
-            ],
-            "description": "The type of upgrade being performed."
+              "web_to_web"
+            ]
           },
-          "client_secret": {
-            "type": "string",
-            "description": "Stripe PaymentIntent client secret for confirming the upgrade payment."
-          },
-          "checkout_url": {
-            "type": "string",
-            "description": "Fallback checkout URL."
-          },
-          "transaction_id": {
-            "type": "string",
-            "description": "ZeroSettle transaction ID for the upgrade."
+          "entitlement": {
+            "type": "object",
+            "properties": {
+              "product_id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "is_active": {
+                "type": "boolean"
+              },
+              "expires_at": {
+                "type": "string",
+                "description": "When the entitlement expires.",
+                "nullable": true,
+                "format": "date-time"
+              }
+            },
+            "description": "The entitlement after the change."
           }
         }
       },
@@ -2840,6 +4068,9 @@
             "$ref": "#/components/schemas/SubscriptionStateActiveStorekit"
           },
           {
+            "$ref": "#/components/schemas/SubscriptionStateActivePlay"
+          },
+          {
             "$ref": "#/components/schemas/SubscriptionStateMigrationTrial"
           },
           {
@@ -2853,18 +4084,23 @@
             "active_web": "#/components/schemas/SubscriptionStateActiveWeb",
             "active_storekit": "#/components/schemas/SubscriptionStateActiveStorekit",
             "migration_trial": "#/components/schemas/SubscriptionStateMigrationTrial",
-            "cancelled_active": "#/components/schemas/SubscriptionStateCancelledActive"
+            "cancelled_active": "#/components/schemas/SubscriptionStateCancelledActive",
+            "active_play": "#/components/schemas/SubscriptionStateActivePlay"
           }
         }
       },
       "SubscriptionStateNone": {
         "type": "object",
         "description": "User has no active subscription entitlement from any source.",
-        "required": ["type"],
+        "required": [
+          "type"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["none"]
+            "enum": [
+              "none"
+            ]
           }
         }
       },
@@ -2883,16 +4119,18 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["active_web"]
+            "enum": [
+              "active_web"
+            ]
           },
           "product_id": {
             "type": "string",
             "description": "Reference ID of the active product."
           },
-          "subscription_group_id": {
+          "family_id": {
             "type": "integer",
             "nullable": true,
-            "description": "ZeroSettle subscription group ID, if any."
+            "description": "ZeroSettle product family ID, if any."
           },
           "status": {
             "type": "string",
@@ -2941,14 +4179,17 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["active_storekit"]
+            "enum": [
+              "active_storekit"
+            ]
           },
           "product_id": {
             "type": "string"
           },
-          "subscription_group_id": {
+          "family_id": {
             "type": "integer",
-            "nullable": true
+            "nullable": true,
+            "description": "ZeroSettle product family ID, if any."
           },
           "status": {
             "type": "string",
@@ -2993,17 +4234,20 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["migration_trial"]
+            "enum": [
+              "migration_trial"
+            ]
           },
           "web_product_id": {
             "type": "string"
           },
+          "family_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "ZeroSettle product family ID, if any."
+          },
           "storekit_product_id": {
             "type": "string"
-          },
-          "subscription_group_id": {
-            "type": "integer",
-            "nullable": true
           },
           "trial_ends_at": {
             "type": "string",
@@ -3037,7 +4281,9 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["cancelled_active"]
+            "enum": [
+              "cancelled_active"
+            ]
           },
           "source": {
             "type": "string",
@@ -3046,9 +4292,10 @@
           "product_id": {
             "type": "string"
           },
-          "subscription_group_id": {
+          "family_id": {
             "type": "integer",
-            "nullable": true
+            "nullable": true,
+            "description": "ZeroSettle product family ID, if any."
           },
           "expires_at": {
             "type": "string",
@@ -3085,6 +4332,7 @@
             "enum": [
               "no_action",
               "migrate_storekit_to_web",
+              "migrate_play_to_web",
               "upgrade_storekit_to_web",
               "upgrade_web_to_web"
             ],
@@ -3116,31 +4364,61 @@
             "description": "Minimum subscribed days before the offer becomes eligible (for rollout/lock-in rules)."
           },
           "display": {
-            "$ref": "#/components/schemas/OfferDisplayV2",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OfferDisplayV2"
+              }
+            ],
             "nullable": true
           },
           "proration": {
-            "$ref": "#/components/schemas/OfferProration",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OfferProration"
+              }
+            ],
             "nullable": true
           },
           "requires_apple_cancel": {
             "type": "boolean",
-            "description": "Whether the user must cancel their StoreKit subscription after the new checkout completes (true for `migrate_*` / `upgrade_storekit_to_web`)."
+            "description": "Whether the user must cancel their App Store subscription after the new checkout completes (true for `migrate_storekit_to_web` / `upgrade_storekit_to_web`)."
           },
           "apple_subscription": {
-            "$ref": "#/components/schemas/AppleSubscriptionSummary",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AppleSubscriptionSummary"
+              }
+            ],
             "nullable": true
           },
           "checkout_presentation": {
             "type": "string",
-            "enum": ["webview", "native_pay", "safari_vc", "safari"],
+            "enum": [
+              "webview",
+              "native_pay",
+              "safari_vc",
+              "safari"
+            ],
             "nullable": true,
-            "description": "How the SDK should present checkout for this offer."
+            "description": "How the SDK should present checkout for this offer. `webview` is the default. `native_pay` is a legacy value and is not supported for new integrations."
           },
           "experiment_variant_id": {
             "type": "integer",
             "nullable": true,
             "description": "A/B experiment variant ID when this offer is part of an experiment."
+          },
+          "max_subscription_days": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Maximum subscribed days for the offer to apply. Null for no limit."
+          },
+          "rollout_percent": {
+            "type": "integer",
+            "description": "Percentage of eligible users who see the offer (0 to 100)."
+          },
+          "source": {
+            "type": "string",
+            "description": "Storefront the user is migrating from (`store_kit` or `play_store`). Present only for `migrate_*` offers."
           }
         }
       },
@@ -3241,7 +4519,7 @@
       },
       "Error": {
         "type": "object",
-        "description": "Error response.",
+        "description": "Error response. `error` is always present. Many errors also carry a machine-readable `code`, and some use `error` itself as the code (for example `in_flight`, `use_checkout_configs`).",
         "properties": {
           "error": {
             "type": "string",
@@ -3250,11 +4528,155 @@
           "code": {
             "type": "string",
             "description": "Machine-readable error code (not always present)."
+          },
+          "message": {
+            "type": "string",
+            "description": "Extra detail for some errors."
+          },
+          "retry_after": {
+            "type": "integer",
+            "description": "Seconds to wait before retrying. Sent with `in_flight` and server-busy errors."
           }
         },
         "required": [
           "error"
         ]
+      },
+      "CancelFlowOption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Option ID."
+          },
+          "order": {
+            "type": "integer",
+            "description": "Display order."
+          },
+          "label": {
+            "type": "string",
+            "description": "Option text."
+          },
+          "icon_name": {
+            "type": "string",
+            "description": "Icon name.",
+            "nullable": true
+          },
+          "subtitle": {
+            "type": "string",
+            "description": "Secondary text.",
+            "nullable": true
+          },
+          "triggers_offer": {
+            "type": "boolean",
+            "description": "Selecting this option shows the retention offer."
+          },
+          "triggers_pause": {
+            "type": "boolean",
+            "description": "Selecting this option shows the pause option."
+          },
+          "route": {
+            "type": "string",
+            "nullable": true,
+            "description": "Where selecting this option leads. Sent only on the full shape (iOS 1.6.0+, Android 1.3.0+, Flutter 1.8.0+)."
+          }
+        },
+        "description": "A survey answer option."
+      },
+      "UpgradeExecuteStorekitResponse": {
+        "type": "object",
+        "description": "Result for a StoreKit to web upgrade. Nothing has been charged yet.",
+        "required": [
+          "success",
+          "upgrade_type",
+          "target_product_id"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Always `true`."
+          },
+          "upgrade_type": {
+            "type": "string",
+            "enum": [
+              "storekit_to_web"
+            ]
+          },
+          "target_product_id": {
+            "type": "string",
+            "description": "Product to check out."
+          },
+          "cancel_instructions": {
+            "type": "string",
+            "description": "Text telling the user to cancel the Apple subscription after upgrading."
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Values for the checkout to carry so the upgrade is tracked.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SubscriptionStateActivePlay": {
+        "type": "object",
+        "description": "User has an active Google Play subscription (may be in grace period).",
+        "required": [
+          "type",
+          "product_id",
+          "status",
+          "is_trial",
+          "will_renew",
+          "entitlement_id"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "active_play"
+            ]
+          },
+          "product_id": {
+            "type": "string"
+          },
+          "family_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "ZeroSettle product family ID, if any."
+          },
+          "status": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "is_trial": {
+            "type": "boolean"
+          },
+          "trial_ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "will_renew": {
+            "type": "boolean"
+          },
+          "play_purchase_token": {
+            "type": "string"
+          },
+          "play_subscription_id": {
+            "type": "string"
+          },
+          "play_linked_purchase_token": {
+            "type": "string"
+          },
+          "entitlement_id": {
+            "type": "integer"
+          }
+        }
       }
     },
     "responses": {

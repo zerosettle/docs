@@ -1,11 +1,37 @@
 ---
 title: 'Sync StoreKit Transaction'
-openapi: 'POST /iap/storekit-transactions'
+openapi: 'POST /iap/storekit-transactions/'
 ---
 
 When Apple processed the purchase as a sandbox purchase (TestFlight, App Review or Xcode) but the request used a live key, the transaction is saved in Live as a test purchase and the response carries `"is_test_purchase": true` along with the existing `environment_mismatch` warning.
 
 If the StoreKit transaction id already belongs to a different project, the request is rejected with `409` and `{"error": "storekit_transaction_id_conflict", "message": "This StoreKit transaction id already belongs to a different project."}`. Nothing is saved. Check that the app is using the publishable key of the project the purchase belongs to.
+
+## Bundle id mismatch (400)
+
+The JWS is signed by Apple and carries the `bundleId` of the app that made the purchase. ZeroSettle compares it with the bundle id registered for your app in the dashboard. If they differ, the request is refused with `400`:
+
+```json
+{
+  "error": "The transaction's bundle id does not belong to this app.",
+  "code": "bundle_id_mismatch"
+}
+```
+
+Nothing is saved. This check has been enforced in production since 2026-10-25.
+
+What to do:
+
+- Almost always the bundle id registered in the dashboard (App settings) is wrong or missing a variant. Fix it there, then the next sync succeeds. Do not change the app's bundle id.
+- A project with no registered bundle id is never refused.
+- Accepted without extra setup: the exact registered id, its `maccatalyst.` form, and the registered id plus `.watchkitapp` or `.watchkitextension`. Any other extension or sibling app id counts as a mismatch.
+- The SDK keeps the transaction unfinished and retries, so purchases are not lost while you fix the registration.
+
+Other `400` errors are `Invalid JSON body`, `jws_representation is required`, `user_id is required` and `Missing productId in JWS payload`. A JWS that fails Apple signature verification returns `401` with `JWS signature verification failed`.
+
+## Another user owns the subscription
+
+If the Apple subscription already belongs to a different `user_id`, the call returns `200` with `"owned": false`, `"conflict": true` and `"claim_available": true`. Nothing is granted. Offer [Claim Entitlement](/api-reference/endpoint/claim-entitlement) if the person should take it over.
 
 ## Bulk reconcile
 

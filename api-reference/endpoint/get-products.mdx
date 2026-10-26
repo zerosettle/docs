@@ -1,11 +1,11 @@
 ---
 title: 'Get Products'
-openapi: 'GET /iap/products'
+openapi: 'GET /iap/products/'
 ---
 
 ## Trial mode object
 
-When `user_id` is included in the request and the user is eligible for a free trial on an `auto_renewable_subscription` product, that product's response object includes a `trial` field containing the following:
+When `user_id` is included in the request, every `auto_renewable_subscription` product that has a free trial configured includes a `trial` field. It is present whether or not the user is still eligible, so also check `is_trial_eligible`. The object contains:
 
 | Field | Type | Description |
 |---|---|---|
@@ -25,6 +25,11 @@ The `trial` object is **absent** (not null) for:
 - Non-subscription products
 - Subscription products with no trial configured
 - Requests without a `user_id`
-- Users who are not trial-eligible
+
+`is_trial_eligible` is the per-user answer. It is `null` when no `user_id` was sent, when the product has no trial, or when the product is not in a subscription family.
+
+## Response shape
+
+The response is `{"products": [...], "config": {"checkout": {...}, "migration": {...}|null, "offer": {...}|null}}`. Checkout presentation and any Switch & Save or upgrade offer live under `config`. Use `checkout_route` on each product: `store` means a routing experiment sent this user to the store, so do not offer web checkout.
 
 **App responsibility:** These fields are facts about the payment mechanics. The app owns all trial copy and UI — ZeroSettle does not supply copy strings.

@@ -4,7 +4,7 @@ description: 'ZeroSettle IAP SDK API endpoints'
 icon: 'code'
 ---
 
-The ZeroSettle IAP API powers the SDK and enables server-side integration. All SDK-facing endpoints are authenticated via the `X-ZeroSettle-Key` header.
+The ZeroSettle IAP API powers the SDK and enables server-side integration. Every endpoint is authenticated with the `X-ZeroSettle-Key` header. Almost all of them take your publishable key. One endpoint, [Get Migration Cohort](/api-reference/endpoint/migration-cohort), takes your secret key.
 
 ## Authentication
 
@@ -18,8 +18,22 @@ curl -H "X-ZeroSettle-Key: zs_pk_test_..." https://api.zerosettle.io/v1/iap/prod
 |---|---|
 | `zs_pk_test_` | Sandbox (no real charges) |
 | `zs_pk_live_` | Production (real payments) |
+| `zs_sk_test_` | Sandbox, secret key (server-side only) |
+| `zs_sk_live_` | Production, secret key (server-side only) |
+
+The key decides the environment. There is no separate environment header on these endpoints.
+
+A publishable key ships inside your app, so treat it as public. A secret key must stay on your server and must never be shipped in an app.
 
 Your API keys are available on the [ZeroSettle dashboard](https://app.zerosettle.io) under **Settings > API Keys**.
+
+## Paths end with a slash
+
+Every path ends with `/`, for example `/v1/iap/products/`. Send it exactly like that. A request without the trailing slash is redirected, and a redirected `POST` or `PATCH` loses its body.
+
+## SDK headers
+
+The SDKs send `X-ZS-SDK-Platform` (`ios`, `android`, `flutter`) and `X-ZS-SDK-Version` with each request. They change a few responses: the `source` value for Google Play purchases, the shape of the cancel flow, `checkout_presentation`, and the `410 use_checkout_configs` answer on Create Payment Intent. If you call the API directly you can leave them out and you get the default shape.
 
 ## Base URL
 
@@ -34,18 +48,25 @@ The API currently does not enforce rate limits, but please be reasonable with re
 
 ## Error Handling
 
-All error responses follow this format:
+Every error response has an `error` string. Many also carry a machine-readable `code`, and some add `message` or `retry_after` (seconds):
 
 ```json
 {
-  "error": "Human-readable error message"
+  "error": "This account is not yet approved for live transactions. Contact support.",
+  "code": "not_whitelisted"
 }
 ```
+
+Some errors use `error` itself as the code, for example `in_flight` and `use_checkout_configs`.
 
 | Status Code | Meaning |
 |---|---|
 | `400` | Invalid request (missing/malformed parameters) |
 | `401` | Invalid or missing API key |
-| `403` | Account disabled or insufficient permissions |
+| `403` | Account disabled (`tenant_disabled`), or a live key on an account not yet approved for live transactions (`not_whitelisted`) |
 | `404` | Resource not found |
+| `409` | Conflict, for example `already_entitled` or `in_flight` (retry after `retry_after` seconds) |
+| `410` | `use_checkout_configs`: see Create Payment Intent |
+| `500` | Server error, for example `checkout_domain_not_configured` |
 | `502` | Upstream service error (Stripe, Apple) |
+| `503` | Server busy (retry after `retry_after` seconds) or `migration_unavailable` |

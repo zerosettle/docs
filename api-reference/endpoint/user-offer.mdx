@@ -1,6 +1,6 @@
 ---
 title: 'Get User Offer'
-openapi: 'GET /iap/user-offer'
+openapi: 'GET /iap/user-offer/'
 ---
 
 ## When to use this
@@ -9,10 +9,10 @@ openapi: 'GET /iap/user-offer'
 with **SDK 1.2+**. A single request returns:
 
 - The user's **current subscription state** as a tagged union (`subscription.type`
-  is the discriminator — `none`, `active_web`, `active_storekit`,
+  is the discriminator — `none`, `active_web`, `active_storekit`, `active_play`,
   `migration_trial`, or `cancelled_active`).
 - Exactly **one offer decision** keyed by `offer.action_type`
-  (`no_action`, `migrate_storekit_to_web`, `upgrade_storekit_to_web`, or
+  (`no_action`, `migrate_storekit_to_web`, `migrate_play_to_web`, `upgrade_storekit_to_web`, or
   `upgrade_web_to_web`). `is_eligible` is `false` iff `action_type` is `no_action`.
 
 It replaces the overlapping legacy surface of:
@@ -77,7 +77,7 @@ to `offer.checkout_product_id`.
   "subscription": {
     "type": "active_storekit",
     "product_id": "com.example.pro.monthly",
-    "subscription_group_id": 7,
+    "family_id": 7,
     "status": "active",
     "expires_at": "2026-05-11T00:00:00+00:00",
     "is_trial": false,
@@ -134,7 +134,7 @@ User is on StoreKit and the campaign upgrades them to a higher-tier web product
   "subscription": {
     "type": "active_storekit",
     "product_id": "com.example.basic.monthly",
-    "subscription_group_id": 7,
+    "family_id": 7,
     "status": "active",
     "expires_at": "2026-05-11T00:00:00+00:00",
     "is_trial": false,
@@ -191,7 +191,7 @@ on the next renewal. `requires_apple_cancel` is always `false` for this branch.
   "subscription": {
     "type": "active_web",
     "product_id": "com.example.pro.monthly.web",
-    "subscription_group_id": 7,
+    "family_id": 7,
     "status": "active",
     "expires_at": "2026-05-11T00:00:00+00:00",
     "trial_ends_at": null,
@@ -226,7 +226,7 @@ on the next renewal. `requires_apple_cancel` is always `false` for this branch.
     },
     "requires_apple_cancel": false,
     "apple_subscription": null,
-    "checkout_presentation": "native_pay",
+    "checkout_presentation": "webview",
     "experiment_variant_id": null
   },
   "server_time": "2026-04-20T18:12:05.412831+00:00"

@@ -1,0 +1,35 @@
+---
+title: 'Get Migration Cohort'
+openapi: 'GET /iap/migration-cohort/'
+---
+
+This is the one endpoint in this reference that takes your **secret** key. Call it from your backend only. Never put a secret key in an app.
+
+```bash
+curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
+  "https://api.zerosettle.io/v1/iap/migration-cohort/?limit=100"
+```
+
+Your secret keys are in the [dashboard](https://app.zerosettle.io) with your publishable keys. A `zs_sk_test_` key reads sandbox data and a `zs_sk_live_` key reads live data.
+
+## Paging
+
+Each response holds up to `limit` users (default 100, maximum 500). While `next_cursor` is not `null`, send it back as `cursor` to get the next page. When the campaign is off, or nobody is eligible, `users` is an empty list.
+
+```json
+{
+  "users": [
+    {
+      "external_user_id": "user_abc123",
+      "product_id": "com.example.pro.monthly",
+      "subscription_started_at": "2026-08-01T10:00:00+00:00",
+      "eligible_since": "2026-08-15T10:00:00+00:00",
+      "is_currently_eligible": true
+    }
+  ],
+  "next_cursor": "48213",
+  "campaign": { "is_enabled": true, "rollout_percent": 100 }
+}
+```
+
+See [Switch & Save](/iap/switch-and-save) for how the campaign works.

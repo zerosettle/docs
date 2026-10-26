@@ -1,4 +1,6 @@
 ---
 title: 'Get Transaction'
-openapi: 'GET /iap/transactions/{transaction_id}'
+openapi: 'GET /iap/transactions/{transaction_id}/'
 ---
+
+`status` is one of `pending`, `processing`, `completed`, `failed`, `refunded` or `superseded`. A successful payment is `completed`; a disputed transaction is reported as `refunded`. `superseded` is an abandoned checkout that a newer checkout for the same product replaced. `expires_at` is omitted when the transaction has no subscription entitlement.

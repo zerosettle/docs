@@ -1,7 +1,11 @@
 ---
 title: 'Create Payment Intent'
-openapi: 'POST /iap/payment-intents'
+openapi: 'POST /iap/payment-intents/'
 ---
+
+<Note>
+SDK 1.3.0 and later send `X-ZS-SDK-Version` and get `410` with `{"error": "use_checkout_configs"}` from this endpoint. Those SDKs use a different checkout endpoint and handle this themselves, so you do not need to react to the 410 in an app that uses the SDK. It matters only if you call this endpoint directly with that header. The batch endpoint does not return it.
+</Note>
 
 ## Trial mode discriminators
 
@@ -18,7 +22,7 @@ Call `stripe.confirmSetup()` when `intent_type == "setup"` and `stripe.confirmPa
 
 ## Related endpoints
 
-The following two endpoints are part of the trial-mode checkout flow but are not listed separately in this reference. Their response fields are documented here.
+The following two endpoints are called by the SDK and are not listed separately in this reference. Their response fields are documented here.
 
 ### GET /v1/iap/checkout-config/\{transaction\_id\}/
 

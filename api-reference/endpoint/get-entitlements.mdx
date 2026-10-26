@@ -1,6 +1,12 @@
 ---
 title: 'Get Entitlements'
-openapi: 'GET /iap/entitlements'
+openapi: 'GET /iap/entitlements/'
 ---
 
 Each entry carries `is_test_purchase`. It is `true` for a TestFlight, App Review or Xcode purchase that arrived on a live key; the entitlement still grants access and is left out of revenue.
+
+Only entitlements that still grant access are returned (`active`, `cancelled`, `grace_period`, `past_due`). Expired and paused entitlements are not in the list. `product_type` is one of `consumable`, `non_consumable`, `non_renewing` or `auto_renewable`.
+
+Look users up by `user_id`. An `email` lookup matches only legacy email-only checkouts, so a user your app identified with a `user_id` is not found by email.
+
+`source` is `play_store` only for Android clients (`X-ZS-SDK-Platform: android`). Other clients receive `web_checkout` for Google Play entitlements.
