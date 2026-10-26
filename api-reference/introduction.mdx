@@ -60,6 +60,14 @@ Every error response has an `error` string. Many also carry a machine-readable `
 
 Some errors use `error` itself as the code, for example `in_flight` and `use_checkout_configs`.
 
+Two newer groups of endpoints differ. The [Data API](/api-reference/data-api) and the identity endpoints (`/v1/identities/*`, `/v1/iap/identities/reconcile/`) return an object:
+
+```json
+{ "error": { "code": "invalid_parameter", "message": "limit must be a whole number from 1 to 500." } }
+```
+
+The usage endpoints (`/v1/usage/`) return a flat `{ "error": "<code>", "message": "..." }`. Each endpoint page shows its shape.
+
 | Status Code | Meaning |
 |---|---|
 | `400` | Invalid request (missing/malformed parameters) |
@@ -68,6 +76,7 @@ Some errors use `error` itself as the code, for example `in_flight` and `use_che
 | `404` | Resource not found |
 | `409` | Conflict, for example `already_entitled` or `in_flight` (retry after `retry_after` seconds) |
 | `410` | Gone: `use_checkout_configs` (see Create Payment Intent) or an expired checkout config |
+| `429` | Rate limited. Wait the number of seconds in the `Retry-After` header |
 | `500` | Server error, for example `checkout_domain_not_configured` |
 | `502` | Upstream service error (Stripe, Apple) |
 | `503` | Server busy (retry after `retry_after` seconds) or `migration_unavailable` |

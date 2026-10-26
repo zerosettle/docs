@@ -3374,7 +3374,7 @@
       "get": {
         "operationId": "dataListCustomerMerges",
         "summary": "List customer merges",
-        "description": "Merges and refused merges that involve the customer, as the kept or the merged-away user id, newest first. `{customer}` may be an old user id: it resolves to the customer that kept it. A refused merge is listed under the id that was merged away (a guest id, for example), not under the kept id.",
+        "description": "Merges and refused merges recorded against the customer, as the kept or the merged-away user id, newest first. An analytics-only move and a refusal that never reached a customer record are not listed. `{customer}` may be an old user id: it resolves to the customer that kept it. A refused merge is listed under the id that was merged away (a guest id, for example), not under the kept id.",
         "tags": [
           "Data API"
         ],
@@ -5909,7 +5909,7 @@
             "properties": {
               "merged_ids": {
                 "type": "array",
-                "description": "Your old user ids that now resolve to this customer, oldest first.",
+                "description": "Your old user ids that now resolve to this customer, in lowercase, oldest first. Compare them without regard to case.",
                 "items": {
                   "type": "string"
                 }
@@ -5936,7 +5936,7 @@
               "refused",
               "analytics_moved"
             ],
-            "description": "`merged`: the customers were combined. `refused`: the merge was not done; see `refusal_code`. `analytics_moved`: the id had no customer yet, so only its analytics rows moved."
+            "description": "`merged`: the customers were combined. `refused`: the merge was not done; see `refusal_code`. `analytics_moved`: reserved; it is not returned today."
           },
           "from_user_id": {
             "type": "string",

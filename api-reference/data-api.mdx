@@ -73,15 +73,15 @@ curl -H "X-ZeroSettle-Key: zs_sk_live_..." \
 
 The id in the path is matched without regard to case. An id that contains `/` cannot go in the path; use the `email` filter on the list instead.
 
-The single-customer response also has `merged_ids`: your old user ids that now resolve to this customer. The list does not include it.
+The single-customer response also has `merged_ids`: your old user ids that now resolve to this customer, in lowercase, oldest first. Compare them without regard to case. The list does not include it.
 
 ### Merges
 
-When two of your user ids are combined (a guest who signs in, for example), the merge is recorded. `merges` lists every merge and every refused merge for the customer, newest first. The id in the path can be an old id; it resolves to the customer that kept it.
+When two of your user ids are combined (a guest who signs in, for example), the merge is recorded. `merges` lists the merges and refused merges recorded against the customer, newest first. An analytics-only move and a refusal that never reached a customer record are not listed. The id in the path can be an old id; it resolves to the customer that kept it.
 
-Each row has `outcome` (`merged`, `refused` or `analytics_moved`), `from_user_id`, `into_user_id`, `merged_by` (`server`, `app`, `support`, `restore` or `system`), `refusal_code`, `moved` (`transactions` and `entitlements` counts) and `created_at`. `from_user_id` is `null` when the source was an email label.
+Each row has `id`, `outcome` (`merged` or `refused`), `from_user_id`, `into_user_id`, `merged_by` (`server`, `app`, `support`, `restore` or `system`), `refusal_code`, `moved` (`transactions` and `entitlements` counts) and `created_at`. `from_user_id` is `null` when the source was an email label.
 
-A refused merge is listed under the id that was merged away, not under the id that was meant to keep the data. If a guest's merge into `user_123` was refused, look for it under the guest's id. `refusal_code` is one of `invalid_id`, `same_identity`, `from_not_found`, `already_reconciled`, `into_reconciled`, `environment_mismatch` or `conflict`.
+A refused merge is listed under the id that was merged away, not under the id that was meant to keep the data. If a guest's merge into `user_123` was refused, look for it under the guest's id. `refusal_code` is `conflict`, `environment_mismatch`, `already_reconciled` or `into_reconciled`.
 
 ### Revenue
 
