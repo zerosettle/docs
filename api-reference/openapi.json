@@ -583,7 +583,7 @@
       "patch": {
         "operationId": "updateStorekitStatus",
         "summary": "Update StoreKit Status",
-        "description": "Reports a StoreKit subscription state change for a migration transaction. As of 2026-04-27, this is a *trigger to verify* endpoint: when the SDK reports `storekit_status=2` (anything other than active), the backend queries Apple's App Store Server API itself and persists what Apple reports onto the transaction's `storekit_apple_status` and `storekit_subscription_end` fields. Billing-relevant data is never sourced from the client.",
+        "description": "Reports a StoreKit subscription state change for a migration transaction. As of 2026-04-27, this is a *trigger to verify* endpoint: for either `storekit_status` value the backend queries Apple's App Store Server API itself and stores what Apple reports (`storekit_status`, `storekit_apple_status` and `storekit_subscription_end`). The value the device sends is never stored, and when Apple cannot be reached the transaction is left unchanged. The response is the same either way. Billing-relevant data is never sourced from the client.",
         "tags": [
           "Transactions"
         ],
@@ -614,7 +614,7 @@
                       1,
                       2
                     ],
-                    "description": "`1` = active (finished successfully, no further action). `2` = anything-not-active (cancelled, expired, billing retry, grace period, revoked). When `2` is reported, the backend triggers a server-side Apple App Store Server API query to resolve the canonical state."
+                    "description": "`1` = active (finished successfully, no further action). `2` = anything-not-active (cancelled, expired, billing retry, grace period, revoked). The value is a trigger only: the backend resolves the canonical state from Apple's App Store Server API and stores that instead."
                   },
                   "storekit_original_transaction_id": {
                     "type": "string",
@@ -851,7 +851,7 @@
             }
           },
           "400": {
-            "description": "Bad request — missing required field, or the entitlement is a consumable and cannot be claimed.",
+            "description": "Bad request — missing required field, the entitlement is a consumable and cannot be claimed, or the transaction is refused. A refusal carries a `code`: `bundle_id_mismatch` (the transaction's bundle id does not belong to this app), `transaction_revoked` (Apple revoked or refunded it) or `subscription_expired` (the subscription has lapsed and nothing shows it renewed).",
             "content": {
               "application/json": {
                 "schema": {
@@ -945,6 +945,14 @@
                     "is_test_purchase": {
                       "type": "boolean",
                       "description": "`true` when Apple processed the transaction as a sandbox purchase (TestFlight, App Review or Xcode) but the request used a live key. The purchase is saved in Live as a test purchase and is left out of revenue."
+                    },
+                    "owned": {
+                      "type": "boolean",
+                      "description": "`false` when no access was granted for this user, for example when the transaction is owned by another account or Apple has revoked it."
+                    },
+                    "revoked": {
+                      "type": "boolean",
+                      "description": "Present and `true` when the signed transaction carries a revocation date. The response is still a success so the SDK can finish the transaction, but nothing is granted and nothing is saved."
                     }
                   }
                 }

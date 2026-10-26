@@ -2,3 +2,13 @@
 title: 'Claim Entitlement'
 openapi: 'POST /iap/claim-entitlement/'
 ---
+
+## Refused claims
+
+A claim needs a live purchase. The request is rejected with `400` and a `code` when:
+
+- `bundle_id_mismatch`: the transaction's bundle id does not belong to this app.
+- `transaction_revoked`: Apple revoked or refunded the transaction.
+- `subscription_expired`: the subscription has lapsed, and nothing shows that it renewed or is in billing grace.
+
+Test purchases (TestFlight, App Review, Xcode) from a live key are still accepted and saved in Live as test purchases.
