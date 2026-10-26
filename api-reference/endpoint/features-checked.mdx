@@ -4,7 +4,7 @@ openapi: 'POST /iap/features/checked/'
 ---
 
 <Warning>
-  This endpoint is not released yet. No released SDK calls it, and the app side of plans is coming in a later SDK release.
+  No released SDK calls this endpoint yet. The app side of plans is coming in a later SDK release.
 </Warning>
 
 A ZeroSettle SDK calls this endpoint on its own to report which feature keys your app checks. You do not call it yourself. Up to 50 keys go in one request, and each key is at most 64 characters. Authenticate with the publishable key in the `X-ZeroSettle-Key` header, as with the other SDK endpoints.

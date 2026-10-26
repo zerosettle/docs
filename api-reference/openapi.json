@@ -40,7 +40,7 @@
     },
     {
       "name": "Usage",
-      "description": "Spend credits and read balances from your server with a secret key (not released yet)"
+      "description": "Spend credits and read balances from your server with a secret key"
     },
     {
       "name": "StoreKit",
@@ -2823,7 +2823,7 @@
       "post": {
         "operationId": "spendUsage",
         "summary": "Spend Usage",
-        "description": "This endpoint is not released yet. Spends units for one action by one person and answers whether to go ahead. Call it from your server with a secret key, before each AI request. An unknown `user_id` is created as a new person on the Free plan. While the app is paused, the answer is `allowed` with `paused: true` and nothing is spent. A retry with the same `idempotency_key` within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request.",
+        "description": "Spends units for one action by one person and answers whether to go ahead. Call it from your server with a secret key, before each AI request. An unknown `user_id` is created as a new person on the Free plan. While the app is paused, the answer is `allowed` with `paused: true` and nothing is spent. A retry with the same `idempotency_key` within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request.",
         "tags": [
           "Usage"
         ],
@@ -2955,7 +2955,7 @@
       "get": {
         "operationId": "readUsage",
         "summary": "Read Balances",
-        "description": "This endpoint is not released yet. Returns a person's plan, add-ons and the balance in each currency. Spends nothing. An unknown user gets the Free view and is not created.",
+        "description": "Returns a person's plan, add-ons and the balance in each currency. Spends nothing. An unknown user gets the Free view and is not created.",
         "tags": [
           "Usage"
         ],
@@ -3058,7 +3058,7 @@
       "post": {
         "operationId": "finishUsage",
         "summary": "Finish a Hold",
-        "description": "This endpoint is not released yet. Settles a hold taken by `POST /v1/usage/` for a by-usage action. Send one of `amount`, `usage` with `model`, or `cost`. Usage that cannot be priced (an unknown model and no cost) never errors: the hold settles at its estimate. The difference from the hold is settled. Settling can take a balance to zero, never below; any excess is returned as `uncharged`. A second finish returns the stored result unchanged. A hold with no finish settles at its estimate 15 minutes after it was made (`settled_by: \"timeout\"`). A finish that arrives after that, within 24 hours of the hold, still updates cost to serve but not the charge. After 24 hours the request is gone and finish answers `404 not_found`.",
+        "description": "Settles a hold taken by `POST /v1/usage/` for a by-usage action. Send one of `amount`, `usage` with `model`, or `cost`. Usage that cannot be priced (an unknown model and no cost) never errors: the hold settles at its estimate. The difference from the hold is settled. Settling can take a balance to zero, never below; any excess is returned as `uncharged`. A second finish returns the stored result unchanged. A hold with no finish settles at its estimate 15 minutes after it was made (`settled_by: \"timeout\"`). A finish that arrives after that, within 24 hours of the hold, still updates cost to serve but not the charge. After 24 hours the request is gone and finish answers `404 not_found`.",
         "tags": [
           "Usage"
         ],
@@ -3195,7 +3195,7 @@
       "post": {
         "operationId": "undoUsage",
         "summary": "Undo a Request",
-        "description": "This endpoint is not released yet. Gives back what a request spent, or releases a hold, to the parts it came from, if they still exist. An allowance whose period has rolled over gets nothing back. Works within 24 hours of the request. A second undo returns the stored result.",
+        "description": "Gives back what a request spent, or releases a hold, to the parts it came from, if they still exist. An allowance whose period has rolled over gets nothing back. Works within 24 hours of the request. A second undo returns the stored result.",
         "tags": [
           "Usage"
         ],

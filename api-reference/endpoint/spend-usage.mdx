@@ -3,10 +3,6 @@ title: 'Spend Usage'
 openapi: 'POST /usage/'
 ---
 
-<Warning>
-  This endpoint is not released yet.
-</Warning>
-
 Call this from your server before each AI request, at `https://api.zerosettle.io/v1/usage/`. It spends units for one action by one person and answers whether to go ahead. Authenticate with a **secret key** (`zs_sk_test_...` or `zs_sk_live_...`) in the `X-ZeroSettle-Key` header. The key picks the environment; sandbox and live balances never mix. Never put a secret key in an app.
 
 Set a short timeout on this call and decide what to do when ZeroSettle can't be reached. See [Usage limits and credits](/iap/usage-limits).
@@ -54,6 +50,7 @@ Errors look like `{"error": "<code>", "message": "<sentence>"}`.
 | Status | Codes |
 |---|---|
 | `400` | `bad_json`, `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_model`, `bad_cost`, `bad_estimate`, `bad_idempotency_key`, `no_currencies` |
+| `413` | `body_too_large` (the body is over 64 KB) |
 | `409` | `idempotency_key_reused` (the same key within 24 hours with a different body, or a key in use by a concurrent request), `request_undone` (the key's request was undone) |
 | `429` | `rate_limited`, with a `Retry-After` header in seconds |
 

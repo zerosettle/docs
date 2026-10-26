@@ -3,10 +3,6 @@ title: 'Read Balances'
 openapi: 'GET /usage/'
 ---
 
-<Warning>
-  This endpoint is not released yet.
-</Warning>
-
 Returns a person's plan, add-ons and the balance in each currency, and spends nothing. Authenticate with a secret key. An unknown user gets the Free view and is not created.
 
 While the app is paused, the answer also has `paused: true`. Balances are read as usual and stop moving until the app resumes.

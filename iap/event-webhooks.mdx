@@ -75,8 +75,8 @@ sync, trigger emails, or notify your team, without polling our API.
 
     See [Switch & Save](/iap/switch-and-save) for the flow these describe.
   </Accordion>
-  <Accordion title="Plans and credits (unreleased)">
-    These events are not released yet. They belong to [usage limits and credits](/iap/usage-limits).
+  <Accordion title="Plans and credits">
+    These events belong to [usage limits and credits](/iap/usage-limits).
 
     | Event | When it fires |
     |---|---|
@@ -84,7 +84,7 @@ sync, trigger emails, or notify your team, without polling our API.
     | `currency.limit_reached` | A request was refused because the person had too few units |
     | `currency.granted` | A credit pack purchase added units, or units were given by hand from the dashboard |
 
-    See [Plans and credits events](#plans-and-credits-events-unreleased) for payloads.
+    See [Plans and credits events](#plans-and-credits-events) for payloads.
   </Accordion>
 </AccordionGroup>
 
@@ -254,10 +254,10 @@ Because there is no body `id`, deduplicate these on the `X-ZeroSettle-Idempotenc
 header, which is stable for one state change. The two eligibility events fire when the
 state flips, not on every check.
 
-### Plans and credits events (unreleased)
+### Plans and credits events
 
 <Info>
-  These three events are not released yet. They use the same envelope and delivery as the
+  These three events use the same envelope and delivery as the
   events above. In every payload, `data.is_test_purchase` is `true` when the purchase
   behind the event was a test purchase, and `false` otherwise.
 </Info>
@@ -271,7 +271,8 @@ Sent when we see a person's plan or add-ons change. We see a change on a purchas
 <Note>
   `plan.changed` fires only after your project has configured plans: at least one paid plan or add-on, a feature or a currency. Until then ZeroSettle sends none, so an endpoint subscribed to all events (`*`) sees no `plan.changed`. Mapping products to the Free plan alone does not count.
 </Note>
- `from` is `null` when ZeroSettle sees a person for the first time, after plans were first set up, and they are on a paid plan or hold an add-on. People first seen before plans were set up send nothing for their starting plan. That is not necessarily a new purchase:
+
+`from` is `null` when ZeroSettle sees a person for the first time, after plans were first set up, and they are on a paid plan or hold an add-on. People first seen before plans were set up send nothing for their starting plan. That is not necessarily a new purchase:
 
 - An existing store subscriber seen for the first time sends one.
 - After an identity merge, the kept person can send one.

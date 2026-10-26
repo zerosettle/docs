@@ -18,9 +18,9 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 ## October 2026
 
 <Update label="Platform" description="Unreleased">
-### Credits, usage limits and plans on the server (unreleased)
+### Credits, usage limits and plans on the server
 
-This change is not released yet. The app-side SDK APIs for plans and features are not in any released SDK; they are coming in a later SDK release.
+The app-side SDK APIs for plans and features are not in any released SDK; they are coming in a later SDK release.
 
 A server API spends credits before each AI request. It uses a secret key, not the publishable key:
 
@@ -35,7 +35,7 @@ Each request can be finished, undone or retried for 24 hours. A retry with the s
 
 A web checkout for a credit pack needs a user id; without one it answers `400 user_id_required`. A Google Play pack bought with quantity N credits N packs. A chargeback takes back unspent pack units until the dispute is won; an inquiry keeps access and pack units.
 
-Three developer webhook events are added: `plan.changed`, `currency.limit_reached` and `currency.granted`. `plan.changed` is sent only after your project has configured plans. See [Usage limits and credits](/iap/usage-limits) and [Event webhooks](/iap/event-webhooks#plans-and-credits-events-unreleased).
+Three developer webhook events are added: `plan.changed`, `currency.limit_reached` and `currency.granted`. `plan.changed` is sent only after your project has configured plans. See [Usage limits and credits](/iap/usage-limits) and [Event webhooks](/iap/event-webhooks#plans-and-credits-events).
 </Update>
 
 <Update label="Docs" description="2026-10-26">

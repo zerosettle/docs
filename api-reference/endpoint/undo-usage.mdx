@@ -3,10 +3,6 @@ title: 'Undo a Request'
 openapi: 'POST /usage/{usage_id}/undo/'
 ---
 
-<Warning>
-  This endpoint is not released yet.
-</Warning>
-
 Gives back what a request spent, or releases a hold, for example when a generation failed. Authenticate with a secret key.
 
 - The units go back to the parts they came from, if those still exist. An allowance whose period has rolled over gets nothing back.

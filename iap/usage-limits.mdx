@@ -4,10 +4,6 @@ description: 'Plans, features and currencies: check access in your app, and spen
 icon: 'gauge'
 ---
 
-<Warning>
-  Plans, features and usage limits are not released yet. The APIs on this page may change before release.
-</Warning>
-
 Use this to meter AI features with credits and to gate parts of your app by plan. You set the rules once in the dashboard. Your server spends credits before each AI request, using a secret key. Your app can also read what the person has, once the SDK support described [below](#check-access-in-your-app) ships.
 
 ## The model
@@ -304,7 +300,7 @@ TestFlight, Xcode and App Review buy in Apple's sandbox, often with your live ke
 ## Check access in your app
 
 <Warning>
-  Coming in a later SDK release. No released SDK has these APIs yet, and Flutter and React Native have no support yet. The server API above and the [read endpoint](/api-reference/endpoint/get-entitlements) work today on their own. The code below shows the planned shape and may change.
+  Coming in a later SDK release. No released SDK has these APIs yet, and Flutter and React Native have no support yet. The server API above and the `plan`, `add_ons`, `features` and `balances` keys on the [read endpoint](/api-reference/endpoint/get-entitlements) do not need the SDK. The code below shows the planned shape and may change.
 </Warning>
 
 The app reads the plan, features and balances with the publishable key. Call `identify` first: access loads for the signed-in person, and until it has, every read answers from the `offlineFeatureDefaults` you set in code. The SDK refreshes after a purchase or restore and publishes an update when something changes. The app never spends credits; balances are for display.
@@ -384,7 +380,7 @@ The raw data behind these reads is on the [read endpoint](/api-reference/endpoin
   <Card title="Report Checked Features" icon="flag" href="/api-reference/endpoint/features-checked">
     How an SDK tells the dashboard which feature keys your app checks.
   </Card>
-  <Card title="Event webhooks" icon="bell" href="/iap/event-webhooks#plans-and-credits-events-unreleased">
+  <Card title="Event webhooks" icon="bell" href="/iap/event-webhooks#plans-and-credits-events">
     `plan.changed`, `currency.limit_reached` and `currency.granted`.
   </Card>
   <Card title="Get Entitlements" icon="list" href="/api-reference/endpoint/get-entitlements">
