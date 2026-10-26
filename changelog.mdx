@@ -6,7 +6,7 @@ icon: 'clock-rotate-left'
 
 Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift SDK — the primary and most feature-complete platform. Android (Kotlin) and Flutter SDKs follow closely and share the same API endpoints.
 
-**Current version:** `1.6.0`
+**Current version:** `1.6.2`
 **Minimum requirements:** iOS 17.0+, Swift 6.1+, Xcode 16.3+
 
 <Tip>
@@ -16,6 +16,27 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 ---
 
 ## October 2026
+
+<Update label="Docs" description="2026-10-26">
+### Documentation corrections
+
+We checked these docs against the live API and the released SDKs (iOS 1.6.2, Android 1.2.1, Flutter 1.7.0) and corrected what was wrong. If you built against the old pages, check these:
+
+- **API reference shapes.** `GET /v1/iap/products/` returns its settings in a `config` object. Transaction history reports `completed` (not `succeeded`), reports disputed payments as `refunded`, and leaves out abandoned checkouts. Entitlements use `product_type` values `consumable`, `non_consumable`, `non_renewing` and `auto_renewable`. The checkout, cancel-flow, upgrade-offer and event-tracking schemas now match what the API sends and accepts. See the [API reference](/api-reference/introduction).
+- **Trailing slashes.** Every endpoint path ends in `/`. A `POST` without it is redirected and loses its body.
+- **Event webhooks.** The retry schedule, `X-ZeroSettle-Event-Id` (one id per delivery) and the `migration.*` envelope are corrected. Consumable purchases send no event. See [Event webhooks](/iap/event-webhooks).
+- **Android checkout return.** The Android SDK returns to `zerosettle://checkout/return`. The App Links setup previously shown on [Universal links](/iap/universal-links) was wrong.
+- **TestFlight and test purchases.** A TestFlight, Xcode or App Review purchase made with a live key stays in Live, marked as a test purchase. See [Testing](/iap/testing).
+- **Going live.** New accounts are approved for live web checkout by ZeroSettle; until then live checkout returns `not_whitelisted`. See [Go live](/iap/go-live).
+- **Samples and requirements.** Kotlin, Flutter and React Native samples now match the released SDKs, and requirements are listed once on [SDK versions](/iap/sdk-versions). The React Native package is not published yet.
+- **New pages.** [Google Play setup](/iap/google-play-setup), [Connect the App Store](/iap/connect-app-store), and a keys and environments section in [Account setup](/iap/account-setup).
+</Update>
+
+<Update label="Platform" description="2026-10-25">
+### StoreKit sync checks the bundle ID
+
+`POST /v1/iap/storekit-transactions/` now verifies the full Apple certificate chain and refuses a transaction whose bundle ID doesn't match the app's registered bundle ID, with `400` and `code: "bundle_id_mismatch"`. The SDK keeps such a transaction unfinished and retries it, so the fix is to register the right bundle ID for your app in the dashboard. Apps with no registered bundle ID are not checked. Xcode StoreKit Testing and test purchases are unaffected. See [Sync StoreKit transaction](/api-reference/endpoint/sync-storekit-transaction).
+</Update>
 
 <Update label="Platform" description="2026-10-20">
 ### Google Play: purchases of unlinked one-time products are recorded, not granted
