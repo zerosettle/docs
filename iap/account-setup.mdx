@@ -112,7 +112,7 @@ The dashboard provides publishable keys for sandbox and live environments:
 
 The key prefix determines sandbox vs live mode — there is no separate environment toggle.
 
-All ZeroSettle API endpoints — both the SDK and REST API — authenticate with your publishable key via the `X-ZeroSettle-Key` header.
+The SDK and the `/v1/iap/*` REST endpoints authenticate with your publishable key via the `X-ZeroSettle-Key` header. The dashboard also shows a secret key (`zs_sk_test_...` / `zs_sk_live_...`) for server-to-server use. Today it is accepted only by `GET /v1/iap/migration-cohort/`, which lists users eligible for the Switch & Save tip. Keep it out of your app. See [Best Practices](/iap/best-practices#api-key-usage).
 
 Pass your publishable key to the SDK at launch:
 

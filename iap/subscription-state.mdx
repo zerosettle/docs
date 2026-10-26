@@ -195,7 +195,7 @@ This means:
 - **On reinstall or a new device**: The anonymous UUID is install-scoped — it does not survive an app-data clear or reinstall. Promote the user to `Identity.user(id:)` once you have an auth system for reinstall-safe, cross-device restoration.
 
 <Warning>
-  Anonymous identities are install-scoped. Users lose access to their entitlements on reinstall or a new device. Prompt users to create an account after purchase, or use the REST API to query entitlements by email. See [User Identity — Anonymous Users](/iap/user-identity#option-3-anonymous-users) for details.
+  Anonymous identities are install-scoped. Users lose access to their entitlements on reinstall or a new device. Prompt users to create an account after purchase. See [User Identity — Anonymous Users](/iap/user-identity#option-3-anonymous-users) for details.
 </Warning>
 
 ## Cache
@@ -342,7 +342,7 @@ curl --request GET \
   --header 'X-ZeroSettle-Key: zs_pk_live_...'
 ```
 
-Query by email (for anonymous users without a user ID):
+Query by email (only for legacy checkouts that were made with an email and no user ID):
 
 ```bash
 curl --request GET \
@@ -351,10 +351,10 @@ curl --request GET \
   --header 'X-ZeroSettle-Key: zs_pk_live_...'
 ```
 
-Either `user_id` or `email` is required. The email parameter is useful for recovering entitlements for [anonymous users](/iap/user-identity#option-3-anonymous-users) who purchased without a user account.
+Either `user_id` or `email` is required. The email lookup matches only entitlements that have no user ID, which means legacy email-only checkouts. It does **not** find users who identified with `Identity.anonymous`: the SDK gives those installs a generated UUID as their user ID, so query them by that `user_id`. See [User Identity: Anonymous Users](/iap/user-identity#option-3-anonymous-users).
 
 <Note>
-  All API endpoints authenticate with your **publishable key** (`zs_pk_live_...` or `zs_pk_test_...`) via the `X-ZeroSettle-Key` header — the same key you use in the SDK.
+  The `/v1/iap/*` endpoints authenticate with your **publishable key** (`zs_pk_live_...` or `zs_pk_test_...`) via the `X-ZeroSettle-Key` header — the same key you use in the SDK. The one exception is `GET /v1/iap/migration-cohort/`, which takes a secret key. See [Best Practices](/iap/best-practices#api-key-usage).
 </Note>
 
 ## Handling Refunds
