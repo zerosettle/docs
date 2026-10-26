@@ -12,9 +12,9 @@ icon: 'gift'
 
 `OfferTipView` is the canonical drop-in view going forward — it prompts eligible users to switch from Apple billing to direct billing at a discount, and additionally surfaces upgrade offers when configured. It manages its own visibility, checkout flow, and dismissal state. You just add it to your layout.
 
-`MigrationTipView` (documented below for reference) continues to work for legacy integrations but new code should prefer `OfferTipView`.
+The samples below use `OfferTipView`. The deprecated `MigrationTipView` still works and is covered only in the deprecation notes.
 
-<Frame caption="MigrationTipView embedded in a settings screen">
+<Frame caption="Switch & Save tip embedded in a settings screen">
   <img src="/images/switchandsavedocs.png" alt="Switch & Save tip view showing a 15% discount offer" style={{ maxWidth: '400px' }} />
 </Frame>
 
@@ -40,7 +40,7 @@ sequenceDiagram
 
     Note over User,Apple: User has active StoreKit subscription
 
-    App->>SDK: Show MigrationTipView
+    App->>SDK: Show OfferTipView
     SDK->>API: Check migration eligibility
     API-->>SDK: Eligible (discount details)
     SDK->>User: Display "Save 20%" offer
@@ -109,8 +109,8 @@ The discount, copy, tenure, and rollout for the Play campaign are configured in 
 <CodeGroup>
 
 ```swift SwiftUI
-MigrationTipView(
-    userId: currentUser.id,
+// Call ZeroSettle.shared.identify(_:) once at launch. OfferTipView reads the user from it.
+OfferTipView(
     stripeCustomerId: "cus_abc123",                  // optional
     backgroundColor: .black,                        // optional
     titleFont: .system(size: 20, weight: .bold),    // optional
@@ -123,7 +123,7 @@ MigrationTipView(
         case .checkoutCompleted:      print("web checkout succeeded")
         case .appleSubscriptionManagementOpened:
                                       print("opened Apple sub management")
-        case .migrationCompleted:     print("full migration done")
+        case .offerCompleted:         print("full offer flow done")
         case .dismissed:              print("view dismissed")
         }
     }
@@ -133,9 +133,9 @@ MigrationTipView(
 ```tsx React Native
 import { ZSMigrateTipView } from 'react-native-zerosettle';
 
+// React Native 1.1.0 (preview, iOS only) takes userId and backgroundColorHex.
 <ZSMigrateTipView
   userId={currentUser.id}
-  stripeCustomerId="cus_abc123"            // optional
   backgroundColorHex="#1E1E1E"
   style={{ marginHorizontal: 16 }}
 />
@@ -144,15 +144,14 @@ import { ZSMigrateTipView } from 'react-native-zerosettle';
 ```dart Flutter
 import 'package:zerosettle/zerosettle.dart';
 
-MigrationTipView(
-  userId: currentUser.id,
+// Call ZeroSettle.instance.identify(...) once at launch.
+OfferTipView(
   backgroundColor: Color(0xFF1E1E1E),
 )
 ```
 
 ```kotlin Kotlin
-// Android does not use MigrationTipView. The unified ZeroSettleOfferTip Composable
-// (from the optional :ui module) renders Play→web Switch & Save offers.
+// Android uses the ZeroSettleOfferTip Composable from the optional :ui module.
 val mgr = ZeroSettle.offerManager()
 ZeroSettleOfferTip(offerManager = mgr)
 ```
@@ -162,7 +161,11 @@ ZeroSettleOfferTip(offerManager = mgr)
 The iOS, React Native, and Flutter views share the same native implementation. On Android, Switch & Save is exposed differently — see the [Android API](#android-api) section above.
 
 <Note>
-  `MigrationTipView` targets iOS / React Native / Flutter apps switching users from **Apple StoreKit** subscriptions. On Android, use the unified `ZeroSettleOfferTip` Composable, which handles both Play→web Switch & Save migrations and upgrade offers.
+  `OfferTipView` targets iOS and Flutter apps switching users from **Apple StoreKit** subscriptions. On Android, use the `ZeroSettleOfferTip` Composable, which handles both Play→web Switch & Save migrations and upgrade offers. React Native 1.1.0 ships only `ZSMigrateTipView`.
+</Note>
+
+<Note>
+  `MigrationTipView` (and its alias `ZSMigrateTipView` on iOS) is deprecated since ZeroSettleKit 1.1.5. In Flutter, `MigrationTipView` is a typealias of `OfferTipView`. When you migrate, drop the `userId:` argument and rename `.migrationCompleted` to `.offerCompleted`.
 </Note>
 
 ## Automatic Visibility
@@ -194,7 +197,7 @@ List {
         // your existing rows...
     }
 
-    MigrationTipView(userId: user.id, backgroundColor: .blue)
+    OfferTipView(backgroundColor: .blue)
         .listRowInsets(EdgeInsets())
         .listRowBackground(Color.clear)
 }
@@ -204,7 +207,7 @@ List {
 VStack(spacing: 16) {
     // your existing content...
 
-    MigrationTipView(userId: user.id, backgroundColor: .indigo)
+    OfferTipView(backgroundColor: .indigo)
         .padding(.horizontal, 16)
 }
 ```
@@ -212,14 +215,14 @@ VStack(spacing: 16) {
 ```swift ScrollView
 ScrollView {
     // ...
-    MigrationTipView(userId: user.id)
+    OfferTipView()
 }
 ```
 
 ```tsx React Native Settings
 <ScrollView>
   {/* your existing content... */}
-  <OfferTipView
+  <ZSMigrateTipView
     userId={user.id}
     backgroundColorHex="#0000FF"
     style={{ marginHorizontal: 16 }}
@@ -231,10 +234,7 @@ ScrollView {
 ListView(
   children: [
     // your existing rows...
-    MigrationTipView(
-      userId: user.id,
-      backgroundColor: Color(0xFF0000FF),
-    ),
+    OfferTipView(backgroundColor: Color(0xFF0000FF)),
   ],
 )
 ```
@@ -245,20 +245,15 @@ Column(
     // your existing content...
     Padding(
       padding: EdgeInsets.symmetric(horizontal: 16),
-      child: MigrationTipView(
-        userId: user.id,
-        backgroundColor: Color(0xFF3F00B5),
-      ),
+      child: OfferTipView(backgroundColor: Color(0xFF3F00B5)),
     ),
   ],
 )
 ```
 
 ```kotlin Kotlin
-// The Android SDK does not yet ship a built-in migration widget. Use the headless
-// `MigrationPrompt` model from the SDK to drive your own UI — fetch the prompt via
-// `ZeroSettle.getMigrationPrompt(...)`, then render it however your app design dictates.
-// A built-in component is on the roadmap.
+// Android ships the ZeroSettleOfferTip Composable in the optional :ui module.
+ZeroSettleOfferTip(offerManager = ZeroSettle.offerManager())
 ```
 
 </CodeGroup>
@@ -269,41 +264,38 @@ Column(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `userId` | `String` | Required | The user identifier passed to the checkout backend. |
-| `stripeCustomerId` | `String?` | `nil` | Optional existing Stripe Customer ID (`cus_xxx`). When provided, the checkout is attached to this customer instead of creating a new one. Useful for a unified [Billing Portal](https://docs.stripe.com/customer-management/integrate-customer-portal) view. |
 | `backgroundColor` | `Color` (SwiftUI, Flutter) / `string` (React Native) | `.black` / `"#000000"` | Background color for the card. Pass a `Color` in SwiftUI and Flutter, or a hex string in React Native. |
+
+React Native 1.1.0 (`ZSMigrateTipView`) also requires `userId`. SwiftUI and Flutter read the user from `identify(_:)`.
 
 ### SwiftUI only
 
-These optional parameters are available on the native SwiftUI view. React Native and Flutter wrappers use the defaults.
+These optional parameters are available on the native SwiftUI view. Flutter uses the defaults.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
+| `stripeCustomerId` | `String?` | `nil` | Optional existing Stripe Customer ID (`cus_xxx`). When provided, the checkout is attached to this customer instead of creating a new one. Useful for a unified [Billing Portal](https://docs.stripe.com/customer-management/integrate-customer-portal) view. |
 | `titleFont` | `Font?` | System bold | Custom font for the title text. |
 | `bodyFont` | `Font?` | System default | Custom font for the body/message text. |
 | `ctaFont` | `Font?` | System bold | Custom font for the CTA button text. |
 | `borderColor` | `Color?` | `nil` (no border) | Border color applied as a rounded rectangle stroke on the card. |
-| `onEvent` | `((MigrationTipView.Event) -> Void)?` | `nil` | Closure invoked when a lifecycle event occurs. See **Event Types** below. |
+| `onEvent` | `((OfferTipView.Event) -> Void)?` | `nil` | Closure invoked when a lifecycle event occurs. See **Event Types** below. |
 
 The button copy, discount amount, and messaging are controlled from the [dashboard switch and save campaign](/iap/dashboard#migration-campaigns). No code change needed.
 
 ### Event Types
 
-The `onEvent` callback receives a `MigrationTipView.Event` value as the user progresses through the migration flow:
+The `onEvent` callback receives an `OfferTipView.Event` value as the user progresses through the flow:
 
 | Event | When it fires |
 |-------|--------------|
 | `.ctaTapped` | The user tapped the main CTA button to begin checkout. |
 | `.checkoutCompleted` | The web checkout completed successfully. The user now has a web entitlement, but their Apple subscription is still active. |
 | `.appleSubscriptionManagementOpened` | The user opened Apple's subscription-management sheet to cancel their Apple billing. |
-| `.migrationCompleted` | The full migration flow is finished — web checkout succeeded **and** the Apple subscription-management sheet was shown. |
+| `.offerCompleted` | The full offer flow is finished — web checkout succeeded **and** the Apple subscription-management sheet was shown. |
 | `.dismissed` | The view was dismissed (close button, auto-dismiss after completion, or the user became ineligible). |
 
-Events fire in lifecycle order: `ctaTapped` → `checkoutCompleted` → `appleSubscriptionManagementOpened` → `migrationCompleted` → `dismissed`. Not every event is guaranteed — for example, a user who dismisses the view before completing checkout will only trigger `ctaTapped` then `dismissed`.
-
-<Note>
-  `onDismiss` is deprecated but still works. It maps to `onEvent` and only fires on `.dismissed`. Migrate to `onEvent` for full visibility into the flow.
-</Note>
+Events fire in lifecycle order: `ctaTapped` → `checkoutCompleted` → `appleSubscriptionManagementOpened` → `offerCompleted` → `dismissed`. Not every event is guaranteed — for example, a user who dismisses the view before completing checkout will only trigger `ctaTapped` then `dismissed`.
 
 ## Experimentation
 
@@ -326,7 +318,7 @@ The view may be hidden during development because it was previously dismissed. R
 <CodeGroup>
 
 ```swift SwiftUI
-ZSMigrationManager.resetDismissedState()
+ZSOfferManager.resetDismissedState()
 ```
 
 ```tsx React Native
@@ -340,46 +332,39 @@ await ZeroSettle.instance.resetMigrateTipState();
 ```
 
 ```kotlin Kotlin
-// Not available on Android — ZSMigrateTipView is iOS-only.
+// Not available on Android.
 ```
 
 </CodeGroup>
 
-<Note>
-  `ZSMigrateTipView.resetMigrateTipState()` still works but is deprecated. Use `ZSMigrationManager.resetDismissedState()` instead.
-</Note>
-
 ### Region Override
 
-The migration tip is restricted to US-region devices. To test from other regions, force the jurisdiction check:
+The migration tip is restricted to US-region devices. To test from other regions, force the jurisdiction. Gate this behind `#if DEBUG`:
 
 <CodeGroup>
 
 ```swift SwiftUI
 // Force US jurisdiction — tip will appear regardless of device locale
-ZSMigrationManager.forceUSARegion()
+ZeroSettle.shared.forcedJurisdiction = .us
 
 // Reset to real jurisdiction detection
-ZSMigrationManager.resetRegionOverride()
+ZeroSettle.shared.forcedJurisdiction = nil
 ```
 
 ```tsx React Native
-// Not available in the React Native SDK — region-override APIs are not
-// exposed by react-native-zerosettle. To test the migration tip from a
+// Not available in the React Native SDK. To test the tip from a
 // non-US region, use a US-region device or simulator.
 ```
 
 ```dart Flutter
-await ZeroSettle.instance.forceUSARegion();
-
-// Reset to real jurisdiction detection
-await ZeroSettle.instance.resetRegionOverride();
+// Flutter has no region override. Force the offer gate on instead:
+await ZeroSettle.instance.setSwitchAndSaveTestMode(true);
 ```
 
 </CodeGroup>
 
 <Note>
-This is a debug tool — do not ship with `forceUSARegion()` enabled. Unlike `demoMode`, this only bypasses the region check. All other eligibility checks (active StoreKit subscription, rollout, tenure, etc.) still apply.
+`forcedJurisdiction` is a debug tool — do not ship with it set. It only changes the jurisdiction check. All other eligibility checks (active StoreKit subscription, rollout, tenure, etc.) still apply.
 </Note>
 
 The view logs its visibility decisions to the console with the prefix `[ZSMigrateTipView Business Logic]`, including which condition caused it to show or hide.
@@ -390,8 +375,8 @@ The view logs its visibility decisions to the console with the prefix `[ZSMigrat
   <Card title="Offer Tip View" icon="gift" href="/iap/offer-tip-view">
     Unified view for migration and upgrade offers
   </Card>
-  <Card title="Custom Switch and Save UI" icon="wand-magic-sparkles" href="/iap/migration-manager">
-    Build your own switch and save experience with ZSMigrationManager
+  <Card title="Custom Switch and Save UI" icon="wand-magic-sparkles" href="/iap/offer-manager">
+    Build your own switch and save experience with ZSOfferManager
   </Card>
   <Card title="Dashboard" icon="gauge" href="/iap/dashboard#migration-campaigns">
     Configure your switch and save campaign and discount
