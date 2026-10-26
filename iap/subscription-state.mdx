@@ -357,6 +357,12 @@ Either `user_id` or `email` is required. The email lookup matches only entitleme
   The `/v1/iap/*` endpoints authenticate with your **publishable key** (`zs_pk_live_...` or `zs_pk_test_...`) via the `X-ZeroSettle-Key` header — the same key you use in the SDK. The one exception is `GET /v1/iap/migration-cohort/`, which takes a secret key. See [Best Practices](/iap/best-practices#api-key-usage).
 </Note>
 
+## Renewal grace for App Store subscriptions
+
+An auto-renewing App Store subscription keeps access for a short grace after `expires_at` while Apple's renewal notice arrives. The grace is the smaller of 24 hours and 10% of the subscription period, so a weekly plan gets about 17 hours and a monthly plan gets 24 hours. Billing retry gets no grace. If the app has Billing Grace Period enabled in App Store Connect, access runs to Apple's grace end date instead.
+
+This means the entitlement can stay active, and `subscription.expired` can arrive, up to 24 hours after `expires_at`. Do not compare `expires_at` to the current time on your own server to decide access: you would cut off a customer whose renewal is still on its way. Rely on the entitlement's `isActive` value, or on the [event webhooks](/iap/event-webhooks).
+
 ## Handling Refunds
 
 ZeroSettle handles refunds for both subscription and non-subscription products. As soon as a refund is processed, the entitlements will be updated to reflect the correct status — no action required on your part. The `isActive` property on the affected `Entitlement` will be set to `false`.

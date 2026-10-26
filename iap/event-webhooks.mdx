@@ -121,6 +121,10 @@ until then. Billing Grace Period is opt-in, set to 3, 16 or 28 days (weekly plan
 6). Without it, Apple stops service while it retries billing, the status is `past_due`, and
 `expires_at` is the end of the period that was paid.
 
+### Expiry timing
+
+For App Store subscriptions, `subscription.expired` can arrive up to 24 hours after `expires_at`. ZeroSettle keeps access for the smaller of 24 hours and 10% of the period while Apple's renewal notice arrives. Revoke access on the event, not by comparing `expires_at` to the clock. See [Renewal grace](/iap/subscription-state#renewal-grace-for-app-store-subscriptions).
+
 ### Refunds
 
 A payment produces **one** `transaction.refunded`. Its `id` is `evt_txn_<transaction id>`,
@@ -137,6 +141,10 @@ sends no further event.
   `transaction.refunded`, and the subscription stays active.
 
 The same rule, current period versus earlier period, applies to App Store refunds.
+
+<Note>
+  A store transaction whose price Apple or Google has not reported yet has `amount_cents: 0`. If it is refunded before the price arrives, `transaction.refunded` carries `amount_cents: 0`. The event is not sent again once the price is known.
+</Note>
 
 ## Payload
 

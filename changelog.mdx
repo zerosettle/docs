@@ -17,6 +17,14 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ## October 2026
 
+<Update label="Platform" description="Unreleased">
+### App Store renewal grace, recovered notifications and store-time purchase dates
+
+- **App Store renewal grace.** An auto-renewing App Store subscription keeps access for the smaller of 24 hours and 10% of the period past `expires_at` while Apple's renewal notice arrives. `subscription.expired` can arrive up to 24 hours after `expires_at`. Rely on the entitlement's active state or the webhook, not your own `expires_at` comparison. See [Subscription status](/iap/subscription-state#renewal-grace-for-app-store-subscriptions).
+- **Forwarded notifications.** A notification that ZeroSettle recovers after Apple failed to deliver it is forwarded with `X-ZeroSettle-Recovered: true`. It can arrive late and out of order. Deduplicate by `notificationUUID`. See [Notification forwarding](/iap/webhooks#notification-forwarding).
+- **Transaction history dates.** `GET /v1/iap/transaction-history/` returns the store's purchase time in `purchased_at` for App Store and Google Play rows and orders the list by it. A store purchase whose price has not been reported yet shows `amount_cents: 0` until it arrives, instead of a catalog estimate, and a `transaction.refunded` for it can carry amount 0. Field names and types are unchanged. See [Get transaction history](/api-reference/endpoint/get-transaction-history).
+</Update>
+
 <Update label="Docs" description="2026-10-26">
 ### Documentation corrections
 

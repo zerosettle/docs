@@ -5,4 +5,8 @@ openapi: 'GET /iap/transaction-history/'
 
 Abandoned checkout sessions are not returned. When a customer starts a checkout and later starts another for the same product, the unfinished one is closed internally and left out of this list. A disputed transaction is reported with the status `refunded`. Results are limited by `limit` (default 50, maximum 100); there is no cursor.
 
+Transactions are ordered by `purchased_at`, newest first. For App Store and Google Play purchases `purchased_at` is the store's purchase time, so a purchase restored or synced later keeps its original date. Web checkout rows are unchanged.
+
+A store transaction whose price Apple or Google has not reported yet shows `amount_cents: 0` until the price arrives. ZeroSettle does not fill in an estimate from your catalog.
+
 `status` is one of `completed`, `pending`, `processing`, `failed` or `refunded`. `expires_at` is always `null` here: read expiry from [Get Entitlements](/api-reference/endpoint/get-entitlements).

@@ -3216,11 +3216,11 @@
           "purchased_at": {
             "type": "string",
             "format": "date-time",
-            "description": "Purchase timestamp."
+            "description": "When the purchase was made. For App Store and Google Play rows this is the store's purchase time, not the time ZeroSettle received it. The list is ordered by this field, newest first."
           },
           "amount_cents": {
             "type": "integer",
-            "description": "Transaction amount in cents."
+            "description": "Transaction amount in cents. A store transaction whose price Apple or Google has not reported yet shows `0` until the price arrives. It is not estimated from your catalog."
           },
           "currency": {
             "type": "string",

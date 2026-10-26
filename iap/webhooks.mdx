@@ -96,6 +96,17 @@ ZeroSettle processes the following ASSN v2 notification types:
 
 If your app needs to receive ASSN v2 notifications on your own server (e.g., for analytics or custom logic), you can configure **notification forwarding** in the ZeroSettle dashboard. When enabled, ZeroSettle processes the notification first, then forwards the original signed payload to your URL.
 
+Forwarding applies to an app set to the ZeroSettle forwarding mode with a forwarding URL. ZeroSettle sends a `POST` with a JSON body of `{"signedPayload": "<JWS>"}`. The request times out after 5 seconds, and your endpoint should return a status below 400.
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+| `X-ZeroSettle-Notification-UUID` | Apple's `notificationUUID` for this notification |
+| `X-ZeroSettle-App-Bundle-Id` | The bundle ID of the app the notification belongs to |
+| `X-ZeroSettle-Recovered` | `true` only when ZeroSettle recovered the notification from Apple after Apple failed to deliver it. Absent otherwise |
+
+When ZeroSettle recovers a notification Apple failed to deliver, it forwards it with `X-ZeroSettle-Recovered: true`. A recovered notification can arrive late and out of order relative to notifications you already received. Deduplicate by `notificationUUID` (also in the `X-ZeroSettle-Notification-UUID` header), and use the `signedDate` inside the payload to decide which state is newest.
+
 ## How It Works
 
 <Steps>
