@@ -38,7 +38,7 @@ ZeroSettle.configure(context, ZeroSettleConfig(
 ```
 
 <Warning>
-  If you use RevenueCat, set `syncPlayPurchases = false` to avoid conflicts. RevenueCat manages its own Play Billing listener. See [RevenueCat Integration](/iap/revenuecat-integration).
+  If RevenueCat owns native billing and you do not want native purchases in ZeroSettle's numbers, set `syncPlayPurchases = false`. Leaving it on is also supported. See the RevenueCat page for the full comparison. See [RevenueCat Integration](/iap/revenuecat-integration).
 </Warning>
 
 ## User Choice Billing
@@ -168,11 +168,25 @@ If a customer buys a Google Play one-time product that isn't linked to a product
 
 The dashboard's catalog sheet shows how many purchases are waiting on each unlinked product. When you link it, ZeroSettle finishes those purchases: a non-consumable grants access to each buyer, and a consumable needs nothing more.
 
+## Acknowledgement model
+
+Google Play refunds a purchase that is not acknowledged within 3 days, so the order in which the SDK finalizes a purchase matters. The SDK acknowledges non-consumables and subscriptions, and consumes consumables so the buyer can purchase them again.
+
+| Situation | What the SDK does |
+|---|---|
+| The backend confirms the purchase (`owned: true`) | Acknowledges or consumes it at once |
+| The backend call fails (5xx or timeout) | Does not finalize. It queues the purchase, retries with backoff, and Play redelivers the purchase |
+| The backend answers `owned: false` or reports a conflict | Does not finalize. It surfaces a pending claim instead |
+| Sync keeps failing for more than 24 hours and `strictAck` is `false` (the default) | Acknowledges the purchase defensively, because the user paid Google, and keeps retrying the sync |
+| Sync keeps failing and `strictAck = true` | Never acknowledges without backend validation. Play refunds the purchase after 3 days and the user gets no entitlement |
+
+Set `strictAck = true` in `ZeroSettleConfig` only if you would rather risk an auto-refund than ever acknowledge an unvalidated purchase.
+
 ## Requirements
 
 | Requirement | Version |
 |---|---|
-| Android | API 23+ |
+| Android | API 23+ (see [SDK versions](/iap/sdk-versions)) |
 | Kotlin | 2.1+ |
 | Google Play Billing | Bundled with the SDK |
 | Play Console | Products must be configured |
