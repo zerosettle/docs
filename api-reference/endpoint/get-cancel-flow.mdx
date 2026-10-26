@@ -2,3 +2,19 @@
 title: 'Get Cancel Flow'
 openapi: 'GET /iap/cancel-flow/'
 ---
+
+## The response depends on the SDK
+
+The server shapes the response for the SDK that asks, using the `X-ZS-SDK-Platform` and `X-ZS-SDK-Version` headers the SDKs send.
+
+| SDK | Shape |
+|---|---|
+| iOS 1.6.0+, Android 1.3.0+, Flutter 1.8.0+ | Full: answer options are objects with `route`, plus the `deflect` and `downgrade` blocks, and the offer carries `duration_unit`. |
+| Older iOS and Flutter, and other callers | Base: answer options are objects without `route`. No `deflect` or `downgrade`. |
+| Android before 1.3.0 | Legacy: answer options are plain label strings. No `deflect` or `downgrade`. |
+
+If you call this endpoint directly without those headers, you get the base shape.
+
+When the cancel flow is turned off or not configured, the response is just `{"enabled": false}`.
+
+Send the `id` values you receive back as `question_id` and `selected_option_id` in [Submit Cancel Flow Response](/api-reference/endpoint/submit-cancel-flow-response).
