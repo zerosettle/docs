@@ -1,0 +1,26 @@
+---
+title: 'App Store Setup'
+description: 'Connect App Store Connect and App Store Server Notifications'
+icon: 'apple'
+---
+
+Do this once per app before going live on iOS. It gives ZeroSettle access to your App Store catalog and a live feed of subscription events. For Google Play, see [Google Play setup](/iap/google-play-setup).
+
+## What to set up
+
+<CardGroup cols={1}>
+  <Card title="1. App Store Connect API key" icon="key" href="/iap/account-setup#connect-app-store-connect">
+    Upload your `.p8` key with the App Manager role. ZeroSettle uses it to sync apps and products, generate the `apple-app-site-association` file, configure notifications for you and run external-purchase reporting.
+  </Card>
+  <Card title="2. App Store Server Notifications v2" icon="bell" href="/iap/webhooks#app-store-server-notifications">
+    Choose **ZeroSettle Managed** in the dashboard, or set the URL in App Store Connect yourself. Without it, ZeroSettle learns about renewals and refunds only when a customer opens the app.
+  </Card>
+  <Card title="3. Associated domain for Safari checkout" icon="link" href="/iap/universal-links">
+    Needed for Safari-based checkout modes so users return to your app.
+  </Card>
+  <Card title="4. External purchase reporting" icon="file-contract" href="/iap/external-purchase-reporting">
+    Apple reporting runs from the same App Store Connect key.
+  </Card>
+</CardGroup>
+
+If you forward notifications to your own server, see [Notification forwarding](/iap/webhooks#notification-forwarding).

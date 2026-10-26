@@ -54,7 +54,7 @@ Connect your existing Stripe standard account via OAuth. Keep your products, pri
 After connecting Stripe, add the app that will use ZeroSettle. The App Store Connect API key is not optional for an iOS app that goes live. ZeroSettle uses it to:
 
 - generate the `apple-app-site-association` file that returns Safari-based checkouts to your app (it reads your Team ID from the key; see [Universal Links](/iap/universal-links))
-- configure App Store Server Notifications for you in **ZeroSettle Managed** mode (see [Webhooks & Server-Side](/iap/webhooks))
+- configure App Store Server Notifications for you in **ZeroSettle Managed** mode (see [Notifications and Server-Side Verification](/iap/webhooks))
 - sync your apps and products from App Store Connect
 - run Apple external-purchase reporting (see [External Purchase Reporting](/iap/external-purchase-reporting))
 
@@ -154,6 +154,16 @@ await ZeroSettle.instance.configure(
 <Frame caption="API keys panel with publishable and secret keys">
   <img src="/images/dashboard-api-keys.png" alt="API keys showing publishable key and secret key with copy and rotate buttons" />
 </Frame>
+
+## Keys and environments
+
+- **Publishable key** (`zs_pk_...`): ships inside your app, so treat it as public. The SDK and the `/v1/iap/*` endpoints use it in the `X-ZeroSettle-Key` header. Anyone who has it can call those endpoints, so never rely on it alone to protect something on your server. See [Best Practices](/iap/best-practices#api-key-usage).
+- **Secret key** (`zs_sk_...`): server only. On the current API it is accepted only by `GET /v1/iap/migration-cohort/`.
+- **Sandbox and live are separate environments.** The key prefix picks the environment. Products, event webhook endpoints and App Store Server Notifications settings are per environment, so set each one up again for live. See [Go-Live Checklist](/iap/go-live).
+- **Live needs approval.** A new account is not approved for live transactions. Until you complete Go Live, live requests return HTTP 403 with the code `not_whitelisted`. See [Get approved for live](/iap/go-live#get-approved-for-live).
+- **Purchases from TestFlight, Xcode and App Review** made with a live key stay in Live and are marked as test purchases. See [Testing](/iap/testing#live-mode-test-purchases-and-testflight).
+
+For the REST authentication details and error codes, see the [API introduction](/api-reference/introduction). For event endpoints and signing, see [Event Webhooks](/iap/event-webhooks).
 
 ## Next Steps
 

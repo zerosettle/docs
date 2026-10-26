@@ -1,0 +1,92 @@
+---
+title: 'Google Play Setup'
+description: 'Connect your Play Console: service account, real-time developer notifications and catalog sync'
+icon: 'google'
+---
+
+Do this once per account before Android purchases can sync to ZeroSettle. It gives ZeroSettle read access to your Play catalog and purchases, and a live feed of Play subscription events. The SDK side of Play Billing is covered in [Play Billing Integration](/iap/play-billing-integration). For the App Store equivalent, see [App Store setup](/iap/connect-app-store).
+
+You do the steps below in the dashboard under **Integrations**, in the Google Play tab. One Play service account serves your whole account. Sandbox and live use the same credential, and it covers every Android app in the account.
+
+## 1. Create a service account
+
+ZeroSettle reads Play data through a Google Cloud service account that you own.
+
+<Steps>
+  <Step title="Create or pick a Google Cloud project">
+    The service account lives in a Google Cloud project. Create a new project or reuse an existing one.
+  </Step>
+  <Step title="Enable the Google Play Android Developer API">
+    In that project, enable the Android Publisher API (`androidpublisher.googleapis.com`) so the service account can read your catalog and subscriptions.
+  </Step>
+  <Step title="Create a service account and a JSON key">
+    Add a service account, then create a key of type JSON. Download the file.
+  </Step>
+  <Step title="Invite the service account into Play Console">
+    In Play Console, open **Users and permissions**, invite the service account's email address, and grant it access to your app's financial data and orders.
+  </Step>
+</Steps>
+
+<Note>
+  Google's permissions can take a few minutes to propagate. If the next steps report that the service account cannot reach Play Console, wait one to five minutes and retry.
+</Note>
+
+## 2. Upload the key
+
+In the dashboard, open the Google Play setup, paste the contents of the JSON key file (or drop the `.json` file), and continue. ZeroSettle stores the key encrypted. Uploading again replaces the existing credential.
+
+The upload is rejected if the text is not valid JSON or has no `client_email` field.
+
+## 3. Validate access
+
+Validation checks that the service account can read your app's catalog. It needs the Android package name on the project, so add an Android app to the project first (the dashboard asks for the package name when you connect Google Play to a project).
+
+The validation reads your one-time products and subscriptions. An empty catalog still passes, because the check is about permission, not about having products. It reports one of these results:
+
+| Result | Meaning |
+|---|---|
+| `valid` | The service account can read the catalog. |
+| `IAM_NOT_GRANTED` | The service account has not been invited to Play Console yet, or Google is still propagating the permission. Wait and retry. |
+| `PACKAGE_NOT_FOUND` | The package name does not exist in the Play Console this service account belongs to. |
+| `UNKNOWN` | Any other Play API error. The dashboard shows Google's message. |
+
+## 4. Real-time developer notifications
+
+Real-time developer notifications (RTDN) are how Google tells ZeroSettle about renewals, cancellations, refunds and other changes without waiting for the app to open. ZeroSettle runs one shared Google Cloud Pub/Sub topic for this. You point your Play Console at it.
+
+<Steps>
+  <Step title="Copy the topic name">
+    The dashboard shows the topic name in the Google Play setup. Copy it exactly. If it shows "Topic name unavailable", contact support.
+  </Step>
+  <Step title="Set it in Play Console">
+    In Play Console, open your app's **Monetize** settings, find real-time developer notifications, and paste the topic name as the topic.
+  </Step>
+  <Step title="Send a test notification">
+    Click **Send test notification** in Play Console. In the dashboard, choose to check for the test. ZeroSettle looks for a test notification for your app's package received in the last 10 minutes.
+  </Step>
+</Steps>
+
+If no test arrives, confirm the topic name matches the one in the dashboard, send the test again, and recheck. The test needs an Android app attached to a project, because ZeroSettle matches it by package name. You can finish the rest of setup first and rerun the test later.
+
+## 5. Sync your catalog
+
+Click **Sync products from Play Store** in the Google Play settings (shown once an Android app is attached) to pull your Play products into ZeroSettle. ZeroSettle reads both one-time products and subscriptions, then shows how each maps to your existing ZeroSettle products. For each item you choose to link it to an existing product, import it as a new product, or skip it. Nothing is written until you confirm the review step.
+
+- A subscription's imported price comes from its first active base plan, preferring the USD regional price.
+- Type mismatches (for example a Play subscription matched to a one-time product) are flagged so you can resolve them before applying.
+- A product that already has a Play link cannot be linked again.
+
+## Test purchases
+
+Play purchases made by license-tested accounts are recorded in Sandbox. ZeroSettle reads this from Google's response, not from your key. See [Testing](/iap/testing).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Play Billing Integration" icon="google" href="/iap/play-billing-integration">
+    How the SDK syncs Play purchases and acknowledges them
+  </Card>
+  <Card title="Quickstart (Android)" icon="android" href="/iap/quickstart-android">
+    Add the SDK to your Android app
+  </Card>
+</CardGroup>
