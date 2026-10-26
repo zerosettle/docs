@@ -97,7 +97,7 @@ New purchases always belong to the currently logged-in account.
 
 When multiple ZeroSettle apps share the same iOS bundle ID — for example, two tenants both publish via the same parent App Store record — the backend uses each StoreKit transaction's `appAccountToken` to route App Store Server Notifications to the correct app.
 
-The SDK sets this token automatically (since ZeroSettleKit 1.1.5 / Android 0.15.0) whenever it makes the purchase itself, via `purchaseViaStoreKit(productId:)`. Your `userId` does **not** need to be a UUID — the SDK derives a UUIDv5 from whatever string you pass, so Firebase UIDs, Auth0 `sub` values, and Apple's opaque user identifier all work unchanged. Older SDK versions without this attribution should not be used in multi-tenant deployments.
+The SDK sets this token automatically (since ZeroSettleKit 1.1.5) whenever it makes the purchase itself, via `purchaseViaStoreKit(productId:)`. Your `userId` does **not** need to be a UUID — the SDK derives a UUIDv5 from whatever string you pass, so Firebase UIDs, Auth0 `sub` values, and Apple's opaque user identifier all work unchanged. Older SDK versions without this attribution should not be used in multi-tenant deployments.
 
 <Warning>
   **If your app calls StoreKit's `Product.purchase()` directly, the SDK cannot stamp the token for you** — Apple signs `appAccountToken` at purchase time, and by the time the SDK observes the transaction it is immutable. Pass it yourself:
@@ -219,13 +219,7 @@ When `restoreEntitlements()` runs, it merges both sources:
 
 ## Backward Compatibility
 
-The ownership model was introduced in SDK version 1.1.3. Older SDK versions that don't parse the `owned` flag continue to work — they include all local StoreKit entitlements unfiltered (the pre-1.1.3 behavior).
-
-| SDK Version | Behavior |
-|-------------|----------|
-| < 1.1.3 | All StoreKit entitlements included (no ownership filter) |
-| >= 1.1.3 | Ownership-filtered StoreKit entitlements + `transferStoreKitOwnershipToCurrentUser()` API |
-| >= 1.1.5 | Offer manager hardening, checkout improvements |
+The ownership model was introduced in ZeroSettleKit 1.1.3. Older SDK versions that don't parse the `owned` flag continue to work: they include all local StoreKit entitlements unfiltered. Update to the current version (see [SDK versions](/iap/sdk-versions)); the per-version history is in the [release notes](/releases/ios).
 
 The backend is backward compatible — the `owned` field is additional, not breaking.
 

@@ -21,7 +21,7 @@ ZeroSettle establishes user identity **once per session** with `identify(...)`, 
 | `Identity.deferred` | Auth comes on a later screen. A placeholder, not an identity — see [Deferring identification](#deferring-identification). |
 
 <Note>
-  On Swift and Kotlin these are enum cases — write `.anonymous` and `.deferred`, with no parentheses. Flutter's `Identity` is a class with factory constructors, so Dart spells the same two `Identity.anonymous()` and `Identity.deferred()`.
+  On Swift these are enum cases — write `.anonymous` and `.deferred`, with no parentheses. On Kotlin, `Identity` is a sealed class: write `Identity.Anonymous` and `Identity.Deferred` (objects, no parentheses) and `Identity.User(id = ...)`. Flutter's `Identity` is a class with factory constructors, so Dart spells the same two `Identity.anonymous()` and `Identity.deferred()`.
 </Note>
 
 ### Deferring identification
