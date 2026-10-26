@@ -24,7 +24,7 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 - `POST /v1/iap/storekit-transactions/` answers `200` with `owned: false` and `revoked: true` for a revoked transaction, and grants nothing. Bulk reconcile skips an entry with no bundle id when the project has a registered bundle id.
 - `PATCH /v1/iap/transactions/{transaction_id}/storekit-status/` answers `{"ok": true}` at once and verifies with Apple in the background. The device's value is never stored.
 - Google Play one-time purchases that are pending or cancelled sync as `owned: false` and grant nothing until the purchase completes.
-- The cancel-flow save offer is accepted once per subscription. A repeat returns `200` with `Offer already applied`. If Stripe cannot be read, the call returns `502` and applies nothing.
+- The cancel-flow save offer is accepted once per subscription, and a repeat accept applies nothing new. A repeat returns the applied offer's figures while its coupon is still on the subscription, and `200` with `Offer already applied` and null figures once it has lapsed or Stripe cannot be read. A first accept returns `502` and applies nothing if Stripe cannot be read. Flutter 1.7.0 cannot read a response with null figures.
 
 No SDK update is needed.
 </Update>

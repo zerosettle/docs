@@ -2050,7 +2050,7 @@
       "post": {
         "operationId": "acceptCancelFlowOffer",
         "summary": "Accept Cancel Flow Offer",
-        "description": "Accepts the retention offer from the cancel flow and applies it to the user's Stripe subscription: a percentage discount for a number of months, or a free period. A save offer is accepted once per subscription. A repeat call applies nothing and returns `200` with `message` `Offer already applied` and null `discount_percent` and `duration_months`.",
+        "description": "Accepts the retention offer from the cancel flow and applies it to the user's Stripe subscription: a percentage discount for a number of months, or a free period. A save offer is accepted once per subscription, and a repeat call never applies anything new. While the retention coupon is still on the subscription, a repeat returns `200` with its real `discount_percent` and `duration_months`. Once it has lapsed, or if Stripe cannot be read during the repeat, it returns `200` with `message` `Offer already applied` and null figures.",
         "tags": [
           "Cancel Flow"
         ],
@@ -2084,7 +2084,7 @@
         },
         "responses": {
           "200": {
-            "description": "Offer accepted, or already applied on this subscription (`message` `Offer already applied`, null figures).",
+            "description": "Offer accepted, or already applied on this subscription (the applied figures, or `message` `Offer already applied` with null figures). `discount_percent` and `duration_months` can be null. Flutter 1.7.0 cannot read a response with null figures.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2141,7 +2141,7 @@
             }
           },
           "502": {
-            "description": "Stripe returned an error, or the subscription could not be read from Stripe to check whether an offer was already accepted (`Could not verify the offer status. Try again.`). Nothing is applied.",
+            "description": "Stripe returned an error, or on a first accept the subscription could not be read from Stripe to check whether an offer was already accepted (`Could not verify the offer status. Try again.`). Nothing is applied. A repeat accept never returns 502.",
             "content": {
               "application/json": {
                 "schema": {

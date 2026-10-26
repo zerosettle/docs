@@ -296,7 +296,11 @@ try {
 
 </CodeGroup>
 
-A save offer is accepted once per subscription. If the user accepts again, `acceptSaveOffer` succeeds without applying a second offer. The result has the message `Offer already applied` and no discount percent or duration, so handle those fields being empty. If ZeroSettle cannot read the subscription from Stripe, the call fails with a `502` and nothing is applied, so show your error state and let the user try again.
+A save offer is accepted once per subscription, and a repeat accept never applies anything new. If the retention coupon is still on the subscription, the result carries its real discount and duration. If the coupon has lapsed, or Stripe cannot be read during the repeat, the result has the message `Offer already applied` and no discount percent or duration. A `502` ("Could not verify the offer status. Try again.") applies only to a first accept when Stripe cannot be read; nothing is applied, so show your error state and let the user try again.
+
+<Warning>
+  Handle empty `discountPercent` and `durationMonths`. They are also empty for free-period offers and some first-accept offer types (free days, trial extension). iOS 1.6.2 accepts empty values. Flutter 1.7.0 fails to read a response whose figures are null, because its result model parses them as non-null integers, so `acceptSaveOffer` throws on Flutter for those responses.
+</Warning>
 
 ### SaveOfferResult
 

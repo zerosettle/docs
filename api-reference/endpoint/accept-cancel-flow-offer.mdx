@@ -5,9 +5,13 @@ openapi: 'POST /iap/cancel-flow/accept-offer/'
 
 ## One offer per subscription
 
-A save offer is accepted once per Stripe subscription. A repeat call is not an error and applies nothing:
+A save offer is accepted once per Stripe subscription. A repeat call never applies anything new:
 
-- If an offer was accepted on this subscription before, running or lapsed, the response is `200` with `{"message": "Offer already applied", "discount_percent": null, "duration_months": null}`.
-- If the subscription carries a retention discount from before ZeroSettle recorded acceptances, the response is `200` with that discount's real figures, for example `{"message": "20% off for 3 months", "discount_percent": 20, "duration_months": 3}`.
+- If the retention coupon is still on the subscription, the response is `200` with the applied figures, for example `{"message": "20% off for 3 months", "discount_percent": 20, "duration_months": 3}`.
+- If the coupon has lapsed, or Stripe cannot be read during the repeat, the response is `200` with `{"message": "Offer already applied", "discount_percent": null, "duration_months": null}`.
 
-If ZeroSettle cannot read the subscription from Stripe to check, the call returns `502` with `{"error": "Could not verify the offer status. Try again."}` and nothing is applied. Retry later; it is safe.
+A `502` with `{"error": "Could not verify the offer status. Try again."}` applies only to a first accept when Stripe cannot be read. Nothing is applied; retry later.
+
+## Null figures
+
+`discount_percent` and `duration_months` are `null` for a free-period offer and for the "Offer already applied" response, and `duration_months` is `null` for a forever discount. Some first-accept offer types (free days, trial extension) therefore also return nulls. iOS 1.6.2 accepts nulls. Flutter 1.7.0 fails to read a response whose figures are null, because its result model parses them as non-null integers.
