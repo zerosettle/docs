@@ -6,24 +6,49 @@ icon: 'rocket'
 
 Work through each section before switching from sandbox to live.
 
+<Warning>
+  Live is not just a different key. Sandbox and live are separate environments, and a new account is **not approved for live** until you complete the Go Live step below. Until then, every live purchase fails with HTTP 403 and the error code `not_whitelisted`.
+</Warning>
+
+## Get approved for live
+
+1. In the dashboard, switch to **Live** mode and open **Go Live**. The wizard walks you through the Production Agreement (Terms of Service and Privacy Policy), connecting your live Stripe account if you use BYOS, and a readiness check.
+2. The readiness check looks for App Store Connect credentials, at least one checkout-ready product, a connected Stripe account, and a completed sandbox transaction.
+3. Accepting the agreement approves the account for live transactions. The wizard can also copy your sandbox configuration to live.
+4. If live purchases still return `not_whitelisted` after you finish, contact ZeroSettle support.
+
+<Note>
+  Products are per environment. Review the live prices after the copy, or create the live products yourself, before you accept real payments.
+</Note>
+
 ## Dashboard Checklist
 
+- [ ] Go Live completed (see above), so live purchases no longer return `not_whitelisted`
 - [ ] Stripe live onboarding complete (Managed: Express details submitted; BYOS: Standard account connected and authorized)
 - [ ] Live publishable key generated (`zs_pk_live_...`)
-- [ ] Products created with correct web prices
+- [ ] Live products created or synced, with correct web prices. Live and sandbox products are separate
 - [ ] Checkout branding configured (logo, app icon, brand colors)
-- [ ] Checkout type set per jurisdiction (`webview` recommended for US)
+- [ ] Checkout type set per jurisdiction (`webview` is the default and recommended for US)
 - [ ] Web checkout enabled for target jurisdictions
 - [ ] (Optional) Custom checkout domain configured and verified — see [Custom Checkout Domains](/iap/custom-domains). Once `active`, Stripe payment-domain registration (Apple Pay / Google Pay on web) happens automatically.
+
+## Server Checklist
+
+Webhook configuration is per environment too. Set these up again for live:
+
+- [ ] **App Store Server Notifications** point at `https://api.zerosettle.io/v1/webhooks/appstore-notifications/`. The same URL serves the production and sandbox slots in App Store Connect. Choose **ZeroSettle Managed** under **Integrations → Webhooks** to have ZeroSettle set it for you with your App Store Connect key. See [Webhooks & Server-Side](/iap/webhooks).
+- [ ] **Event webhook endpoint** added for **live** mode, if your server consumes ZeroSettle events. Endpoints you added in sandbox do not receive live events. See [Event Webhooks](/iap/event-webhooks).
+- [ ] Your server maps events to users with `external_user_id`, the id you pass to `identify`.
 
 ## Code Checklist
 
 - [ ] Using live publishable key (not `zs_pk_test_`)
+- [ ] The app's bundle ID matches the bundle ID registered for the app in the dashboard. A StoreKit sync from a different bundle ID is rejected with HTTP 400 and the code `bundle_id_mismatch`
 - [ ] Universal link handler configured (required for Safari checkout flow)
 - [ ] `restoreEntitlements()` called on app launch (or via `identify(_:)` — iOS, Android, and Flutter are all identify-first)
-- [ ] Purchase error handling implemented in delegate
-- [ ] Entitlement delegate callback updating UI (`zeroSettleEntitlementsDidUpdate`)
-- [ ] Fallback to StoreKit / Play Billing when `isWebCheckoutEnabled` is `false`
+- [ ] Purchase error handling implemented
+- [ ] Entitlement updates wired to your UI (iOS: `entitlementUpdates` or `zeroSettleEntitlementsDidUpdate`; Android: `ZeroSettle.entitlements`; Flutter: `entitlementUpdates`)
+- [ ] Fallback to StoreKit / Play Billing when web checkout is turned off for a jurisdiction
 
 <CodeGroup>
 ```swift Swift
@@ -46,12 +71,35 @@ ZeroSettle.configure(context, ZeroSettleConfig(
     publishableKey = "zs_pk_live_..."  // Live key
 ))
 
-// Verify fallback logic
-if (ZeroSettle.isWebCheckoutEnabled) {
-    // Show web checkout
-} else {
+// Android has no isWebCheckoutEnabled. purchase() returns a Result, so
+// fall back to Play Billing when it fails.
+val result = ZeroSettle.purchase(activity = activity, productId = product.id)
+result.onFailure { error ->
     // Fall back to Play Billing
 }
+```
+
+```dart Flutter
+// Verify your live configuration
+await ZeroSettle.instance.configure(
+  publishableKey: 'zs_pk_live_...',  // Live key
+);
+
+// Flutter exposes the global setting through the remote config.
+final config = await ZeroSettle.instance.getRemoteConfig();
+if (config?.checkout.isEnabled ?? true) {
+  // Show web checkout
+} else {
+  // Fall back to StoreKit / Play Billing
+}
+```
+
+```tsx React Native
+// Verify your live configuration (preview, iOS only)
+ZeroSettleKit.configure({ publishableKey: 'zs_pk_live_...' });
+
+// The React Native package has no web-checkout flag. Handle a failed
+// purchase() and fall back to StoreKit.
 ```
 </CodeGroup>
 
@@ -68,6 +116,7 @@ if (ZeroSettle.isWebCheckoutEnabled) {
 ## Final Testing
 
 - [ ] Full purchase tested end-to-end in sandbox with a test card
+- [ ] A TestFlight build tested against your live key. Those purchases stay in Live and are marked as test purchases. See [Testing](/iap/testing#live-mode-test-purchases-and-testflight)
 - [ ] Tested on a physical device (not just simulator)
 - [ ] Tested restore on a fresh install / new device
 - [ ] Tested cancel and refund flows
@@ -87,5 +136,5 @@ Once all checklists are complete:
 4. **Monitor** — watch the dashboard for transaction volume, errors, and webhook delivery
 
 <Note>
-  The key prefix is the only thing that changes between sandbox and live. No other code changes are needed.
+  In the app, the key prefix is the only thing that changes between sandbox and live. The setup above (approval, products, webhook endpoints, App Store Server Notifications) is what makes the live key work.
 </Note>
