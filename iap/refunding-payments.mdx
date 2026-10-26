@@ -6,7 +6,7 @@ icon: 'rotate-left'
 
 You can refund a one-time or non-subscription purchase made by a customer, or the most recent payment of a customer's subscription.
 
-Refunding returns the funds to the customer's payment method (it can take a few days for the payment to be returned, depending on the payment method and the customer's bank). When a refund is made, the customer immediately loses access to any entitlements associated with their subscription or purchased item.
+Refunding returns the funds to the customer's payment method (it can take a few days for the payment to be returned, depending on the payment method and the customer's bank). Access depends on what you refund. A full refund of the current billing period, or of a one-time purchase, ends the customer's access. A partial refund is a credit only and leaves access unchanged. A refund of an earlier period, while a later period is paid and active, leaves the subscription active. See [Refunds](/iap/event-webhooks#refunds) for the events your server receives.
 
 <Note>
 **No Refund for Subscriptions with Billing Issues**
@@ -23,4 +23,4 @@ To refund a payment:
 3. Click on the "..." menu next to the subscription
 4. Select "Refund"
 
-The refund will be processed immediately, and the customer's entitlements will be updated to reflect the change. The `isActive` property on the affected `Entitlement` will be set to `false`, and the corresponding `CheckoutTransaction` status will change to `.refunded`.
+The refund is processed immediately. For a full refund of the current period, the customer's entitlement is updated: the `isActive` property on the affected `Entitlement` is set to `false`. In every case the corresponding transaction status changes to refunded.

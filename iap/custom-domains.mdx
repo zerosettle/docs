@@ -6,7 +6,7 @@ icon: 'globe'
 
 ## Overview
 
-A custom checkout domain replaces the default ZeroSettle host (e.g., `dashboard.zerosettle.io`) in the browser address bar with a subdomain you own — so users see `https://checkout.example.com/...` during browser-based checkout. This affects browser-mode checkout only; native WKWebView and other in-app checkout flows continue to use the default API domain.
+A custom checkout domain replaces the default ZeroSettle host (e.g., `api.zerosettle.io`) in the browser address bar with a subdomain you own — so users see `https://checkout.example.com/...` during browser-based checkout. This affects browser-mode checkout only; native WKWebView and other in-app checkout flows continue to use the default API domain.
 
 ## Prerequisites
 
@@ -79,7 +79,7 @@ ZeroSettle runs a daily health check on every active custom domain. If Cloudflar
     Cloudflare can't resolve the CNAME. Confirm the record exists at your DNS provider (`dig CNAME checkout.example.com` should return `customers.zerosettle.io`). Some providers strip the trailing dot or wrap the value — paste the value exactly as the dashboard shows it. If your TTL is high, propagation can take longer; lowering TTL before adding the record helps next time.
   </Accordion>
   <Accordion title="Setup blocked because Stripe Connect is not active">
-    Custom domains require a fully onboarded Stripe Connect account with charges enabled. Open **Settings > Payments** in the dashboard and finish onboarding (Managed Express details submitted, or BYOS Standard account connected). Once `tenant.stripe_account_charges_ok` is true, retry the domain setup.
+    Custom domains require a fully onboarded Stripe Connect account with charges enabled. Open **Settings > Payments** in the dashboard and finish onboarding (Managed Express details submitted, or BYOS Standard account connected). Once Stripe reports that charges are enabled on the account, retry the domain setup.
   </Accordion>
   <Accordion title="SSL stuck in `provisioning` for hours">
     Cloudflare issues certificates after DNS validation completes. If the domain has been in `provisioning` for more than an hour, the most common cause is a CAA record on the parent domain that excludes Cloudflare. Check `dig CAA example.com` — if a CAA record is set, add `letsencrypt.org` and `digicert.com` (Cloudflare's certificate authorities) or remove the restriction. If no CAA is set, contact support@zerosettle.io.

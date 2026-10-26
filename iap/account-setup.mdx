@@ -51,28 +51,37 @@ Connect your existing Stripe standard account via OAuth. Keep your products, pri
 
 ## Add Your App
 
-After connecting Stripe, add the app that will use ZeroSettle. There are two paths:
+After connecting Stripe, add the app that will use ZeroSettle. The App Store Connect API key is not optional for an iOS app that goes live. ZeroSettle uses it to:
 
-### Option A: Connect App Store Connect
+- generate the `apple-app-site-association` file that returns Safari-based checkouts to your app (it reads your Team ID from the key; see [Universal Links](/iap/universal-links))
+- configure App Store Server Notifications for you in **ZeroSettle Managed** mode (see [Webhooks & Server-Side](/iap/webhooks))
+- sync your apps and products from App Store Connect
+- run Apple external-purchase reporting (see [External Purchase Reporting](/iap/external-purchase-reporting))
 
-Upload your App Store Connect API key to automatically sync your apps and products.
+The Go Live readiness check also looks for it.
+
+### Connect App Store Connect
+
+Upload your App Store Connect API key to sync your apps and products.
 
 1. In the dashboard, go to **Settings > App Store Connect**
 2. Upload your `.p8` key file
 3. Enter the **Key ID** and **Issuer ID** (found in App Store Connect under Users and Access > Integrations > App Store Connect API)
 4. The dashboard validates your credentials and syncs your apps automatically
 
-<Tip>
-  Connecting App Store Connect enables automatic product sync and StoreKit price fetching. This is the recommended path if you have existing App Store products.
-</Tip>
+<Note>
+  Use a key with the **App Manager** role at minimum.
+</Note>
 
-### Option B: Create Manually
+### Or create the app manually
 
-If you don't have an App Store Connect key or prefer manual setup:
+You can add an app by hand while you build, for example before you have a key:
 
 1. Go to **Apps** in the dashboard
 2. Click **Add App**
 3. Enter your app name and bundle ID (e.g., `com.yourcompany.yourapp`)
+
+Add the App Store Connect key before you test Safari checkout or go live.
 
 ## Create Products
 

@@ -1503,4 +1503,4 @@ The `/v1/iap/*` endpoints, including the REST API, authenticate with your **publ
 
 `GET /v1/iap/migration-cohort/` lists the users who are currently eligible for the Switch & Save tip, for outreach such as email or push campaigns. It takes the secret key in the same `X-ZeroSettle-Key` header, infers sandbox or live from the key prefix, and pages with `cursor` and `limit` (default 100, maximum 500). It does not count campaign impressions.
 
-A publishable key can read a user's entitlements by `user_id`, and it is embedded in your app, so treat entitlement lookups from your own server as a convenience, not as a secret. Store secret keys only on your server.
+The publishable key ships inside your app, so anyone who extracts it can read entitlements by `user_id`. Do not rely on it to keep entitlement data private. Store secret keys only on your server.
