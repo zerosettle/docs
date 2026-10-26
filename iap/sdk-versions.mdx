@@ -1,11 +1,28 @@
 ---
-title: 'SDK minimum versions'
-description: 'Minimum ZeroSettle SDK versions for offer view tracking and other features.'
+title: 'SDK versions and requirements'
+description: 'Current SDK versions, platform requirements and minimum versions for each feature.'
 ---
+
+This page is the single source for versions and requirements. Other pages link here instead of repeating them.
+
+## Current versions and requirements
+
+| Platform | Package | Current version | Requirements |
+| --- | --- | --- | --- |
+| iOS | [ZeroSettleKit](https://github.com/zerosettle/ZeroSettleKit) (Swift Package Manager) | 1.6.2 | iOS 17.0+, Swift 6.1+, Xcode 16.3+ |
+| Android | [`io.zerosettle:zerosettle-android`](https://central.sonatype.com/artifact/io.zerosettle/zerosettle-android) (Maven Central) | 1.2.1 | Android API 23+ (minSdk 23), Kotlin 2.1+ |
+| Flutter | [`zerosettle`](https://pub.dev/packages/zerosettle) (pub.dev) | 1.7.0 | Flutter 3.38.9+, Dart 3.10.8+, iOS 18.0+ (CocoaPods), Android API 26+ |
+| React Native (preview) | [`react-native-zerosettle`](https://github.com/zerosettle/ZeroSettle-ReactNative) (GitHub, not on npm) | 1.1.0 | iOS 17.0+, New Architecture. iOS only |
+
+<Note>
+  The Flutter plugin pulls in the native SDKs for you. Flutter 1.7.0 depends on ZeroSettleKit `~> 1.5.2` on iOS and `zerosettle-android` 1.2.1 on Android. The React Native 1.1.0 package pulls ZeroSettleKit from Swift Package Manager at `1.1.0` or later within the same major version, so a fresh install resolves to the latest 1.x release.
+</Note>
+
+See [Installation](/iap/installation) for the install commands and [Release notes](/releases) for what changed in each version.
 
 ## Offer view tracking
 
-On-screen offer impression tracking — the **Viewed/Shown** stage in **Campaign → Analyze** —
+On-screen offer impression tracking (the **Viewed/Shown** stage in **Campaign → Analyze**)
 requires the minimum SDK versions below. Older SDKs still convert and report purchases
 correctly, but they cannot report on-screen views, so the Viewed stage under-reports and
 the view-based conversion rate is unavailable.
@@ -18,3 +35,10 @@ the view-based conversion rate is unavailable.
 
 Update your SDK to at least the version above to populate the Viewed stage and the
 view-based conversion rate in the migration and upgrade analytics.
+
+## Other minimum versions
+
+| Feature | Minimum version |
+| --- | --- |
+| Bundled privacy manifest (`PrivacyInfo.xcprivacy`) | iOS 1.6.0 |
+| `recordStoreKitPurchase` (analytics-only mode) | iOS 1.6.0 |
