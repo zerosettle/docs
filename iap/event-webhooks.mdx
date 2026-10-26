@@ -4,6 +4,10 @@ description: 'Receive subscription lifecycle events on your own server'
 icon: 'bell'
 ---
 
+<Info>
+  **Your server pages.** This page covers events ZeroSettle sends to your server. To verify a user's access from your backend, or to set up App Store Server Notifications and forwarding, see [Notifications and Server-Side Verification](/iap/webhooks).
+</Info>
+
 ZeroSettle can POST an event to your server whenever a subscription changes — a
 purchase, a renewal, a cancellation, a refund. Use these to keep your own database in
 sync, trigger emails, or notify your team, without polling our API.
@@ -11,7 +15,7 @@ sync, trigger emails, or notify your team, without polling our API.
 <Note>
   This page covers events **we send to you**. For the Stripe and App Store notifications
   that ZeroSettle receives and handles on your behalf, see
-  [Webhooks & Server-Side](/iap/webhooks) — you do not need to handle those yourself.
+  [Notifications and Server-Side Verification](/iap/webhooks) — you do not need to handle those yourself.
 </Note>
 
 ## Setting up an endpoint

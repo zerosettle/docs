@@ -36,7 +36,7 @@ Work through each section before switching from sandbox to live.
 
 Webhook configuration is per environment too. Set these up again for live:
 
-- [ ] **App Store Server Notifications** point at `https://api.zerosettle.io/v1/webhooks/appstore-notifications/`. The same URL serves the production and sandbox slots in App Store Connect. Choose **ZeroSettle Managed** under **Integrations → Webhooks** to have ZeroSettle set it for you with your App Store Connect key. See [Webhooks & Server-Side](/iap/webhooks).
+- [ ] **App Store Server Notifications** point at `https://api.zerosettle.io/v1/webhooks/appstore-notifications/`. The same URL serves the production and sandbox slots in App Store Connect. Choose **ZeroSettle Managed** under **Integrations → Webhooks** to have ZeroSettle set it for you with your App Store Connect key. See [Notifications and Server-Side Verification](/iap/webhooks).
 - [ ] **Event webhook endpoint** added for **live** mode, if your server consumes ZeroSettle events. Endpoints you added in sandbox do not receive live events. See [Event Webhooks](/iap/event-webhooks).
 - [ ] Your server maps events to users with `external_user_id`, the id you pass to `identify`.
 

@@ -26,7 +26,7 @@ ZeroSettle uses [Stripe Connect](https://stripe.com/connect) to process payments
   </Accordion>
 </AccordionGroup>
 
-In both modes, Stripe routes Connect webhook events to ZeroSettle's platform endpoint automatically. ZeroSettle processes these events to create and update Transactions and Entitlements. See [Webhooks & Server-Side](/iap/webhooks) for the full list of handled events.
+In both modes, Stripe routes Connect webhook events to ZeroSettle's platform endpoint automatically. ZeroSettle processes these events to create and update Transactions and Entitlements. See [Notifications and Server-Side Verification](/iap/webhooks) for the full list of handled events.
 
 ## Identifying ZeroSettle Activity in Stripe
 
@@ -133,7 +133,7 @@ You can also identify ZeroSettle-created objects visually in the Stripe dashboar
 When you connect your Stripe account to ZeroSettle via OAuth, Stripe automatically routes Connect webhook events to ZeroSettle's platform endpoint. This is how ZeroSettle receives payment lifecycle events and updates your Transactions and Entitlements.
 
 <Warning>
-  Do not configure your own webhook endpoint for the same Stripe events that ZeroSettle handles (e.g., `payment_intent.succeeded`, `customer.subscription.updated`). Duplicate processing will cause entitlement conflicts. See [Webhooks & Server-Side](/iap/webhooks#stripe-webhook-events) for the full list of events ZeroSettle processes.
+  Do not configure your own webhook endpoint for the same Stripe events that ZeroSettle handles (e.g., `payment_intent.succeeded`, `customer.subscription.updated`). Duplicate processing will cause entitlement conflicts. See [Notifications and Server-Side Verification](/iap/webhooks#stripe-webhook-events) for the full list of events ZeroSettle processes.
 </Warning>
 
 If you have an existing webhook endpoint for your own Stripe activity, use the `application` field filtering shown above to skip ZeroSettle-originated events. This lets both integrations coexist safely on the same Stripe account.

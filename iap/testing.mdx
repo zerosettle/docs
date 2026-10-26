@@ -100,7 +100,7 @@ println("Active: ${entitlements.filter { it.isActive }}")
 
 Subscription lifecycle works the same in sandbox as in production:
 
-- **Renewals** — App Store sandbox subscriptions renew on Apple's accelerated schedule: a monthly plan renews every few minutes, for a limited number of renewals. The resulting notifications reach ZeroSettle only when the sandbox server notification URL in App Store Connect points at ZeroSettle. It is the same URL as production; see [Webhooks & Server-Side](/iap/webhooks#setting-up-assn-v2). Web checkout subscriptions renew on their real schedule and cannot be fast-forwarded today.
+- **Renewals** — App Store sandbox subscriptions renew on Apple's accelerated schedule: a monthly plan renews every few minutes, for a limited number of renewals. The resulting notifications reach ZeroSettle only when the sandbox server notification URL in App Store Connect points at ZeroSettle. It is the same URL as production; see [Notifications and Server-Side Verification](/iap/webhooks#setting-up-assn-v2). Web checkout subscriptions renew on their real schedule and cannot be fast-forwarded today.
 - **Cancellation** — Users can cancel via the Stripe customer portal. The entitlement remains active until the end of the current billing period.
 - **Refunds** — Issue refunds from the dashboard or directly in the Stripe dashboard. A full refund of the current billing period ends the subscription and access, and you receive `subscription.expired` and `transaction.refunded`. A partial refund is a credit only, and a refund of an earlier period leaves the subscription active. See [Refunds](/iap/event-webhooks#refunds).
 

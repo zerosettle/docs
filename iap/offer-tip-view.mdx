@@ -4,6 +4,10 @@ description: 'Unified drop-in view for migration and upgrade offers'
 icon: 'gift'
 ---
 
+<Info>
+  **Part of Retention and growth.** This is the drop-in view. To build your own UI, see [Custom Offer UI](/iap/offer-manager). To configure who sees which offer, see [Campaigns & Offers](/iap/campaigns). For the concept and the Switch & Save flow, see [Switch & Save View](/iap/switch-and-save).
+</Info>
+
 `OfferTipView` is a unified drop-in view that handles both migration and upgrade offers. The server determines which offer to show based on the user's subscription state — you just add one line of code. It resolves the active user from `ZeroSettle.shared.identify(_:)`, so no `userId` is passed at the call site.
 
 <Note>
