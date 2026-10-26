@@ -27,7 +27,7 @@ class MyApplication : Application() {
         ZeroSettle.configure(
             this,
             ZeroSettleConfig(
-                publishableKey = "zs_pk_live_…"  // From your ZeroSettle dashboard
+                publishableKey = "zs_pk_test_…"  // Sandbox key from your ZeroSettle dashboard
             )
         )
     }
@@ -224,7 +224,7 @@ class StoreActivity : ComponentActivity() {
 
         ZeroSettle.configure(
             this,
-            ZeroSettleConfig(publishableKey = "zs_pk_live_…")
+            ZeroSettleConfig(publishableKey = "zs_pk_test_…")
         )
 
         setContent { StoreScreen(activity = this) }

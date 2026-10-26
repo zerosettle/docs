@@ -127,8 +127,20 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
     **Fix:** Ensure the same user identifier is used consistently in `identify(_:)` (iOS, Android, and Flutter are all identify-first), `checkoutSheet`, and `restoreEntitlements()`.
   </Accordion>
 
+  <Accordion title="Live purchases fail with not_whitelisted">
+    A new account is not approved for live transactions. Every live request returns HTTP 403 with the code `not_whitelisted` until the account is approved.
+
+    **Fix:** Complete **Go Live** on the dashboard and accept the Production Agreement. If the error continues, contact support. See the [Go-Live Checklist](/iap/go-live).
+  </Accordion>
+
+  <Accordion title="StoreKit sync fails with bundle_id_mismatch">
+    The StoreKit transaction's bundle ID does not belong to the app the key belongs to, so the sync returns HTTP 400 with the code `bundle_id_mismatch`.
+
+    **Fix:** Check that the bundle ID registered for the app on the dashboard matches the bundle ID of the build, and that you are using that app's publishable key.
+  </Accordion>
+
   <Accordion title="Sandbox/Live environment mismatch">
-    A purchase made with a sandbox key creates sandbox entitlements. Restoring with a live key (or vice versa) won't find them.
+    A purchase made with a sandbox key creates sandbox entitlements. Restoring with a live key (or vice versa) won't find them. A TestFlight or Xcode purchase made with a live key is the exception: it stays in Live, marked as a test purchase. See [Testing](/iap/testing#live-mode-test-purchases-and-testflight).
 
     **Fix:** Ensure your API key environment matches where the purchase was made.
   </Accordion>
@@ -160,15 +172,15 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
 
 <AccordionGroup>
   <Accordion title="apple-app-site-association not configured">
-    Universal links require a valid `apple-app-site-association` file hosted at your domain.
+    ZeroSettle hosts the `apple-app-site-association` file on `api.zerosettle.io` and builds it from your app's bundle ID and the Team ID of your App Store Connect key. An app with no bundle ID, or an account with no App Store Connect key, is left out.
 
-    **Fix:** Follow the complete [Universal Links setup guide](/iap/universal-links).
+    **Fix:** Set the bundle ID on the dashboard, upload your App Store Connect key, then check that your app appears at `https://api.zerosettle.io/.well-known/apple-app-site-association`. Follow the complete [Universal Links setup guide](/iap/universal-links).
   </Accordion>
 
   <Accordion title="App not installed from App Store or TestFlight">
     During development, universal links only work if the app was installed via Xcode with the Associated Domains entitlement properly configured.
 
-    **Fix:** Ensure your app's `Associated Domains` capability includes `applinks:yourdomain.com`.
+    **Fix:** Ensure your app's `Associated Domains` capability includes `applinks:api.zerosettle.io` and `applinks:zerosettle.io`.
   </Accordion>
 
   <Accordion title="Missing .zeroSettleHandler()">
@@ -275,6 +287,46 @@ log stream --predicate 'subsystem == "com.zerosettle.kit"' --level debug
 <Warning>
   **Release builds redact every log message.** `ZSLogger` formats with `%{public}@` in DEBUG and `%{private}@` in Release, so a TestFlight or App Store build shows `<private>` in place of each message in Console.app and in sysdiagnose. To read SDK logs from a real build, attach Xcode's debugger to the running process, or reproduce in a Debug build.
 </Warning>
+
+## Troubleshooting on Android
+
+The Android SDK returns `kotlin.Result` from its public calls and does not throw for normal errors, so start by logging the failure. The error cases are in the [Android quickstart](/iap/quickstart-android#error-handling).
+
+**Logs.** The default logger writes to logcat with the tag `ZeroSettle/<area>`. Filter with `adb logcat | grep "ZeroSettle/"`. To forward logs to Crashlytics, Sentry or similar, pass your own `ZeroSettleLogger` as `ZeroSettleConfig(logger = ...)`.
+
+**Events.** `ZeroSettle.events` is a `SharedFlow`. Collect it to see `PurchaseSucceeded`, `PurchaseFailed(reason)` and `SyncFailed(purchaseToken, attempts, terminal)`.
+
+<AccordionGroup>
+  <Accordion title="IllegalArgumentException when calling configure">
+    `ZeroSettleConfig` requires the publishable key to start with `zs_pk_test_` or `zs_pk_live_`.
+
+    **Fix:** Pass the key from the dashboard unchanged.
+  </Accordion>
+
+  <Accordion title="NotConfigured or UserNotIdentified">
+    `ZeroSettleError.NotConfigured` means `configure()` was not called. `ZeroSettleError.UserNotIdentified` means `identify()` was not called before the API you used.
+
+    **Fix:** Call `ZeroSettle.configure(context, ...)` in `Application.onCreate()`, then `ZeroSettle.identify(...)` before any other call.
+  </Accordion>
+
+  <Accordion title="CheckoutInFlight">
+    A web checkout is already open. Calling `purchase()` again returns `ZeroSettleError.CheckoutInFlight`.
+
+    **Fix:** Disable your buy button while a purchase is running. If the Custom Tab was dismissed without a result, call `ZeroSettle.releasePendingCheckout()` from `onResume()` (see the [Android quickstart](/iap/quickstart-android)).
+  </Accordion>
+
+  <Accordion title="Checkout finishes but the app never gets the result">
+    In Custom Tab and external browser modes the result returns through the `zerosettle://checkout` deep link.
+
+    **Fix:** Register the intent filter for scheme `zerosettle` and host `checkout`, and forward the intent to `ZeroSettle.completeWebCheckout(url)` from `onNewIntent`. See [Android Deep Links](/iap/universal-links#android-deep-links).
+  </Accordion>
+
+  <Accordion title="Play purchase is not acknowledged or keeps retrying">
+    When the backend is unreachable, the SDK queues the purchase and retries, and Play redelivers it. After 24 hours of failed syncs the SDK acknowledges defensively unless `strictAck` is set. A `SyncFailed` event with `terminal = true` means the retry budget for that purchase is used up.
+
+    **Fix:** Check connectivity and the key environment. See the [acknowledgement model](/iap/play-billing-integration#acknowledgement-model).
+  </Accordion>
+</AccordionGroup>
 
 ## Still Stuck?
 
