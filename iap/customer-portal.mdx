@@ -18,7 +18,9 @@ described below.
 
 <Note>
   Earlier SDK versions exposed `showManageSubscription()` and
-  `openCustomerPortal()`. These have been removed. Use the cancel flow
+  `openCustomerPortal()`. These have been removed from the iOS and Android SDKs.
+  The Flutter plugin keeps both as deprecated stubs that throw
+  `not_implemented` on iOS. Use the cancel flow
   (`.retentionSheet` / `presentCancelFlow`) for ZeroSettle (web) subscriptions,
   and the platform's native subscription settings for store-billed
   subscriptions (see below).
@@ -46,7 +48,7 @@ Button("Manage Subscription") {
 On Android, Flutter, and React Native, present subscription management with the
 cancel flow described in the [Cancel Flow](#cancel-flow) section below.
 Identity is implicit on iOS, Android, and Flutter — call `identify()` once at
-startup; React Native (1.3.x) still takes a `userId`.
+startup; React Native (1.1.0) still takes a `userId`.
 
 ### Native Store Subscriptions
 
@@ -164,7 +166,7 @@ The questionnaire and retention offer are configured on the [ZeroSettle dashboar
 ### Built-in Cancel Flow
 
 Call `identify()` once at startup — the imperative cancel flow takes no
-`userId` on iOS and Flutter. React Native (1.3.x) still passes a `userId`.
+`userId` on iOS and Flutter. React Native (1.1.0) still passes a `userId`.
 
 <Note>
   The imperative `presentCancelFlow` is implemented on **iOS only**. The

@@ -29,7 +29,7 @@ val cached = ZeroSettle.entitlements.value
 ```
 
 ```tsx React Native
-// React Native (1.3.x) still takes the userId argument
+// React Native (1.1.0) still takes the userId argument
 const entitlements = await ZeroSettleKit.restoreEntitlements(currentUser.id);
 
 // Or access cached
@@ -160,7 +160,7 @@ ZeroSettle.restoreEntitlements()
 
 ```tsx React Native
 try {
-  // React Native (1.3.x) still takes the userId argument
+  // React Native (1.1.0) still takes the userId argument
   const entitlements = await ZeroSettleKit.restoreEntitlements(currentUser.id);
   // Update UI based on entitlements
   updatePremiumAccess(entitlements);
@@ -186,7 +186,7 @@ This fetches entitlements from both ZeroSettle's web checkout system and StoreKi
 
 ### Anonymous Users
 
-If your app has no auth system, identify with `Identity.anonymous` (`bootstrap('')` on React Native 1.3.x). The SDK persists a stable per-install UUID, so `restoreEntitlements()` works normally — entitlements are tied to that UUID.
+If your app has no auth system, identify with `Identity.anonymous` (`bootstrap('')` on React Native 1.1.0). The SDK persists a stable per-install UUID, so `restoreEntitlements()` works normally — entitlements are tied to that UUID.
 
 This means:
 

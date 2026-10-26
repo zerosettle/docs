@@ -51,7 +51,7 @@ val isPremium = ZeroSettle.activeEntitlements.any {
 ```
 
 ```tsx React Native
-// React Native (1.3.x) uses the bootstrap(userId) model
+// React Native (1.1.0) uses the bootstrap(userId) model
 await ZeroSettleKit.bootstrap(currentUser.id);
 
 const entitlements = await ZeroSettleKit.getActiveEntitlements();
@@ -115,7 +115,7 @@ The SDK sets this token automatically (since ZeroSettleKit 1.1.5 / Android 0.15.
 For cases where you need to transfer an entitlement between accounts — testing, account migration, or support — the SDK provides an explicit claim API:
 
 <Note>
-  `transferStoreKitOwnershipToCurrentUser` is **iOS-only** — it moves a StoreKit purchase. On Android, the Google Play equivalent is `transferPlayOwnershipToCurrentUser(productId:)`, which moves a Play Billing purchase. See [Play Billing Integration](/iap/play-billing-integration). React Native (1.3.x) does not yet expose either transfer method.
+  `transferStoreKitOwnershipToCurrentUser` is **iOS-only** — it moves a StoreKit purchase. On Android, the Google Play equivalent is `transferPlayOwnershipToCurrentUser(productId:)`, which moves a Play Billing purchase. See [Play Billing Integration](/iap/play-billing-integration). React Native (1.1.0) does not yet expose either transfer method.
 </Note>
 
 <CodeGroup>
