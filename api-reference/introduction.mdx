@@ -33,7 +33,7 @@ Every path ends with `/`, for example `/v1/iap/products/`. Send it exactly like 
 
 ## SDK headers
 
-The SDKs send `X-ZS-SDK-Platform` (`ios`, `android`, `flutter`) and `X-ZS-SDK-Version` with each request. They change a few responses: the `source` value for Google Play purchases, the shape of the cancel flow, `checkout_presentation`, and the `410 use_checkout_configs` answer on Create Payment Intent. If you call the API directly you can leave them out and you get the default shape.
+The SDKs send `X-ZS-SDK-Version` with each request, and the Android SDK also sends `X-ZS-SDK-Platform: android`. These change a few responses: the `source` value for Google Play purchases, the shape of the cancel flow, `checkout_presentation`, and the `410 use_checkout_configs` answer on Create Payment Intent. If you call the API directly, you can leave them out and you get the default shape.
 
 ## Base URL
 
@@ -66,7 +66,7 @@ Some errors use `error` itself as the code, for example `in_flight` and `use_che
 | `403` | Account disabled (`tenant_disabled`), or a live key on an account not yet approved for live transactions (`not_whitelisted`) |
 | `404` | Resource not found |
 | `409` | Conflict, for example `already_entitled` or `in_flight` (retry after `retry_after` seconds) |
-| `410` | `use_checkout_configs`: see Create Payment Intent |
+| `410` | Gone: `use_checkout_configs` (see Create Payment Intent) or an expired checkout config |
 | `500` | Server error, for example `checkout_domain_not_configured` |
 | `502` | Upstream service error (Stripe, Apple) |
 | `503` | Server busy (retry after `retry_after` seconds) or `migration_unavailable` |

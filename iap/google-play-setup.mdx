@@ -45,7 +45,7 @@ The validation reads your one-time products and subscriptions. An empty catalog 
 
 | Result | Meaning |
 |---|---|
-| `valid` | The service account can read the catalog. |
+| Valid (no error code) | The service account can read the catalog. |
 | `IAM_NOT_GRANTED` | The service account has not been invited to Play Console yet, or Google is still propagating the permission. Wait and retry. |
 | `PACKAGE_NOT_FOUND` | The package name does not exist in the Play Console this service account belongs to. |
 | `UNKNOWN` | Any other Play API error. The dashboard shows Google's message. |

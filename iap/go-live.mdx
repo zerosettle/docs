@@ -7,7 +7,7 @@ icon: 'rocket'
 Work through each section before switching from sandbox to live.
 
 <Warning>
-  Live is not just a different key. Sandbox and live are separate environments, and a new account is **not approved for live** until you complete the Go Live step below. Until then, every live purchase fails with HTTP 403 and the error code `not_whitelisted`.
+  Live is not just a different key. Sandbox and live are separate environments, and a new account is **not approved for live** until you complete the Go Live step below. Until then, every live web checkout fails with HTTP 403 and the error code `not_whitelisted`.
 </Warning>
 
 ## Get approved for live
@@ -86,6 +86,7 @@ await ZeroSettle.instance.configure(
 );
 
 // Flutter exposes the global setting through the remote config.
+// On Android, getRemoteConfig() returns null; rely on purchase() failing instead.
 final config = await ZeroSettle.instance.getRemoteConfig();
 if (config?.checkout.isEnabled ?? true) {
   // Show web checkout
@@ -102,8 +103,9 @@ ZeroSettleKit.configure({ publishableKey: 'zs_pk_live_...' });
 // with this code when web checkout is off for the user's jurisdiction.
 try {
   await ZeroSettleKit.purchase(product.id, user.id);
-} catch (error) {
-  if (error.code === 'web_checkout_disabled_for_jurisdiction') {
+} catch (error: any) {
+  // 1.1.0 rejects with 'web_checkout_disabled'
+  if (error?.code === 'web_checkout_disabled') {
     // Fall back to StoreKit
   }
 }

@@ -128,7 +128,7 @@ Use this guide to diagnose and fix common issues with ZeroSettle integration. Ea
   </Accordion>
 
   <Accordion title="Live purchases fail with not_whitelisted">
-    A new account is not approved for live transactions. Every live request returns HTTP 403 with the code `not_whitelisted` until the account is approved.
+    A new account is not approved for live transactions. Until it is, every live web checkout request (`/v1/iap/checkout-configs/`, which the current SDKs use, payment intents, checkout sessions and their batch forms) returns HTTP 403 with the code `not_whitelisted`. Other endpoints, and StoreKit and Play syncs, are not affected.
 
     **Fix:** Complete **Go Live** on the dashboard and accept the Production Agreement. If the error continues, contact support. See the [Go-Live Checklist](/iap/go-live).
   </Accordion>

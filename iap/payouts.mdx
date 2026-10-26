@@ -11,7 +11,7 @@ ZeroSettle collects payments as Merchant of Record and pays out revenue to you v
 In Managed mode, ZeroSettle processes the charge on your behalf using a Stripe Express account.
 
 1. Customer pays via web checkout
-2. ZeroSettle collects the payment, deducts platform and processing fees
+2. ZeroSettle collects the payment and deducts its platform fee, which includes Stripe processing
 3. Net revenue is transferred to your Stripe Express account
 4. Stripe pays out to your linked bank account on the standard payout schedule
 
@@ -27,10 +27,10 @@ You retain full control of your Stripe dashboard, reporting, payout schedule, an
 
 | | Managed | BYOS |
 |---|---|---|
-| **Stripe processing** | ~2.9% + 30c | ~2.9% + 30c (your negotiated rate) |
+| **Stripe processing** | Included in the ZeroSettle fee | ~2.9% + 30c, paid by your Stripe account (your negotiated rate) |
 | **ZeroSettle platform fee** | 5% + 50c | 0.5% |
 | **Sales tax** | Collected & remitted by ZeroSettle | Collected & remitted by ZeroSettle |
-| **Net to you** | Gross - Stripe - ZeroSettle fees | Gross - Stripe - 0.5% |
+| **Net to you** | Gross - ZeroSettle fee | Gross - Stripe - 0.5% |
 
 ### Example: $9.99 Sale
 
@@ -39,9 +39,8 @@ You retain full control of your Stripe dashboard, reporting, payout schedule, an
 | Line item | Amount |
 |---|---|
 | Gross | $9.99 |
-| Stripe processing (2.9% + 30c) | -$0.59 |
-| ZeroSettle platform fee (5% + 50c) | -$1.00 |
-| **Net to you** | **$8.40** |
+| ZeroSettle platform fee (5% + 50c, Stripe processing included) | -$1.00 |
+| **Net to you** | **$8.99** |
 
 **BYOS mode:**
 

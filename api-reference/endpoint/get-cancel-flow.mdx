@@ -5,13 +5,13 @@ openapi: 'GET /iap/cancel-flow/'
 
 ## The response depends on the SDK
 
-The server shapes the response for the SDK that asks, using the `X-ZS-SDK-Platform` and `X-ZS-SDK-Version` headers the SDKs send.
+The server shapes the response by SDK platform and `X-ZS-SDK-Version`. The platform comes from `X-ZS-SDK-Platform` (sent by Android) or else from the User-Agent.
 
-| SDK | Shape |
+| Caller | Shape |
 |---|---|
-| iOS 1.6.0+, Android 1.3.0+, Flutter 1.8.0+ | Full: answer options are objects with `route`, plus the `deflect` and `downgrade` blocks, and the offer carries `duration_unit`. |
-| Older iOS and Flutter, and other callers | Base: answer options are objects without `route`. No `deflect` or `downgrade`. |
-| Android before 1.3.0 | Legacy: answer options are plain label strings. No `deflect` or `downgrade`. |
+| iOS with ZeroSettleKit 1.6.0 or later | Full: answer options are objects with `route`, plus the `deflect` and `downgrade` blocks, and the offer carries `duration_unit`. |
+| Android (every released version, 1.2.1 and earlier), including Flutter apps on Android | Legacy: answer options are plain label strings. No `deflect` or `downgrade`. A later release adds the full shape. |
+| Older iOS, Flutter 1.7.0 on iOS (it bundles ZeroSettleKit 1.5.x), and direct calls | Base: answer options are objects without `route`. No `deflect` or `downgrade`. |
 
 If you call this endpoint directly without those headers, you get the base shape.
 

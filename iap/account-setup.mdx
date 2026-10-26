@@ -160,7 +160,7 @@ await ZeroSettle.instance.configure(
 - **Publishable key** (`zs_pk_...`): ships inside your app, so treat it as public. The SDK and the `/v1/iap/*` endpoints use it in the `X-ZeroSettle-Key` header. Anyone who has it can call those endpoints, so never rely on it alone to protect something on your server. See [Best Practices](/iap/best-practices#api-key-usage).
 - **Secret key** (`zs_sk_...`): server only. On the current API it is accepted only by `GET /v1/iap/migration-cohort/`.
 - **Sandbox and live are separate environments.** The key prefix picks the environment. Products, event webhook endpoints and App Store Server Notifications settings are per environment, so set each one up again for live. See [Go-Live Checklist](/iap/go-live).
-- **Live needs approval.** A new account is not approved for live transactions. Until you complete Go Live, live requests return HTTP 403 with the code `not_whitelisted`. See [Get approved for live](/iap/go-live#get-approved-for-live).
+- **Live needs approval.** A new account is not approved for live transactions. Until you complete Go Live, live web checkout requests return HTTP 403 with the code `not_whitelisted`. See [Get approved for live](/iap/go-live#get-approved-for-live).
 - **Purchases from TestFlight, Xcode and App Review** made with a live key stay in Live and are marked as test purchases. See [Testing](/iap/testing#live-mode-test-purchases-and-testflight).
 
 For the REST authentication details and error codes, see the [API introduction](/api-reference/introduction). For event endpoints and signing, see [Event Webhooks](/iap/event-webhooks).

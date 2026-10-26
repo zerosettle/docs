@@ -114,7 +114,7 @@ Web prices are set independently from store prices. This lets you pass platform 
 
 - `product.webPrice` — the web checkout price you set on the dashboard
 - `product.storeKitPrice` — the App Store price, fetched from StoreKit on-device (iOS and Flutter on iOS)
-- `product.appStorePrice` — the App Store price from the catalog, on every platform. On Android `product.playStorePrice` exists but the backend does not populate it yet
+- `product.appStorePrice` — the App Store price from the catalog, on every platform. On Android, `product.playStorePrice` is the Google Play price from your synced Play catalog, and it is `null` until the product is linked to a Play product with a price
 
 ## Checkout Configuration
 
@@ -187,8 +187,9 @@ ZeroSettle.purchase(activity = activity, productId = product.id)
 // this code when web checkout is off for the user's jurisdiction:
 try {
     await ZeroSettleKit.purchase(product.id, user.id);
-} catch (error) {
-    if (error.code === 'web_checkout_disabled_for_jurisdiction') {
+} catch (error: any) {
+    // 1.1.0 rejects with 'web_checkout_disabled'
+    if (error?.code === 'web_checkout_disabled') {
         // Fall back to StoreKit
     }
 }
@@ -200,7 +201,8 @@ try {
 
 // Flutter has no isWebCheckoutEnabled. Read the global setting from
 // the remote config. This is the global setting; per-jurisdiction
-// overrides are in config.checkout.jurisdictions:
+// overrides are in config.checkout.jurisdictions. On Android,
+// getRemoteConfig() returns null; rely on purchase() failing instead:
 final config = await ZeroSettle.instance.getRemoteConfig();
 if (config?.checkout.isEnabled ?? true) {
     // Show web checkout button
@@ -212,7 +214,7 @@ if (config?.checkout.isEnabled ?? true) {
 
 ### Enable / Disable
 
-You can disable web checkout entirely (globally or per jurisdiction) from the dashboard. When disabled, iOS `isWebCheckoutEnabled` returns `false`, and the checkout sheet fails with `webCheckoutDisabledForJurisdiction` (Flutter: `ZSWebCheckoutDisabledException`, React Native: `web_checkout_disabled_for_jurisdiction`). Use this to gracefully fall back to StoreKit.
+You can disable web checkout entirely (globally or per jurisdiction) from the dashboard. When disabled, iOS `isWebCheckoutEnabled` returns `false`, and the checkout sheet fails with `webCheckoutDisabledForJurisdiction` (Flutter: `ZSWebCheckoutDisabledException`, React Native: error code `web_checkout_disabled`). Use this to gracefully fall back to StoreKit.
 
 ## Promotions
 

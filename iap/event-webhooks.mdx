@@ -44,7 +44,7 @@ sync, trigger emails, or notify your team, without polling our API.
   <Accordion title="Subscription lifecycle">
     | Event | When it fires |
     |---|---|
-    | `subscription.purchased` | A new subscription was purchased (first grant) |
+    | `subscription.purchased` | A new subscription, non-consumable or non-renewing purchase was granted (first grant) |
     | `subscription.renewed` | An existing subscription renewed for a new period. Carries the new period's `expires_at` and status `active` |
     | `subscription.cancelled` | Auto-renew was turned off. **Access continues until period end** |
     | `subscription.expired` | The subscription ended and access was revoked. Also sent when a full refund of the current billing period ends the subscription |
@@ -190,7 +190,7 @@ different: see [Switch & Save events](#switch-and-save-events). Subscription and
 }
 ```
 
-### Switch & Save events
+### Switch and Save events
 
 `migration.eligible`, `migration.ineligible` and `migration.completed` do **not** use the
 envelope above. They have no `id`, `type`, `created` or `environment`. They carry
@@ -429,12 +429,13 @@ app.post('/webhooks/zerosettle', express.raw({ type: 'application/json' }), (req
   changes we can make.
 </Info>
 
-- **No event for one-time or consumable purchases.** Consumable purchases send no event
-  at all, and there is no event type for a one-time purchase. The only payment-level event
-  is `transaction.refunded`. For these purchases, read
+- **No event for consumable purchases.** A consumable purchase sends no event.
+  Non-consumable and non-renewing purchases send `subscription.purchased` (with
+  `data.entitlement.expires_at` set to `null` for a non-consumable, and `will_renew` set to
+  `false`), even though they are not subscriptions. The only payment-level event is
+  `transaction.refunded`. For consumables, read
   [`GET /v1/iap/transaction-history/`](/api-reference/endpoint/get-transaction-history)
-  or [`GET /v1/iap/entitlements/`](/api-reference/endpoint/get-entitlements) from your
-  server.
+  from your server.
 - **Pause, resume, auto-renew turned back on and dispute reversals do not emit events.** If you offer
   [pause](/iap/custom-cancel-flow) as a cancel-flow option, the access change reaches
   your server through no event. A customer turning auto-renew back on after cancelling

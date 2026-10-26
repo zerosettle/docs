@@ -157,16 +157,8 @@ final zs = ZeroSettle.instance;
 ## React Native (preview)
 
 <Warning>
-  React Native support is a preview. The package is **not published to npm**, and version 1.1.0 is iOS only. Install it from the public GitHub repository at the `1.1.0` tag.
+  React Native support is a preview, and the package is **not published yet**: it is not on npm, and there is no supported install command. Version 1.1.0 is iOS only. For early access, contact [support@zerosettle.io](mailto:support@zerosettle.io).
 </Warning>
-
-```bash
-npm install github:zerosettle/ZeroSettle-ReactNative#1.1.0
-# or
-yarn add github:zerosettle/ZeroSettle-ReactNative#1.1.0
-```
-
-Then run `cd ios && pod install`.
 
 <Note>
   Requires iOS 17.0+ and the React Native New Architecture. Android is not available: the package renders an empty view there. The podspec pulls ZeroSettleKit from Swift Package Manager at `1.1.0` or later within the 1.x series, so a fresh install gets the latest 1.x release. See [SDK versions](/iap/sdk-versions).
@@ -184,9 +176,6 @@ ZeroSettleKit.configure({ publishableKey: 'zs_pk_test_...' });
 <Note>
   React Native 1.1.0 uses the `bootstrap(userId)` identity model. Every other platform is identify-first.
 </Note>
-
-**Resources:**
-- [GitHub: ZeroSettle-ReactNative](https://github.com/zerosettle/ZeroSettle-ReactNative)
 
 ---
 

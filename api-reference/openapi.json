@@ -3496,7 +3496,7 @@
           "deflect": {
             "type": "object",
             "nullable": true,
-            "description": "Deflection block, or null. Sent only to SDKs on the full shape (iOS 1.6.0+, Android 1.3.0+, Flutter 1.8.0+).",
+            "description": "Deflection block, or null. Sent only to SDKs on the full shape (ZeroSettleKit 1.6.0 and later on iOS; a later release for Android and Flutter).",
             "properties": {
               "enabled": {
                 "type": "boolean"
@@ -4574,7 +4574,7 @@
           "route": {
             "type": "string",
             "nullable": true,
-            "description": "Where selecting this option leads. Sent only on the full shape (iOS 1.6.0+, Android 1.3.0+, Flutter 1.8.0+)."
+            "description": "Where selecting this option leads. Sent only on the full shape (ZeroSettleKit 1.6.0 and later on iOS; a later release for Android and Flutter)."
           }
         },
         "description": "A survey answer option."

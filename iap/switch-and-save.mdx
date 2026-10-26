@@ -156,7 +156,9 @@ OfferTipView(
 
 ```kotlin Kotlin
 // Android uses the ZeroSettleOfferTip Composable from the optional :ui module.
-val mgr = ZeroSettle.offerManager()
+// Remember the manager so recomposition does not create a new one.
+// The Composable calls evaluate() itself.
+val mgr = remember { ZeroSettle.offerManager() }
 ZeroSettleOfferTip(offerManager = mgr)
 ```
 
@@ -257,7 +259,8 @@ Column(
 
 ```kotlin Kotlin
 // Android ships the ZeroSettleOfferTip Composable in the optional :ui module.
-ZeroSettleOfferTip(offerManager = ZeroSettle.offerManager())
+val mgr = remember { ZeroSettle.offerManager() }
+ZeroSettleOfferTip(offerManager = mgr)
 ```
 
 </CodeGroup>

@@ -114,7 +114,7 @@ fun ProductView(product: Product) {
 The `Product` model carries Play-specific fields (all nullable, populated when the product is configured in Google Play Console):
 - `product.playProductId` — the Play Console product id
 - `product.playBasePlanId` — the Play base plan id (subscriptions)
-- `product.playStorePrice` — a forward-compat slot for the Play price (the backend does not currently emit it)
+- `product.playStorePrice` — the Google Play price from your synced Play catalog, `null` until the product is linked to a Play product with a price
 
 ## Sync Events
 

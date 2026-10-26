@@ -6,20 +6,20 @@ icon: 'credit-card'
 
 ZeroSettle In-App Purchase is a web checkout SDK for mobile apps. It processes payments via Stripe instead of Apple's StoreKit or Google Play Billing, with ZeroSettle acting as the Merchant of Record.
 
-The platform handles payments, tax compliance, refunds, receipts, and liability. The SDK supports **Swift**, **Kotlin**, **Flutter**, and **React Native** (preview, iOS only).
+The platform handles payments, tax compliance, refunds, receipts, and liability. The SDK supports **Swift**, **Kotlin**, **Flutter**, and **React Native** (preview, iOS only, not yet published).
 
 ## Fee Comparison
 
 | | Apple/Google IAP | ZeroSettle IAP |
 | --- | --- | --- |
 | **Fee** | 30% (15% for small business) | 5% + 50¢ |
-| **You keep on a $9.99 sale** | $6.99 | $8.99 before Stripe processing, $8.40 after (Managed). $9.94 and $9.35 with BYOS |
+| **You keep on a $9.99 sale** | $6.99 | $8.99 with Managed (Stripe processing included). $9.94 with BYOS before your own Stripe processing, about $9.35 after |
 | **Tax handling** | Apple/Google handles | ZeroSettle handles |
 | **Compliance** | Your responsibility | ZeroSettle's responsibility |
 | **Payouts** | 45+ days | [Rolling via Stripe](/iap/payouts) |
 | **Your Stripe account** | N/A | Use your own (BYOS) or ours (Managed) |
 
-With **Bring Your Own Stripe (BYOS)**, you connect your existing Stripe account and keep your products, prices, customers, and reporting. Charges go directly to your account — ZeroSettle adds the Merchant of Record layer on top. BYOS fee is 0.5%. Stripe processing (about 2.9% + 30¢) applies in both modes. See [Payouts](/iap/payouts) for the full breakdown.
+With **Bring Your Own Stripe (BYOS)**, you connect your existing Stripe account and keep your products, prices, customers, and reporting. Charges go directly to your account — ZeroSettle adds the Merchant of Record layer on top. BYOS fee is 0.5%. With BYOS your Stripe account also pays Stripe's processing fee (about 2.9% + 30¢). In Managed mode it is included in the 5% + 50¢. See [Payouts](/iap/payouts) for the full breakdown.
 
 ## Payment Modes
 
@@ -229,7 +229,7 @@ Prices are set per storefront — your Apple price and web price can differ. The
 | Swift (iOS) | Available |
 | Kotlin (Android) | Available |
 | Flutter | Available |
-| React Native | Preview (iOS only, installed from GitHub) |
+| React Native | Preview (iOS only, not yet published) |
 
 Versions and requirements for each platform are on [SDK versions](/iap/sdk-versions).
 

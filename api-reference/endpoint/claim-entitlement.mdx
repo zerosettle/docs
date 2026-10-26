@@ -9,7 +9,7 @@ openapi: 'POST /iap/claim-entitlement/'
 |---|---|---|
 | `400` | `Invalid JSON body`, `jws_representation is required`, `user_id is required` | Malformed request. |
 | `400` | `Cannot claim entitlement to a synthetic identity` | `user_id` starts with `apple_otid:`. Those are placeholders created from App Store notifications; claim to a real user id. |
-| `400` | `Consumable products cannot be claimed` | Only subscriptions and non-consumables can move between users. |
+| `400` | `Consumable products cannot be claimed` | Consumables cannot be claimed. Subscriptions, non-consumables and non-renewing purchases can. |
 | `400` | `Missing productId in JWS payload`, `No originalTransactionId in JWS` | The JWS does not describe a claimable purchase. |
 | `401` | `JWS signature verification failed` | The JWS did not verify against Apple's certificate chain. |
 | `404` | `No entitlement found for this transaction` | Nothing is recorded for this `originalTransactionId`, so there is nothing to claim. |
