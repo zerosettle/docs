@@ -2520,8 +2520,8 @@
                   "type": "object",
                   "properties": {
                     "restored": {
-                      "type": "boolean",
-                      "description": "`true` when entitlements were linked to `user_id`."
+                      "type": "integer",
+                      "description": "How many entitlements were linked to `user_id`. `0` when nothing was restored."
                     },
                     "target_identity_id": {
                       "type": "integer",
@@ -2538,7 +2538,7 @@
                   ]
                 },
                 "example": {
-                  "restored": true,
+                  "restored": 1,
                   "target_identity_id": 4821,
                   "message": "Purchases restored"
                 }
