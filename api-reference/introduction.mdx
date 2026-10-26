@@ -43,7 +43,7 @@ The SDKs send `X-ZS-SDK-Version` with each request, and the Android SDK also sen
 
 ## Rate Limits
 
-The SDK endpoints do not enforce rate limits, but please be reasonable with request volume. If you need high-throughput access, contact support@zerosettle.io.
+Most SDK endpoints are not rate limited, but please be reasonable with request volume. Endpoints that are limited say so on their page and return `429` with a `Retry-After` header when you are over the limit. If you need high-throughput access, contact support@zerosettle.io.
 
 The [Data API](/api-reference/data-api) (`/v1/data/`) is limited to 600 requests a minute per credential. Over the limit it returns `429` with a `Retry-After` header.
 
