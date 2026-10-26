@@ -56,12 +56,9 @@ if let migration = catalog.config?.migration {
 ```
 
 ```kotlin Kotlin
-val catalog = ZeroSettle.fetchProducts().getOrThrow()
-
-catalog.config?.migration?.let { migration ->
-    // Show migration prompt to eligible users
-    println("${migration.title}: ${migration.discountPercent}% off")
-}
+// Android's ProductCatalog has no config. Use the offer manager instead.
+val mgr = ZeroSettle.offerManager()
+mgr.evaluate()
 ```
 
 ```tsx React Native
@@ -87,7 +84,7 @@ After a successful migration purchase, track the conversion:
 
 <CodeGroup>
 ```swift Swift
-try await ZeroSettle.shared.trackMigrationConversion(userId: user.id)
+try await ZeroSettle.shared.trackMigrationConversion()
 ```
 
 ```kotlin Kotlin
@@ -222,18 +219,12 @@ Promotional pricing lets you offer discounts on any product. Promotions are conf
 
 ### Accessing Promotions
 
-Active promotions are returned alongside product data. No separate fetch is needed:
+Active promotions are returned alongside product data. No separate fetch is needed. The Android `Product` has no `promotion` field:
 
 <CodeGroup>
 ```swift Swift
 if let promo = product.promotion {
     print("\(promo.displayName): \(promo.promotionalPrice.formatted)")
-}
-```
-
-```kotlin Kotlin
-product.promotion?.let { promo ->
-    println("${promo.displayName}: ${promo.promotionalPrice?.formatted}")
 }
 ```
 

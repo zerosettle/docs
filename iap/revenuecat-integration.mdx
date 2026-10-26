@@ -233,7 +233,9 @@ fun PaywallScreen(zsProduct: Product, rcPackage: Package) {
                 }
             }
         }) {
-            Text("Subscribe — ${zsProduct.webPrice?.formatted}")
+            // Price has amountCents and currencyCode only, so format it yourself
+            val price = zsProduct.webPrice?.let { "%.2f %s".format(it.amountCents / 100.0, it.currencyCode) }
+            Text("Subscribe — $price")
         }
 
         // Play Store fallback via RevenueCat

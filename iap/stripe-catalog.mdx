@@ -1,6 +1,6 @@
 ---
 title: 'Stripe Catalog'
-description: 'Link your Stripe products to their StoreKit counterparts'
+description: 'Link your Stripe products to your ZeroSettle products'
 icon: 'arrows-left-right'
 ---
 
@@ -14,7 +14,7 @@ If you're using ZeroSettle's default Express setup, products and prices are crea
 
 ## How It Works
 
-When a customer checks out, ZeroSettle creates a Stripe `PaymentIntent` (or `Subscription`) using the product and price IDs from your mapping. Without a mapping, ZeroSettle wouldn't know which Stripe product corresponds to which StoreKit product in your catalog.
+When a customer checks out, ZeroSettle creates a Stripe `PaymentIntent` (or `Subscription`) using the product and price IDs from your mapping. Without a mapping, ZeroSettle wouldn't know which Stripe product corresponds to which product in your catalog.
 
 The mapping ensures:
 
@@ -29,7 +29,7 @@ The mapping ensures:
 3. For each ZeroSettle product, select the corresponding Stripe product and price from the dropdown
 4. Click **Save**
 
-Each mapping links a ZeroSettle product (identified by its App Store product ID) to a Stripe `Product` and `Price` pair.
+Each mapping links a ZeroSettle product (identified by its product reference ID) to a Stripe `Product` and `Price` pair.
 
 <Frame caption="AI-suggested product mapping with price mismatch warning and match confidence indicator">
   <img src="/images/stripe-catalog-mapping.png" alt="Stripe catalog mapping showing AI-suggested match between StoreKit and Stripe products with price mismatch warning" style={{ maxWidth: '500px' }} />

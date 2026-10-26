@@ -44,7 +44,7 @@ ZeroSettle.shared.configure(.init(
 ```
 
 <Warning>
-  If you use RevenueCat, set `syncStoreKitTransactions: false` to avoid conflicts. RevenueCat manages its own StoreKit listener. See [RevenueCat Integration](/iap/revenuecat-integration).
+  If RevenueCat owns native billing and you do not want native purchases in ZeroSettle's numbers, set `syncStoreKitTransactions: false`. Leaving it on is also supported: the two SDKs do not conflict. See [RevenueCat Integration](/iap/revenuecat-integration).
 </Warning>
 
 ## Purchasing via StoreKit
@@ -58,8 +58,7 @@ Use `purchaseViaStoreKit()` to trigger a native StoreKit 2 purchase:
 ```swift
 do {
     let transaction = try await ZeroSettle.shared.purchaseViaStoreKit(
-        productId: "premium_monthly",
-        userId: currentUser.id
+        productId: "premium_monthly"
     )
     // transaction is a StoreKit.Transaction
     print("StoreKit purchase completed: \(transaction.id)")
@@ -109,8 +108,7 @@ struct ProductView: View {
                 Button("Buy with App Store — \(skPrice.formatted)") {
                     Task {
                         try? await ZeroSettle.shared.purchaseViaStoreKit(
-                            productId: product.id,
-                            userId: currentUser.id
+                            productId: product.id
                         )
                     }
                 }

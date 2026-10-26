@@ -6,20 +6,20 @@ icon: 'credit-card'
 
 ZeroSettle In-App Purchase is a web checkout SDK for mobile apps. It processes payments via Stripe instead of Apple's StoreKit or Google Play Billing, with ZeroSettle acting as the Merchant of Record.
 
-The platform handles payments, tax compliance, refunds, receipts, and liability. The SDK supports **Swift**, **Kotlin**, **Flutter**, and **React Native** (iOS only).
+The platform handles payments, tax compliance, refunds, receipts, and liability. The SDK supports **Swift**, **Kotlin**, **Flutter**, and **React Native** (preview, iOS only).
 
 ## Fee Comparison
 
 | | Apple/Google IAP | ZeroSettle IAP |
 | --- | --- | --- |
 | **Fee** | 30% (15% for small business) | 5% + 50¢ |
-| **You keep on a $9.99 sale** | $6.99 | ~$8.99 |
+| **You keep on a $9.99 sale** | $6.99 | $8.99 before Stripe processing, $8.40 after (Managed). $9.94 and $9.35 with BYOS |
 | **Tax handling** | Apple/Google handles | ZeroSettle handles |
 | **Compliance** | Your responsibility | ZeroSettle's responsibility |
 | **Payouts** | 45+ days | [Rolling via Stripe](/iap/payouts) |
 | **Your Stripe account** | N/A | Use your own (BYOS) or ours (Managed) |
 
-With **Bring Your Own Stripe (BYOS)**, you connect your existing Stripe account and keep your products, prices, customers, and reporting. Charges go directly to your account — ZeroSettle adds the Merchant of Record layer on top. BYOS fee is 0.5%.
+With **Bring Your Own Stripe (BYOS)**, you connect your existing Stripe account and keep your products, prices, customers, and reporting. Charges go directly to your account — ZeroSettle adds the Merchant of Record layer on top. BYOS fee is 0.5%. Stripe processing (about 2.9% + 30¢) applies in both modes. See [Payouts](/iap/payouts) for the full breakdown.
 
 ## Payment Modes
 
@@ -169,8 +169,8 @@ Opens the checkout URL in the user's default browser. The result returns to your
 <CardGroup cols={2}>
   <Card title="ZeroSettle Handles" icon="shield-check">
     - **Payment processing** — Stripe-powered, Apple Pay + cards
-    - **Tax compliance** — US sales tax, EU VAT, AU GST
-    - **Tax remittance** — Filed and paid to authorities
+    - **Tax compliance** — sales tax calculated at checkout
+    - **Tax remittance** — Filed and paid by ZeroSettle as Merchant of Record
     - **Merchant of Record** — ZeroSettle is the legal seller
     - **Disputes & chargebacks** — Handled automatically
     - **Refunds** — Processed automatically
@@ -224,12 +224,14 @@ Prices are set per storefront — your Apple price and web price can differ. The
 
 ## Platform Support
 
-| Platform | Requirements | Status |
-|---|---|---|
-| Swift (iOS) | iOS 17.0+, Swift 6.1+, Xcode 16.3+ | Available |
-| Kotlin (Android) | Android API 26+, Kotlin 1.9+ | Available |
-| Flutter | Flutter 3.3.0+, iOS 17.0+ / Android API 26+ | Available |
-| React Native | React Native 0.76+, iOS 17.0+ | Available (iOS only) |
+| Platform | Status |
+|---|---|
+| Swift (iOS) | Available |
+| Kotlin (Android) | Available |
+| Flutter | Available |
+| React Native | Preview (iOS only, installed from GitHub) |
+
+Versions and requirements for each platform are on [SDK versions](/iap/sdk-versions).
 
 ## Beyond Checkout
 

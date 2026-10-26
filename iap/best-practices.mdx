@@ -461,7 +461,9 @@ fun PurchaseButton(product: Product) {
             }
         }
     }) {
-        Text("Buy ${product.displayName} — ${product.webPrice?.formatted}")
+        // Price has amountCents and currencyCode only, so format it yourself
+        val price = product.webPrice?.let { "%.2f %s".format(it.amountCents / 100.0, it.currencyCode) }
+        Text("Buy ${product.displayName} — $price")
     }
 }
 ```
@@ -1492,9 +1494,13 @@ curl -X GET "https://api.zerosettle.io/v1/iap/entitlements/?user_id=<user_id>" \
 
 ### API Key Usage
 
-All ZeroSettle API endpoints — including the REST API — authenticate with your **publishable key** (`zs_pk_live_...` or `zs_pk_test_...`) via the `X-ZeroSettle-Key` header. This is the same key you use in the SDK.
+The `/v1/iap/*` endpoints, including the REST API, authenticate with your **publishable key** (`zs_pk_live_...` or `zs_pk_test_...`) via the `X-ZeroSettle-Key` header. This is the same key you use in the SDK.
 
 | Key Type | Where to Use |
 |----------|--------------|
-| Publishable (`zs_pk_`) | SDK, REST API, everywhere |
-| Secret (`zs_sk_`) | Reserved for future use |
+| Publishable (`zs_pk_`) | The SDK and the `/v1/iap/*` REST endpoints |
+| Secret (`zs_sk_test_...` / `zs_sk_live_...`) | Server-to-server only. Never ship it in an app. Today only `GET /v1/iap/migration-cohort/` accepts it |
+
+`GET /v1/iap/migration-cohort/` lists the users who are currently eligible for the Switch & Save tip, for outreach such as email or push campaigns. It takes the secret key in the same `X-ZeroSettle-Key` header, infers sandbox or live from the key prefix, and pages with `cursor` and `limit` (default 100, maximum 500). It does not count campaign impressions.
+
+The publishable key ships inside your app, so anyone who extracts it can read entitlements by `user_id`. Do not rely on it to keep entitlement data private. Store secret keys only on your server.

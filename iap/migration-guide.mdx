@@ -123,9 +123,9 @@ try await ZeroSettle.shared.identify(.deferred)
 try await ZeroSettle.shared.identify(.user(id: user.id))
 ```
 
-Reconciliation of anonymous purchases into an authenticated account (i.e. "the user logged in after making a guest purchase — keep their entitlements") will land in a follow-up release as `completeIdentification(.user(...))`. PR C v1 ships the SDK enum surface only.
+Reconciliation of anonymous purchases into an authenticated account (i.e. "the user logged in after making a guest purchase — keep their entitlements") is not shipped in ZeroSettleKit 1.6.2. The SDK provides the `Identity` enum surface only, so a guest purchase is not merged into an account when the user later signs in.
 
-`fetchProducts(userId:)` and `purchaseViaStoreKit(productId:userId:)` keep their existing optional-`userId` signatures (no deprecation), but now fall back to the identified user when called without one — so `ZeroSettle.shared.fetchProducts()` after `identify(_:)` returns the user-context catalog automatically.
+`fetchProducts(userId:)` and `purchaseViaStoreKit(productId:userId:)` keep their optional-`userId` signatures, but the `userId` parameter of `purchaseViaStoreKit` is documented as deprecated and will be removed in ZeroSettleKit 2.0. Both now fall back to the identified user when called without one — so `ZeroSettle.shared.fetchProducts()` after `identify(_:)` returns the user-context catalog automatically.
 
 ## Parameter Removals
 

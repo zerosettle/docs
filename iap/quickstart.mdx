@@ -104,7 +104,7 @@ Configure the SDK early in your app lifecycle. `configure()` is synchronous — 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `publishableKey` | Required | Your publishable key from the dashboard |
-| `syncStoreKitTransactions` | `true` | Set to `false` if using RevenueCat |
+| `syncStoreKitTransactions` | `true` | Set to `false` only if another SDK such as RevenueCat owns native billing and you don't want native purchases in ZeroSettle's numbers |
 | `preloadCheckout` | `false` | Pre-create PaymentIntents on identify for instant checkout. See [Preloading](/iap/preloading) |
 | `maxPreloadedWebViews` | `nil` | Cap WebView pre-rendering pool size. See [Preloading](/iap/preloading) |
 

@@ -184,8 +184,8 @@ To exercise the integration end to end:
 
 1. Set the scheme's **StoreKit Configuration** to **None**
 2. Run on a physical device signed into a **Sandbox** Apple ID
-3. Use a **sandbox** publishable key (`zs_pk_test_...`) — a sandbox Apple ID with a live key files the transaction under sandbox anyway, where the live dashboard won't show it. See [Testing & Sandbox](/iap/testing#storekit-sandbox--live-key-mismatch)
-4. Buy, then check **Transactions** on the dashboard in sandbox mode
+3. Use a **sandbox** publishable key (`zs_pk_test_...`) and look in sandbox mode. If you use a live key with a Sandbox Apple ID instead, the purchase stays in Live, marked as a test purchase, and is hidden from Live figures unless you turn on **Include test purchases**. See [Testing & Sandbox](/iap/testing#live-mode-test-purchases-and-testflight)
+4. Buy, then check **Transactions** on the dashboard
 
 ## Running alongside RevenueCat
 

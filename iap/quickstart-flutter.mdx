@@ -19,7 +19,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await ZeroSettle.instance.configure(
-    publishableKey: 'zs_pk_live_...',  // From your ZeroSettle dashboard
+    publishableKey: 'zs_pk_test_...',  // Sandbox key from your ZeroSettle dashboard
   );
 
   runApp(const MyApp());
@@ -32,7 +32,7 @@ void main() async {
 |-----------|---------|-------------|
 | `publishableKey` | Required | Your publishable key from the dashboard |
 | `syncStoreKitTransactions` | `true` | Set to `false` if using RevenueCat (iOS) |
-| `appleMerchantId` | `null` | Apple Pay merchant identifier (iOS, native pay) |
+| `appleMerchantId` | `null` | Only for native Apple Pay, which is not supported for new integrations. Leave unset |
 | `preloadCheckout` | `false` | Preload checkout sessions after `identify()` |
 | `syncPlayPurchases` | `true` | Forward Play Billing purchases to the backend (Android) |
 | `playLicenseKey` | `null` | PEM-encoded Play Console public key for local signature verification (Android) |
@@ -173,7 +173,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await ZeroSettle.instance.configure(
-    publishableKey: 'zs_pk_live_...',
+    publishableKey: 'zs_pk_test_...',
   );
 
   runApp(const MyApp());
