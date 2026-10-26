@@ -57,7 +57,7 @@ Gate your paywall on the second `identify()` having completed. If a user can rea
 
 The SDK exposes the id it is acting as, and an id for analytics that is available before sign-in.
 
-Both properties are in the next SDK release.
+`analyticsUserId` is new in the next SDK release on every platform. On iOS, `currentUserId` also becomes public in that release. Android (`ZeroSettle.currentUserId`) and Flutter (`getCurrentUserId()`) already have it.
 
 | Property | What it returns |
 |---|---|

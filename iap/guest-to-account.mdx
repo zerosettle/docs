@@ -13,7 +13,7 @@ ZeroSettle handles this with **reconciliation**: your server tells ZeroSettle th
 </Note>
 
 <Info>
-  The server endpoints work for every app. The in-app calls on this page (`analyticsUserId`, `currentUserId` and `reconcile`) are in the next SDK release for iOS, Android and Flutter. Until you update, identify guests with an id your app mints itself (see [User Identity](/iap/user-identity)), so you already know it, and use [Option 1](#option-1-your-server-calls-the-endpoint).
+  The server endpoints work for every app. The in-app calls on this page, `analyticsUserId` and `reconcile`, and `currentUserId` on iOS, are in the next SDK release for iOS, Android and Flutter. Until you update, identify guests with an id your app mints itself (see [User Identity](/iap/user-identity)), so you already know it, and use [Option 1](#option-1-your-server-calls-the-endpoint).
 </Info>
 
 ## How it works
@@ -156,14 +156,14 @@ A key stays bound to the ids it first succeeded with.
 
 - **Same key, same ids, within 24 hours.** You get the stored result back, and nothing runs again.
 - **Same key, same ids, after 24 hours.** You still get the original success. The ids were already merged, so the call does not fail.
-- **Same key, different ids, at any time.** The call is refused with `422 idempotency_mismatch`, and it stays refused. Use a new key for a new pair.
+- **Same key, different ids.** Refused with `422 idempotency_mismatch` whenever the key already has a stored success. Use a new key for a new pair.
 - **A refusal is not stored.** A retry after a `409` runs again, with the same key or a new one.
 
 Derive the key from the pair or from the sign-up (`signup-7741`), not from a timestamp, so a retry reuses it.
 
 ### Errors
 
-Every error from the identity endpoints has the same body:
+Every error from `/v1/identities/reconcile/` and `/v1/identities/link-token/`, and the link-token and rate-limit errors of the `/v1/iap/` identity endpoints, has this body:
 
 ```json
 { "error": { "code": "reconcile_refused", "message": "The ids could not be reconciled. See the dashboard for details." } }
@@ -180,6 +180,8 @@ Every error from the identity endpoints has the same body:
 | 429 | `rate_limited` | Over a limit. Wait `Retry-After` seconds. See [Rate limits](#rate-limits) |
 
 The link-token endpoints add one more: `401 invalid_link_token`, for a token that is malformed, has a bad signature, is expired, was already used, or belongs to the other environment. The reason is deliberately not given.
+
+An invalid publishable key, and a `400` from `POST /v1/iap/identity-link/`, use the standard `{"error": "<message>"}` shape instead.
 
 ## Option 2: your server mints a link token
 
@@ -314,6 +316,8 @@ do {
     // Expired, already used, or not valid. Ask your server for a new one.
 } catch ZeroSettleError.rateLimited(let retryAfter) {
     // The token is still usable. Retry after retryAfter seconds.
+} catch {
+    // Network or other error.
 }
 ```
 
@@ -412,7 +416,7 @@ While a refusal stands, the guest id still owns the guest's purchases and the ac
 
 [`POST /v1/iap/restore-purchases/`](/api-reference/endpoint/restore-purchases) moves purchases from an email-only guest to a user id. The ZeroSettle SDKs do not call it: it is for a restore flow you build yourself, with the publishable key.
 
-- It runs each match through the same reconcile rules. A conflict refuses that guest and moves nothing from it. The response is still `200`, with `restored: 0` and a message telling the person to contact support.
+- It runs each match through the same reconcile rules. A conflict refuses that guest and moves nothing from it. The response is still `200`. `restored` counts only what moved (so it is `0` when every match was refused), and `message` tells the person to contact support.
 - A restore that moves purchases sends [`identity.reconciled`](/iap/event-webhooks#identity-reconciled) with `actor` of `restore_purchases`, not `subscription.purchased`. `from_user_id` is `null`, because the guest had no external id.
 - It is rate limited per IP (10 an hour), per email and app (5 an hour) and per app (6,000 a minute). Over a limit it returns `429` with a `Retry-After` header. If the rate-limit store is unavailable, the per-IP and per-email limits refuse the call with `429` and `Retry-After: 5`.
 - The `429` body is `{"error": "Too many restore attempts. Try again later."}`, a plain string rather than the identity error shape.

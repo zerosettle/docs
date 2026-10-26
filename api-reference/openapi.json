@@ -2417,7 +2417,7 @@
                   },
                   "user_id": {
                     "type": "string",
-                    "description": "The user's external ID. Before `identify`, SDKs send a per-device UUID (the SDK's `analyticsUserId`), the same one `identify(.anonymous)` adopts later, instead of the literal `anonymous`. A guest-to-account reconcile moves these events to the account."
+                    "description": "The user's external ID. Up to the current SDK release, events sent before `identify` use the literal `anonymous`. From the next SDK release, SDKs send a per-device UUID (the SDK's `analyticsUserId`) instead, the same one `identify(.anonymous)` adopts later. A guest-to-account reconcile moves these events to the account."
                   },
                   "product_id": {
                     "type": "string",
@@ -2425,7 +2425,7 @@
                   },
                   "environment": {
                     "type": "string",
-                    "description": "Optional. The StoreKit environment the device is running in (`Production`, `Sandbox` or `Xcode`), sent by the iOS SDK. A non-production environment sent with a live key marks the event as a test event. Omitted when unknown, and an omitted value is never treated as a test event."
+                    "description": "Optional. The StoreKit environment the device is running in (`Production`, `Sandbox` or `Xcode`), sent by the iOS SDK from the next SDK release. A non-production environment sent with a live key marks the event as a test event. Omitted when unknown, and an omitted value is never treated as a test event."
                   },
                   "screen_name": {
                     "type": "string",
@@ -2487,7 +2487,7 @@
       "post": {
         "operationId": "restorePurchases",
         "summary": "Restore Purchases",
-        "description": "Moves purchases made by an anonymous (email-only) customer to the current user ID, matched by email. Useful when a user reinstalls the app or signs in on a new device. The ZeroSettle SDKs do not call this endpoint: it is for your own restore flow.\n\nEach matching guest identity is moved through the same reconcile core as Reconcile Identities. If the guest and the target hold a live entitlement to the same non-consumable product (a subscription, including a trial or one cancelled but still running out its period, or a one-time unlock; consumables never conflict), that guest is refused and **nothing is restored from it**. The response is still `200`, with `restored` of `0` for it and a `message` telling the person to contact support.\n\nA move that happens sends an `identity.reconciled` webhook, not `subscription.purchased`. The guest's Stripe links and profile are not moved by this endpoint.\n\nRate limited per IP (10 an hour), per email and app (5 an hour) and per app (6,000 a minute). Over a limit the response is `429` with a `Retry-After` header. If the rate-limit store is unavailable, the per-IP and per-email limits refuse the call with `429` and `Retry-After: 5`. A restore button should treat a `429` as a failed restore and offer a retry after the delay.",
+        "description": "Moves purchases made by an anonymous (email-only) customer to the current user ID, matched by email. Useful when a user reinstalls the app or signs in on a new device. The ZeroSettle SDKs do not call this endpoint: it is for your own restore flow.\n\nEach matching guest identity is moved through the same reconcile core as Reconcile Identities. If the guest and the target hold a live entitlement to the same non-consumable product (a subscription, including a trial or one cancelled but still running out its period, or a one-time unlock; consumables never conflict), that guest is refused and **nothing is restored from it**. The response is still `200`. `restored` counts only what moved (so it is `0` when every match was refused), and `message` tells the person to contact support.\n\nA move that happens sends an `identity.reconciled` webhook, not `subscription.purchased`. The guest's Stripe links and profile are not moved by this endpoint.\n\nRate limited per IP (10 an hour), per email and app (5 an hour) and per app (6,000 a minute). Over a limit the response is `429` with a `Retry-After` header. If the rate-limit store is unavailable, the per-IP and per-email limits refuse the call with `429` and `Retry-After: 5`. A restore button should treat a `429` as a failed restore and offer a retry after the delay.",
         "tags": [
           "Restore"
         ],
