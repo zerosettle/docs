@@ -164,6 +164,10 @@ Both sources are merged into a single entitlements list. Your app doesn't need t
 
 If a Play purchase is already owned by a different ZeroSettle account, the SDK does **not** silently transfer it. It surfaces a `PendingClaim` on `ZeroSettle.pendingClaims`; the host app resolves it explicitly with `ZeroSettle.transferPlayOwnershipToCurrentUser(productId)`.
 
+## Account tokens and `obfuscatedAccountId`
+
+When a user is signed in, the Android SDK sets `obfuscatedAccountId` on the Play purchase to an account token derived from that user. If the purchase is later synced under a different signed-in user, ZeroSettle re-attributes it to the token's user only when that user has synced before and the purchase has no owner yet. Otherwise the usual claim flow applies. Do not set your own `obfuscatedAccountId` when you use the ZeroSettle Android SDK.
+
 ## One-time products you haven't linked yet
 
 If a customer buys a Google Play one-time product that isn't linked to a product in your ZeroSettle catalog, ZeroSettle can't tell whether it's a consumable or a non-consumable. It records the purchase and its revenue but grants no lasting access, so a consumable pack never turns into permanent access by mistake. The sync call answers `owned: true` with no `entitlementId`, and the SDK acknowledges the purchase as usual.

@@ -44,7 +44,8 @@
               "iap/quickstart",
               "iap/quickstart-android",
               "iap/quickstart-flutter",
-              "iap/user-identity"
+              "iap/user-identity",
+              "iap/guest-to-account"
             ]
           },
           {
@@ -234,6 +235,15 @@
             "group": "Customer Portal",
             "pages": [
               "api-reference/endpoint/create-customer-portal-session"
+            ]
+          },
+          {
+            "group": "Identity",
+            "pages": [
+              "api-reference/endpoint/reconcile-identities",
+              "api-reference/endpoint/create-link-token",
+              "api-reference/endpoint/present-link-token",
+              "api-reference/endpoint/link-identity-rows"
             ]
           },
           {

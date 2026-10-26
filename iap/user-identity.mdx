@@ -47,11 +47,49 @@ let catalog = try await ZeroSettle.shared.identify(.user(id: user.id))
 let transaction = try await ZeroSettle.shared.purchase(productId: "premium_monthly")
 ```
 
-Gate your paywall on the second `identify()` having completed. If a user can reach a buy button before you know who they are, you have two choices — block the purchase until they sign in, or call `identify(.anonymous)` and accept that the purchase is permanently tied to that install (see the one-way-door warning under [Anonymous Users](#option-3-anonymous-users)).
+Gate your paywall on the second `identify()` having completed. If a user can reach a buy button before you know who they are, you have two choices — block the purchase until they sign in, or call `identify(.anonymous)` and accept that the purchase is tied to that install until your server moves it to an account (see [Guest to Account](/iap/guest-to-account)).
 
 <Note>
   Unrelated: elsewhere in these docs "deferred mode" refers to a checkout warmup optimisation in the SDK's networking layer. It has nothing to do with `Identity.deferred`.
 </Note>
+
+## Reading the current id
+
+The SDK exposes the id it is acting as, and an id for analytics that is available before sign-in.
+
+Both properties are in the next SDK release.
+
+| Property | What it returns |
+|---|---|
+| `currentUserId` | The id the SDK is acting as: your id after `identify(.user)`, the generated UUID after `identify(.anonymous)`. `nil` before any `identify()` and after `logout()` |
+| `analyticsUserId` | Set before sign-in too. The current id when there is one, otherwise a per-device UUID that is generated and stored on first use. It is the same UUID `identify(.anonymous)` adopts later, so paywall views recorded before identify join the purchase made after it |
+
+<CodeGroup>
+
+```swift Swift
+let signedInAs: String? = ZeroSettle.shared.currentUserId   // read-only
+let eventsId: String = ZeroSettle.shared.analyticsUserId    // never empty
+```
+
+```kotlin Kotlin
+val signedInAs: String? = ZeroSettle.currentUserId.value    // StateFlow, read-only
+val eventsId: String? = ZeroSettle.analyticsUserId()        // suspend, null only before configure()
+```
+
+```dart Flutter
+final String? signedInAs = await ZeroSettle.instance.getCurrentUserId();
+final String eventsId = await ZeroSettle.instance.analyticsUserId();
+```
+
+</CodeGroup>
+
+<Note>
+  On iOS, `currentUserId` is not observable by SwiftUI, so a view will not refresh when it changes. Track your own signed-in state for UI, and use these properties to read which id the SDK is using, for example to hand a guest id to your server at sign-up. See [Guest to Account](/iap/guest-to-account).
+</Note>
+
+<Warning>
+  **Do not switch signed-in users without `logout()`.** Calling `identify(.user(id: B))` while user A is signed in makes the SDK act as B, but purchases made as A stay with A, and nothing tells ZeroSettle that A and B are the same person. The SDK logs a warning when this happens. Call `logout()` first when a different person signs in. If A and B really are the same person (a guest who just signed up), have your server [reconcile](/iap/guest-to-account) the two ids instead.
+</Warning>
 
 ## Option 1: RevenueCat Users
 
@@ -308,9 +346,9 @@ final transaction = await ZeroSettle.instance.purchase(
 **Restoration**: `restoreEntitlements()` works for anonymous users — entitlements are tied to the persisted UUID.
 
 <Warning>
-  **Choosing `.anonymous` is a one-way door.** There is no merge or transfer from an anonymous identity to a real one: calling `identify(.user(id:))` later starts a *new* backend identity, and the anonymous install's purchase history stays behind on the old one. The UUID is also install-scoped — a reinstall or app-data clear loses it.
+  **An anonymous id is install-scoped.** The UUID lives on the device, so a reinstall or an app-data clear loses it, and with it the link to the purchases made under it.
 
-  If you expect to have real user IDs eventually, don't start on `.anonymous`. Mint a stable identifier you own on first launch and pass it to `Identity.user(id:)` from day one — see [Picking an identity on iOS](#picking-an-identity-on-ios). Reach for `.anonymous` only when you are confident the app will never have accounts.
+  If the person later creates an account, your server can move the guest's purchases to it, see [Guest to Account](/iap/guest-to-account). Without that step, calling `identify(.user(id:))` starts a new identity and the guest's purchase history stays behind on the old one. If you expect real user IDs eventually, you can also mint a stable identifier you own on first launch and pass it to `Identity.user(id:)` from day one, see [Picking an identity on iOS](#picking-an-identity-on-ios).
 </Warning>
 
 ## Picking an identity on iOS
@@ -337,7 +375,7 @@ SignInWithAppleButton(.signIn) { request in
 
 **Your backend's user ID.** A UUID your server minted at signup. Equally good, if you have a server.
 
-**An ID you mint on device.** No accounts and no backend, but you expect them later: generate a `UUID()` on first launch and store it in the Keychain (which survives reinstall, unlike `UserDefaults`). Pass it to `Identity.user(id:)` from the very first launch. This costs nothing now and avoids the anonymous one-way door described above.
+**An ID you mint on device.** No accounts and no backend, but you expect them later: generate a `UUID()` on first launch and store it in the Keychain (which survives reinstall, unlike `UserDefaults`). Pass it to `Identity.user(id:)` from the very first launch. This costs nothing now and keeps the guest's id under your control.
 
 <Note>
   The ID does not need to be a UUID. The SDK derives Apple's `appAccountToken` as a UUIDv5 over whatever string you pass, so Firebase UIDs, Auth0 `sub` values, and Apple's opaque user identifier all work as-is. Don't reshape your IDs to satisfy the SDK.
@@ -468,6 +506,9 @@ The SDK merges entitlements from all sources when you call `restoreEntitlements(
   </Accordion>
   <Accordion title="Use a stable identity ID">
     Pass a stable identifier to `Identity.user(id:)` that doesn't change. UUIDs work well. Avoid using email addresses directly as they can change.
+  </Accordion>
+  <Accordion title="Log out before another person signs in">
+    Call `logout()` when the signed-in person changes. Switching `identify(.user(id:))` from one user to another without it leaves the first user's pending work attached to the first id, and the SDK logs a warning.
   </Accordion>
   <Accordion title="Call restoreEntitlements on app launch">
     After `identify()`, call `restoreEntitlements()` so entitlements are synced even if the app was reinstalled, or a purchase was made on another device.

@@ -66,7 +66,7 @@ struct YourApp: App {
 
 The user ID you pass is what ties transactions together across devices and reinstalls. On iOS, Sign in with Apple's opaque user identifier is the strongest option available; see [Picking an identity on iOS](/iap/user-identity#picking-an-identity-on-ios) for the alternatives.
 
-Avoid `Identity.anonymous` unless you are certain the app will never have accounts — [it is a one-way door](/iap/user-identity#option-3-anonymous-users).
+If the app will have accounts later, plan to [move the guest's purchases to the account](/iap/guest-to-account) at sign-up. An anonymous id is also lost on reinstall, see [Anonymous Users](/iap/user-identity#option-3-anonymous-users).
 
 ### 3. Stamp `appAccountToken` on your own purchases
 
@@ -172,7 +172,7 @@ public nonisolated static func trackEvent(
 
 `screenName` and `metadata` are free-form — use them to tell one paywall entry point from another.
 
-Two things to know: events sent before `configure()` are dropped rather than queued, and events sent before `identify(_:)` are attributed to the literal user `"anonymous"`. Send them from a paywall that can only appear after both have run.
+Events sent before `configure()` are dropped rather than queued. Events sent before `identify(_:)` now carry a per-device id (`analyticsUserId`) instead of the literal `"anonymous"`. It is the same id `identify(.anonymous)` adopts later, and a [guest-to-account reconcile](/iap/guest-to-account) moves those events to the account. On iOS, events also carry the StoreKit environment (`Production`, `Sandbox` or `Xcode`), so views from TestFlight and Xcode are flagged as test traffic. Android has `trackEvent` too, with the same behavior.
 
 ## Testing
 

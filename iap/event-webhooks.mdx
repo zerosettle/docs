@@ -75,6 +75,12 @@ sync, trigger emails, or notify your team, without polling our API.
 
     See [Switch & Save](/iap/switch-and-save) for the flow these describe.
   </Accordion>
+
+  <Accordion title="Identity">
+    | Event | When it fires |
+    |---|---|
+    | `identity.reconciled` | One customer id was merged into another: by your server, a link token, a support merge in the dashboard or Restore Purchases. It fires on every merge, including one that moved nothing. See [Identity reconciled](#identity-reconciled) |
+  </Accordion>
 </AccordionGroup>
 
 <Note>
@@ -140,9 +146,11 @@ The same rule, current period versus earlier period, applies to App Store refund
 
 ## Payload
 
-Subscription, trial and `transaction.refunded` events share one envelope shape
-(`id`, `type`, `created`, `environment`, `project_id`, `data`). The `migration.*` events are
-different: see [Switch & Save events](#switch-and-save-events). Subscription and trial events:
+Subscription, trial, `transaction.refunded` and `identity.reconciled` events share one envelope shape
+(`id`, `type`, `created`, `environment`, `project_id`, `data`), but the `data` block differs by event.
+`identity.reconciled` has no `external_user_id`: see [Identity reconciled](#identity-reconciled).
+The `migration.*` events are different again: see [Switch & Save events](#switch-and-save-events).
+Subscription and trial events:
 
 ```json
 {
@@ -243,6 +251,82 @@ Because there is no body `id`, deduplicate these on the `X-ZeroSettle-Idempotenc
 header, which is stable for one state change. The two eligibility events fire when the
 state flips, not on every check.
 
+### Identity reconciled
+
+`identity.reconciled` fires when one customer id is merged into another, see [Guest to Account](/iap/guest-to-account). It fires once per merge, and on **every** merge that happens: a merge that moved no purchases still sends it, with `moved` counts of `0`. A reconcile that only moves a guest's analytics (the guest id has no customer record) is not a merge and sends no event. A refused reconcile sends none either.
+
+```json
+{
+  "id": "evt_reconciled_4821",
+  "type": "identity.reconciled",
+  "created": "2026-10-23T14:05:11.402918+00:00",
+  "environment": "live",
+  "project_id": 85,
+  "data": {
+    "reconciliation_id": 4821,
+    "from_user_id": "3f1c9c52-8f5e-4a52-9d9c-0f0b6f1a7c11",
+    "into_user_id": "user_8472",
+    "actor": "secret_key",
+    "moved": {
+      "transactions": 2,
+      "entitlements": 1
+    }
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `data.reconciliation_id` | The id of the reconciliation record. Same as `reconciliation_id` in the reconcile endpoint response |
+| `data.from_user_id` | The id that was merged away. Later events and reads under it forward to `into_user_id`. `null` when the source had no external id (an email-only restore) |
+| `data.into_user_id` | The id that kept the purchases |
+| `data.actor` | Who asked for the merge: `secret_key`, `link_token`, `dashboard_user`, `restore_purchases`, `identity_link` or `system`. Tolerate other values |
+| `data.moved.transactions` | Transactions that moved |
+| `data.moved.entitlements` | Entitlements that moved |
+
+<Warning>
+  **This event has no `data.external_user_id`.** The subscription, trial and refund events all carry it, so a catch-all handler that routes on `event.data.external_user_id` before it looks at `event.type` will break on this event. Branch on `type` first. The ids are `data.from_user_id` and `data.into_user_id`.
+</Warning>
+
+On this event, make your own records for `from_user_id` point at `into_user_id`, and do not treat the move as a new purchase. No `subscription.purchased` is sent for a subscription that moved. Restore Purchases sends `identity.reconciled` too, not `subscription.purchased`.
+
+<CodeGroup>
+
+```javascript Node.js
+// Inside your verified, deduplicated handler (see Handling events)
+if (event.type === 'identity.reconciled') {
+  const { from_user_id, into_user_id, moved } = event.data;
+
+  // Re-point anything you keyed on the guest id. from_user_id can be null.
+  if (from_user_id) {
+    await db.users.repointId({ from: from_user_id, to: into_user_id });
+  }
+
+  // A merge that moved nothing still arrives, with zero counts.
+  if (moved.entitlements > 0) {
+    await refreshAccess(into_user_id);
+  }
+}
+```
+
+```python Python
+# Inside your verified, deduplicated handler (see Handling events)
+if event["type"] == "identity.reconciled":
+    data = event["data"]
+    from_id = data["from_user_id"]  # can be None
+    into_id = data["into_user_id"]
+
+    # Re-point anything you keyed on the guest id.
+    if from_id:
+        db.repoint_user_id(old=from_id, new=into_id)
+
+    # A merge that moved nothing still arrives, with zero counts.
+    if data["moved"]["entitlements"] > 0:
+        refresh_access(into_id)
+```
+
+</CodeGroup>
+
 ### Field reference
 
 | Field | Notes |
@@ -250,7 +334,7 @@ state flips, not on every check.
 | `id` | Unique and stable per event, the same for every endpoint you have. It is **not** the `X-ZeroSettle-Event-Id` header. Use it to deduplicate |
 | `type` | The event type. **Note the field is `type`, not `event_type`** |
 | `environment` | `live` or `sandbox` |
-| `data.external_user_id` | Whatever you passed to `identify(_:)`. For anonymous users this is a generated UUID that will not match a user in your system |
+| `data.external_user_id` | Whatever you passed to `identify(_:)`. For anonymous users this is a generated UUID that will not match a user in your system. Not present on `identity.reconciled` |
 | `data.product_id` | Your canonical product reference id |
 | `data.source` | The rail the subscription is on: `web_checkout`, `store_kit` or `play_store`. It is also set on `subscription.cancelled` and `subscription.expired`. It is `null` only for an entitlement granted manually from the dashboard that has never been on a rail — see below. On `transaction.refunded` it is the raw payment source, which can also be `play_billing` or `play_billing_external` for Google Play |
 | `data.transaction.id` | On `transaction.refunded`: ZeroSettle's internal transaction number (an integer). Not a Stripe or Apple id |
@@ -411,6 +495,11 @@ app.post('/webhooks/zerosettle', express.raw({ type: 'application/json' }), (req
     case 'subscription.cancelled':
       // Still has access until expires_at — mark it, do not revoke
       markWillNotRenew(event.data.external_user_id, event.data.entitlement.expires_at);
+      break;
+
+    case 'identity.reconciled':
+      // No external_user_id on this event. See Identity reconciled.
+      repointUser(event.data.from_user_id, event.data.into_user_id);
       break;
 
     default:

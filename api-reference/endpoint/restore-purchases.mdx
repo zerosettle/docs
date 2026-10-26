@@ -2,3 +2,11 @@
 title: 'Restore Purchases'
 openapi: 'POST /iap/restore-purchases/'
 ---
+
+<Warning>
+  This endpoint is rate limited. Over a limit it returns `429` with a `Retry-After` header, and `Retry-After: 5` when the rate-limit store is unavailable. A restore button should treat a `429` as a failed restore and offer a retry after the delay. See [Guest to Account](/iap/guest-to-account#restore-purchases) for the limits and a client example.
+</Warning>
+
+<Info>
+  A restore that moves purchases sends an [`identity.reconciled`](/iap/event-webhooks#identity-reconciled) webhook, not `subscription.purchased`. The ZeroSettle SDKs do not call this endpoint.
+</Info>

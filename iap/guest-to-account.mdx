@@ -1,0 +1,553 @@
+---
+title: 'Guest to Account'
+description: 'Keep a guest''s purchases when they sign up, with a server call or a link token'
+icon: 'user-plus'
+---
+
+Many apps let people buy before they have an account. The guest purchases, then creates an account later, and you want the purchase, any credits, and the history of what they did to follow them to the new account.
+
+ZeroSettle handles this with **reconciliation**: your server tells ZeroSettle that one id (the guest) and another id (the account) are the same person, and ZeroSettle moves everything from the first to the second.
+
+<Note>
+  Only your server decides who is who. The app never asks to merge two ids on its own. It can carry a short-lived token your server signed, but your server is the one vouching for the link.
+</Note>
+
+<Info>
+  The server endpoints work for every app. The in-app calls on this page (`analyticsUserId`, `currentUserId` and `reconcile`) are in the next SDK release for iOS, Android and Flutter. Until you update, identify guests with an id your app mints itself (see [User Identity](/iap/user-identity)), so you already know it, and use [Option 1](#option-1-your-server-calls-the-endpoint).
+</Info>
+
+## How it works
+
+<Steps>
+  <Step title="Identify the guest">
+    Identify the guest with `identify(.anonymous)`, or with an id your app minted on first launch (see [User Identity](/iap/user-identity)). Either way, purchases and events are recorded under that id.
+  </Step>
+  <Step title="Read the guest id at sign-up">
+    When the guest creates an account, send the guest id to your server along with the sign-up request. Read it from `analyticsUserId`. It is set even for a guest who never bought anything.
+  </Step>
+  <Step title="Reconcile from your server">
+    After your server creates the account, it calls ZeroSettle with the guest id (`from`) and the account id (`into`). There are two ways: call the reconcile endpoint yourself, or mint a link token and let the app present it.
+  </Step>
+  <Step title="Continue as the account">
+    The app identifies as the account and refreshes entitlements. The guest's purchases are now there.
+  </Step>
+</Steps>
+
+## What moves
+
+| Moves to the account | Notes |
+|---|---|
+| Purchases and subscriptions | Transactions and entitlements. The original purchase id is kept for your records |
+| Purchased credits | Credit packs the guest bought move to the account and add to its balance. Plan allowances do not move: the account keeps its own |
+| Stripe customer links | The guest's Stripe customer is attached to the account, so checkout finds it |
+| Analytics and experiment rows | Paywall views, checkout events and experiment assignments move with the person, so a funnel that started as a guest finishes as the account |
+
+ZeroSettle only updates its own records. It never cancels a Stripe subscription, never changes an App Store or Google Play subscription, and never charges anyone.
+
+<Info>
+  **A guest who never bought anything can still move.** If the guest id has no customer record at all (no purchase, no checkout, no Stripe customer), only its analytics and experiment rows move. The call succeeds with zero counts, sends no event and sets up no forwarding. A guest who does have a customer record but no purchases takes a normal merge: zero counts, forwarding, and an `identity.reconciled` event with zeros.
+</Info>
+
+## Old ids keep working
+
+After a merge, the guest id forwards to the account. (An analytics-only move sets up no forwarding.) A late renewal, an App Store or Google Play notification, an entitlement read or an event that still uses the old id lands on the account, and ZeroSettle does not create a new customer for it. You do not need to update ids that you have stored elsewhere.
+
+## Rules
+
+- **One way.** `into` keeps the purchases. You cannot move them back.
+- **Once per id.** An id that was merged away cannot be merged again. If you name an id that was merged away as the `into` side, ZeroSettle follows it to the account that kept it.
+- **Same environment.** Live and sandbox ids never mix.
+- **Ids are matched without regard to letter case.** `User_8472` and `user_8472` are the same id, so a call that names both is refused as the same identity.
+- **It refuses on conflict.** If both customers hold a live entitlement to the same non-consumable product, ZeroSettle moves nothing. That covers a subscription (including a trial, or one cancelled but still running out its period) and a one-time unlock. Consumables never conflict. See [When a reconcile is refused](#when-a-reconcile-is-refused).
+
+## Option 1: your server calls the endpoint
+
+Call `POST /v1/identities/reconcile/` from your backend with your **secret key** (`zs_sk_...`). Never put the secret key in an app. Send it in the `X-ZeroSettle-Key` header, or as `Authorization: Bearer <key>`.
+
+Send an `Idempotency-Key` header of 1 to 255 characters. If your request times out, retry with the same key and the same ids. [Idempotency](#idempotency) explains exactly what a repeat returns.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.zerosettle.io/v1/identities/reconcile/ \
+  -H "X-ZeroSettle-Key: $ZEROSETTLE_SECRET_KEY" \
+  -H "Idempotency-Key: signup-7741" \
+  -H "Content-Type: application/json" \
+  -d '{"from": "3f1c9c52-8f5e-4a52-9d9c-0f0b6f1a7c11", "into": "user_8472", "reason": "signup"}'
+```
+
+```javascript Node.js
+async function reconcileGuest(guestId, accountId, signupId) {
+  const res = await fetch('https://api.zerosettle.io/v1/identities/reconcile/', {
+    method: 'POST',
+    headers: {
+      'X-ZeroSettle-Key': process.env.ZEROSETTLE_SECRET_KEY,
+      'Idempotency-Key': `signup-${signupId}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: guestId, into: accountId, reason: 'signup' }),
+  });
+
+  if (res.status === 409) return { refused: true };   // nothing moved
+  if (res.status === 429) {
+    throw new Error(`Rate limited, retry in ${res.headers.get('Retry-After')}s`);
+  }
+  if (!res.ok) throw new Error(`Reconcile failed: ${res.status}`);
+  return res.json();
+}
+```
+
+```python Python
+import os
+import requests
+
+def reconcile_guest(guest_id: str, account_id: str, signup_id: str) -> dict:
+    res = requests.post(
+        "https://api.zerosettle.io/v1/identities/reconcile/",
+        headers={
+            "X-ZeroSettle-Key": os.environ["ZEROSETTLE_SECRET_KEY"],
+            "Idempotency-Key": f"signup-{signup_id}",
+        },
+        json={"from": guest_id, "into": account_id, "reason": "signup"},
+        timeout=10,
+    )
+    if res.status_code == 409:
+        return {"refused": True}  # nothing moved
+    if res.status_code == 429:
+        raise RuntimeError(f"Rate limited, retry in {res.headers.get('Retry-After')}s")
+    res.raise_for_status()
+    return res.json()
+```
+
+</CodeGroup>
+
+A success looks like this:
+
+```json
+{
+  "reconciliation_id": 4821,
+  "from": "3f1c9c52-8f5e-4a52-9d9c-0f0b6f1a7c11",
+  "into": "user_8472",
+  "moved": { "transactions": 2, "entitlements": 1 }
+}
+```
+
+Once the call returns, have the app identify as the account:
+
+<CodeGroup>
+
+```swift Swift
+try await ZeroSettle.shared.identify(.user(id: account.id))
+```
+
+```kotlin Kotlin
+ZeroSettle.identify(Identity.User(id = account.id))
+```
+
+```dart Flutter
+await ZeroSettle.instance.identify(Identity.user(id: account.id));
+```
+
+</CodeGroup>
+
+### Idempotency
+
+A key stays bound to the ids it first succeeded with.
+
+- **Same key, same ids, within 24 hours.** You get the stored result back, and nothing runs again.
+- **Same key, same ids, after 24 hours.** You still get the original success. The ids were already merged, so the call does not fail.
+- **Same key, different ids, at any time.** The call is refused with `422 idempotency_mismatch`, and it stays refused. Use a new key for a new pair.
+- **A refusal is not stored.** A retry after a `409` runs again, with the same key or a new one.
+
+Derive the key from the pair or from the sign-up (`signup-7741`), not from a timestamp, so a retry reuses it.
+
+### Errors
+
+Every error from the identity endpoints has the same body:
+
+```json
+{ "error": { "code": "reconcile_refused", "message": "The ids could not be reconciled. See the dashboard for details." } }
+```
+
+| Status | `code` | Meaning |
+|---|---|---|
+| 400 | `idempotency_key_required` | The `Idempotency-Key` header is missing, or longer than 255 characters |
+| 400 | `invalid_request` | The body is not JSON with string `from` and `into` of at most 255 characters each, or `reason` is longer than 500 characters |
+| 401 | `secret_key_required` | No key, a publishable key, or a secret key that is not valid |
+| 405 | `method_not_allowed` | Use `POST`. The `Allow` header says so |
+| 409 | `reconcile_refused` | The ids could not be reconciled and nothing moved. The reason is in the dashboard, not in this response. See [When a reconcile is refused](#when-a-reconcile-is-refused) |
+| 422 | `idempotency_mismatch` | The `Idempotency-Key` is already bound to different ids |
+| 429 | `rate_limited` | Over a limit. Wait `Retry-After` seconds. See [Rate limits](#rate-limits) |
+
+The link-token endpoints add one more: `401 invalid_link_token`, for a token that is malformed, has a bad signature, is expired, was already used, or belongs to the other environment. The reason is deliberately not given.
+
+## Option 2: your server mints a link token
+
+If it is easier for the app to finish the move, your server signs a link token and returns it with the sign-up response. The app presents it with `reconcile(linkToken:)`. This call uses the app's publishable key, and the SDK also switches to the account for you.
+
+A link token names one `from` and one `into`, expires within 10 minutes, and works once.
+
+<Tabs>
+  <Tab title="Ask ZeroSettle to sign it">
+    Call `POST /v1/identities/link-token/` from your backend with your secret key. It checks nothing about the ids: the checks happen when the token is presented.
+
+    <CodeGroup>
+
+    ```bash curl
+    curl -X POST https://api.zerosettle.io/v1/identities/link-token/ \
+      -H "X-ZeroSettle-Key: $ZEROSETTLE_SECRET_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"from": "3f1c9c52-8f5e-4a52-9d9c-0f0b6f1a7c11", "into": "user_8472"}'
+    ```
+
+    ```javascript Node.js
+    const res = await fetch('https://api.zerosettle.io/v1/identities/link-token/', {
+      method: 'POST',
+      headers: {
+        'X-ZeroSettle-Key': process.env.ZEROSETTLE_SECRET_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: guestId, into: accountId }),
+    });
+    const { token, expires_at } = await res.json();
+    ```
+
+    ```python Python
+    res = requests.post(
+        "https://api.zerosettle.io/v1/identities/link-token/",
+        headers={"X-ZeroSettle-Key": os.environ["ZEROSETTLE_SECRET_KEY"]},
+        json={"from": guest_id, "into": account_id},
+        timeout=10,
+    )
+    token = res.json()["token"]
+    ```
+
+    </CodeGroup>
+  </Tab>
+  <Tab title="Sign it yourself">
+    No network call needed. A token is two base64url segments joined by a dot, with no padding:
+
+    ```
+    token = base64url(payload_json) + "." + base64url(HMAC_SHA256(hmac_key, base64url(payload_json)))
+    hmac_key = HMAC_SHA256(secret_key, "zerosettle-link-token-v1")
+    ```
+
+    The payload is `{"v":1,"from":...,"into":...,"exp":...,"nonce":...,"env":...}`:
+
+    | Field | Value |
+    |---|---|
+    | `v` | `1` |
+    | `from`, `into` | The two ids, up to 255 characters each |
+    | `exp` | Unix seconds, at most 600 seconds from now (ZeroSettle allows 60 seconds of clock skew) |
+    | `nonce` | A random string of 16 to 64 printable characters, unique per token |
+    | `env` | `live` for a `zs_sk_live_` key, `test` for a `zs_sk_test_` key |
+
+    <CodeGroup>
+
+    ```javascript Node.js
+    const crypto = require('crypto');
+
+    function mintLinkToken(secretKey, fromId, intoId, env) {
+      const payload = Buffer.from(JSON.stringify({
+        v: 1,
+        from: fromId,
+        into: intoId,
+        exp: Math.floor(Date.now() / 1000) + 300,
+        nonce: crypto.randomBytes(24).toString('base64url'),
+        env, // 'live' or 'test'
+      })).toString('base64url');
+
+      const hmacKey = crypto.createHmac('sha256', secretKey)
+        .update('zerosettle-link-token-v1')
+        .digest();
+      const signature = crypto.createHmac('sha256', hmacKey)
+        .update(payload)
+        .digest('base64url');
+
+      return `${payload}.${signature}`;
+    }
+    ```
+
+    ```python Python
+    import base64, hashlib, hmac, json, secrets, time
+
+    def _b64url(raw: bytes) -> str:
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+    def mint_link_token(secret_key: str, from_id: str, into_id: str, env: str) -> str:
+        payload = _b64url(json.dumps({
+            "v": 1,
+            "from": from_id,
+            "into": into_id,
+            "exp": int(time.time()) + 300,
+            "nonce": secrets.token_urlsafe(24),
+            "env": env,  # "live" or "test"
+        }, separators=(",", ":")).encode())
+
+        hmac_key = hmac.new(
+            secret_key.encode(), b"zerosettle-link-token-v1", hashlib.sha256
+        ).digest()
+        signature = hmac.new(hmac_key, payload.encode("ascii"), hashlib.sha256).digest()
+        return f"{payload}.{_b64url(signature)}"
+    ```
+
+    </CodeGroup>
+  </Tab>
+</Tabs>
+
+Present the token from the app:
+
+<CodeGroup>
+
+```swift Swift
+do {
+    let result = try await ZeroSettle.shared.reconcile(linkToken: signup.linkToken)
+    // result.movedTransactions, result.movedEntitlements
+    // result.switchedToAccount is true when the SDK was acting as the guest id
+    // and has now continued as the account.
+    if !result.switchedToAccount {
+        try await ZeroSettle.shared.identify(.user(id: result.intoUserId))
+    }
+} catch ZeroSettleError.reconcileRefused {
+    // Nothing moved. The token is spent.
+} catch ZeroSettleError.invalidLinkToken {
+    // Expired, already used, or not valid. Ask your server for a new one.
+} catch ZeroSettleError.rateLimited(let retryAfter) {
+    // The token is still usable. Retry after retryAfter seconds.
+}
+```
+
+```kotlin Kotlin
+ZeroSettle.reconcile(signup.linkToken)
+    .onSuccess { result ->
+        // result.movedTransactions, result.movedEntitlements
+    }
+    .onFailure { error ->
+        when (error) {
+            is ZeroSettleError.ReconcileRefused -> { /* nothing moved, token spent */ }
+            is ZeroSettleError.InvalidLinkToken -> { /* ask your server for a new one */ }
+            is ZeroSettleError.RateLimited -> { /* token still usable, retry later */ }
+            else -> { /* network or backend error */ }
+        }
+    }
+```
+
+```dart Flutter
+try {
+  final result = await ZeroSettle.instance.reconcile(linkToken: signup.linkToken);
+  if (!result.switchedToAccount) {
+    await ZeroSettle.instance.identify(Identity.user(id: result.intoUserId));
+  }
+} on ZSReconcileRefusedException {
+  // Nothing moved. The token is spent.
+} on ZSInvalidLinkTokenException {
+  // Expired, already used, or not valid. Ask your server for a new one.
+} on ZSRateLimitedException catch (e) {
+  // The token is still usable. Retry after e.retryAfter.
+}
+```
+
+</CodeGroup>
+
+<Note>
+  When the SDK was acting as the guest id, `reconcile` continues as the account for you on every platform. Swift and Flutter report it in `switchedToAccount`. The Android result does not have that field, so read `currentUserId` if you need to know.
+</Note>
+
+<Warning>
+  **When you update the iOS SDK, add a `default` to any `switch` over `ZeroSettleError`.** The next SDK release adds the cases `reconcileRefused`, `invalidLinkToken` and `rateLimited(retryAfter:)`, so an exhaustive switch stops compiling. Android's `ZeroSettleError` gains `ReconcileRefused`, `InvalidLinkToken` and `RateLimited` the same way, so give any exhaustive `when` an `else` branch.
+</Warning>
+
+<Warning>
+  A link token is spent the moment it is presented, **even if the reconcile is refused**. The one exception is a `429` rate limit, which does not spend it. After a refusal, have your server mint a new token for the retry.
+</Warning>
+
+## Keep only the funnel: `identity-link`
+
+Sometimes you want a guest's experiment assignments and paywall history to follow them to their login, and you do not want the app to be able to move purchases. `POST /v1/iap/identity-link/` does that, with the publishable key.
+
+```json
+{ "previous_user_id": "3f1c9c52-8f5e-4a52-9d9c-0f0b6f1a7c11", "user_id": "user_8472" }
+```
+
+You can send `previous_install_id` (the raw SDK install id) instead of `previous_user_id`.
+
+Without a `link_token`, this call:
+
+- **Never moves purchases** and never creates, merges or changes a customer record. It moves experiment impressions, assignments, exposures, outcome rows and funnel events.
+- **Skips an id that a live account owns**, and an id that was already merged away. It answers `200` with `"status": "skipped"` and zero counts.
+- **Never drops a row.** Where `user_id` already holds a row for the same experiment, that row wins and the guest's row stays where it is.
+- Is rate limited to 60 calls a minute per client IP and 6,000 a minute per app.
+
+The response is `"status": "ok"` plus a count for each kind of row moved (`impressions_moved`, `assignments_moved`, `exposures_moved`, `funnel_events_moved` and so on). See the [endpoint reference](/api-reference/endpoint/link-identity-rows).
+
+With a signed `link_token` in the body, the same endpoint is a full reconcile, like [Option 2](#option-2-your-server-mints-a-link-token): purchases move, the same limits and refusals apply, and the response adds `reconciliation_id`.
+
+## When a reconcile is refused
+
+A refusal means ZeroSettle moved nothing. The most common cause is a conflict: both customers hold a live entitlement to the same non-consumable product, a subscription (including a trial, or one cancelled but still running out its period) or a one-time unlock. Consumables never conflict. ZeroSettle never expires one side to resolve it, and never touches Stripe or a store.
+
+To your server a refusal is `409 reconcile_refused` (and `reconcileRefused` in the SDK). The specific reason is not in the response. Read it in the dashboard, on the customer page, where refused reconciles are listed with a plain-language reason.
+
+| Reason | What it means |
+|---|---|
+| `conflict` | Both customers hold a live entitlement to the same non-consumable product. The dashboard names the products |
+| `already_reconciled` | The `from` id was already merged into another customer |
+| `into_reconciled` | The `into` id was merged away and has no customer to forward to |
+| `same_identity` | Both ids are the same customer. Ids that differ only in letter case count as the same |
+| `environment_mismatch` | The ids belong to different environments (live and sandbox) |
+| `invalid_id` | An id is empty or too long |
+| `from_not_found` | No customer with the `from` id |
+
+A call from your server never reaches `invalid_id` (a missing or oversized id is a `400 invalid_request` first), and a `from` id with no customer record moves analytics only instead of being refused as `from_not_found`. So from your server you will see the first five.
+
+What to do:
+
+1. Open the customer in the dashboard and read the reason.
+2. If it is a conflict, decide which subscription the person keeps. Let the other one end, for example by cancelling it and waiting for the period to finish.
+3. Reconcile again, or ask support to merge the two customers from the customer page. A support merge applies the same rules and shows a preview before it moves anything.
+
+While a refusal stands, the guest id still owns the guest's purchases and the account id owns its own. Decide in your app whether the person should stay on the guest id until it is sorted out.
+
+## Restore Purchases
+
+[`POST /v1/iap/restore-purchases/`](/api-reference/endpoint/restore-purchases) moves purchases from an email-only guest to a user id. The ZeroSettle SDKs do not call it: it is for a restore flow you build yourself, with the publishable key.
+
+- It runs each match through the same reconcile rules. A conflict refuses that guest and moves nothing from it. The response is still `200`, with `restored: 0` and a message telling the person to contact support.
+- A restore that moves purchases sends [`identity.reconciled`](/iap/event-webhooks#identity-reconciled) with `actor` of `restore_purchases`, not `subscription.purchased`. `from_user_id` is `null`, because the guest had no external id.
+- It is rate limited per IP (10 an hour), per email and app (5 an hour) and per app (6,000 a minute). Over a limit it returns `429` with a `Retry-After` header. If the rate-limit store is unavailable, the per-IP and per-email limits refuse the call with `429` and `Retry-After: 5`.
+- The `429` body is `{"error": "Too many restore attempts. Try again later."}`, a plain string rather than the identity error shape.
+
+Treat a `429` as a failed restore on your restore button, and offer a retry after the delay:
+
+<CodeGroup>
+
+```swift Swift
+struct RestoreResult: Decodable { let restored: Int; let message: String }
+
+enum RestoreOutcome {
+    case done(RestoreResult)
+    case retryLater(seconds: Int)
+}
+
+func restore(email: String, userId: String) async throws -> RestoreOutcome {
+    var request = URLRequest(url: URL(string: "https://api.zerosettle.io/v1/iap/restore-purchases/")!)
+    request.httpMethod = "POST"
+    request.setValue(publishableKey, forHTTPHeaderField: "X-ZeroSettle-Key")
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONEncoder().encode(["email": email, "user_id": userId])
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let http = response as! HTTPURLResponse
+    if http.statusCode == 429 {
+        let wait = Int(http.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 5
+        return .retryLater(seconds: wait)   // show "Try again in a moment"
+    }
+    guard http.statusCode == 200 else { throw URLError(.badServerResponse) }
+    return .done(try JSONDecoder().decode(RestoreResult.self, from: data))
+}
+```
+
+```kotlin Kotlin
+sealed interface RestoreOutcome {
+    data class Done(val body: String) : RestoreOutcome
+    data class RetryLater(val seconds: Int) : RestoreOutcome
+}
+
+suspend fun restore(email: String, userId: String): RestoreOutcome = withContext(Dispatchers.IO) {
+    val conn = URL("https://api.zerosettle.io/v1/iap/restore-purchases/").openConnection() as HttpURLConnection
+    try {
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("X-ZeroSettle-Key", PUBLISHABLE_KEY)
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.doOutput = true
+        val body = JSONObject().put("email", email).put("user_id", userId).toString()
+        conn.outputStream.use { it.write(body.toByteArray()) }
+
+        when (conn.responseCode) {
+            429 -> RestoreOutcome.RetryLater(conn.getHeaderField("Retry-After")?.toIntOrNull() ?: 5)
+            200 -> RestoreOutcome.Done(conn.inputStream.bufferedReader().readText())
+            else -> throw IOException("Restore failed: ${conn.responseCode}")
+        }
+    } finally {
+        conn.disconnect()
+    }
+}
+```
+
+```dart Flutter
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+/// Returns the decoded result, or a delay to wait before the next try.
+Future<({Map<String, dynamic>? result, Duration? retryAfter})> restore(
+    String email, String userId) async {
+  final res = await http.post(
+    Uri.parse('https://api.zerosettle.io/v1/iap/restore-purchases/'),
+    headers: {
+      'X-ZeroSettle-Key': publishableKey,
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({'email': email, 'user_id': userId}),
+  );
+  if (res.statusCode == 429) {
+    final seconds = int.tryParse(res.headers['retry-after'] ?? '') ?? 5;
+    return (result: null, retryAfter: Duration(seconds: seconds));
+  }
+  if (res.statusCode != 200) throw Exception('Restore failed: ${res.statusCode}');
+  return (result: jsonDecode(res.body) as Map<String, dynamic>, retryAfter: null);
+}
+```
+
+</CodeGroup>
+
+## Rate limits
+
+| Call | Limit | Over the limit |
+|---|---|---|
+| `POST /v1/identities/reconcile/` | 300 a minute and 50,000 a day, per project | `429 rate_limited` with `Retry-After` |
+| Presenting a link token (`POST /v1/iap/identities/reconcile/`) | The same 300 and 50,000, per project, counted apart from the secret-key calls. Also 5 presentations an hour for the same `from` id | `429 rate_limited` with `Retry-After`. The token is not spent. If the rate-limit store is unavailable the per-id limit refuses with `Retry-After: 5` |
+| `POST /v1/iap/identity-link/` without a token | 60 a minute per client IP and 6,000 a minute per app | `429 rate_limited` with `Retry-After` |
+| `POST /v1/iap/restore-purchases/` | 10 an hour per IP, 5 an hour per email and app, 6,000 a minute per app | `429` with `Retry-After` |
+
+`POST /v1/identities/link-token/` is not rate limited, but a token you mint still counts against the presentation limits when the app presents it.
+
+## Test it in sandbox
+
+Sandbox and live are separate worlds, so you can try the whole flow without touching a real customer.
+
+1. Use your **sandbox secret key** (`zs_sk_test_...`) on the server and the sandbox publishable key (`zs_pk_test_...`) in the app. The key decides the environment. A call with a sandbox key only sees sandbox ids.
+2. As a guest in a sandbox build, call `identify(.anonymous)`, read `analyticsUserId`, and make a test purchase. Pick a sandbox account id, for example `test-user-1`.
+3. Call the reconcile endpoint with the sandbox secret key, `from` set to the guest id and `into` set to `test-user-1`. You should get `moved.entitlements: 1`.
+4. Identify the app as `test-user-1` and check that the entitlement is there.
+5. Switch the dashboard to sandbox mode. The merge is under the customer's merged ids. To see a refusal, buy the same subscription as both ids before you reconcile.
+
+A link token signed with a `zs_sk_test_` key has `env` of `test` and is refused by a live publishable key, and the other way round. Webhook endpoints are per environment, so add a sandbox endpoint to see `identity.reconciled` while you test.
+
+## Rolling out on an app with existing guests
+
+If your app already has guests who later signed up, you can move them in a backfill. Do it from your server, with the secret key.
+
+1. **Build the list of pairs.** One guest id and one account id per person. A guest with no customer record is fine: it moves analytics only and succeeds with zero counts.
+2. **Pace the calls under the limits.** The limits are 300 a minute and 50,000 a day per project. Send about 4 a second at most, so you stay well under 300 a minute, and stop for the day before 50,000. A larger list takes more than one day.
+3. **Give every pair its own idempotency key,** built from the pair, for example `backfill-<guest id>-<account id>`. A key stays bound to the ids it first succeeded with, so a re-run of the whole job is safe: pairs that already merged return their original result.
+4. **On `429`, wait `Retry-After` seconds** and send the same call again.
+5. **On `409`, do not retry in a loop.** Write the pair to a list of refused pairs and carry on. Most refusals are a conflict: the person bought the same subscription as both a guest and an account. Refusals are not stored against the key, so you can run the pair again later with the same key.
+6. **Read the reasons in the dashboard.** The customer page lists each refused reconcile with a plain-language reason and the products involved. Settle each one (see [When a reconcile is refused](#when-a-reconcile-is-refused)), then run the refused list again.
+7. **Watch the webhook.** Every merge sends [`identity.reconciled`](/iap/event-webhooks#identity-reconciled), including merges that moved nothing, so a backfill of 10,000 pairs sends up to 10,000 events. Make sure your handler is quick and idempotent before you start.
+
+Try a small batch in sandbox first, then a handful of live pairs, then the rest.
+
+## Webhooks
+
+A reconcile that merges two customers sends an `identity.reconciled` event to your webhook endpoints, so you can update your own records. It sends one for every merge, including a merge that moved nothing, and none for an analytics-only move or a refusal. The event has no `external_user_id`: see [Event Webhooks](/iap/event-webhooks#identity-reconciled).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="User Identity" icon="user" href="/iap/user-identity">
+    The identity modes and which one to start with
+  </Card>
+  <Card title="Reconcile endpoint" icon="code" href="/api-reference/endpoint/reconcile-identities">
+    Request and response reference
+  </Card>
+</CardGroup>
