@@ -100,7 +100,7 @@ println("Active: ${entitlements.filter { it.isActive }}")
 
 Subscription lifecycle works the same in sandbox as in production:
 
-- **Renewals** — App Store sandbox subscriptions renew on Apple's accelerated schedule: a monthly plan renews every few minutes, for a limited number of renewals. The resulting notifications reach ZeroSettle only when your sandbox server notification URL (the `?sandbox=true` URL in [Webhooks & Server-Side](/iap/webhooks#setting-up-assn-v2)) points at ZeroSettle. Web checkout subscriptions renew on their real schedule and cannot be fast-forwarded today.
+- **Renewals** — App Store sandbox subscriptions renew on Apple's accelerated schedule: a monthly plan renews every few minutes, for a limited number of renewals. The resulting notifications reach ZeroSettle only when the sandbox server notification URL in App Store Connect points at ZeroSettle. It is the same URL as production; see [Webhooks & Server-Side](/iap/webhooks#setting-up-assn-v2). Web checkout subscriptions renew on their real schedule and cannot be fast-forwarded today.
 - **Cancellation** — Users can cancel via the Stripe customer portal. The entitlement remains active until the end of the current billing period.
 - **Refunds** — Issue refunds from the dashboard or directly in the Stripe dashboard. A full refund of the current billing period ends the subscription and access, and you receive `subscription.expired` and `transaction.refunded`. A partial refund is a credit only, and a refund of an earlier period leaves the subscription active. See [Refunds](/iap/event-webhooks#refunds).
 
@@ -110,62 +110,58 @@ Subscription lifecycle works the same in sandbox as in production:
 
 ## Resetting Sandbox Data
 
-The dashboard provides three reset options under **Settings > Sandbox**:
+The dashboard provides three reset options under **Settings > Sandbox**. They act on the sandbox environment only.
 
 ### Reset to Live
 
 Copies your live products and subscription configurations into the sandbox environment. Useful when your live catalog has diverged from sandbox.
 
-```
-POST /api/v1/sandbox/reset-to-live/
-```
-
 ### Reset to ASC
 
 Re-syncs the sandbox from App Store Connect. Pulls the latest product metadata from your ASC catalog into sandbox.
 
-```
-POST /api/v1/sandbox/reset-to-asc/
-```
-
 ### Clear All
 
-Wipes all sandbox data — transactions, entitlements, and game sessions. Products are preserved.
+Wipes all sandbox data, including transactions and entitlements. Products are preserved.
 
 <Warning>
   **Clear All** is irreversible. You'll be asked to confirm before the reset is applied.
 </Warning>
 
-## StoreKit Sandbox + Live Key Mismatch
+## Live mode test purchases and TestFlight
 
-<Warning>
-  **Using a sandbox Apple account with a live publishable key will cause StoreKit transactions to appear in sandbox mode on the dashboard, not live mode.**
-</Warning>
+TestFlight builds, Xcode runs and App Review all buy in Apple's Sandbox, and they often use your app's **live** publishable key. ZeroSettle keeps these purchases in Live and marks them as test purchases. They are not moved to the sandbox environment.
 
-When you make a StoreKit purchase using a sandbox Apple ID, Apple's transaction receipt includes `environment: "sandbox"`. ZeroSettle uses this to determine the transaction's environment — regardless of which publishable key the SDK is configured with.
+What that means:
 
-This means if your SDK is configured with a **live** key (`zs_pk_live_...`) but you're signed into a **sandbox** Apple account, the StoreKit transaction will be:
-- **Stored** in sandbox mode (`is_sandbox=true`)
-- **Invisible** on the live dashboard
-- **Visible** on the sandbox dashboard (toggle to sandbox mode to see it)
-
-The backend will return a `warning: "environment_mismatch"` in the StoreKit sync response when this happens.
-
-**To avoid this during testing:**
-- Use a **sandbox publishable key** (`zs_pk_test_...`) when testing with sandbox Apple accounts
-- Or switch to **sandbox mode** on the dashboard to view the transactions
+- The purchase is stored in **Live** and shows a **Test** badge in the dashboard.
+- It **still unlocks access**, so App Review and your testers are never locked out.
+- It is **excluded from revenue, MRR, charts, reports and active users** by default. Turn on **Include test purchases** in the dashboard sidebar to see it in those figures.
+- Transaction and customer lists can show, hide or filter to test purchases only.
+- Experiments and Autopilot always exclude test purchases.
+- REST entitlement responses and event webhooks carry `is_test_purchase`. Ignore events with `is_test_purchase: true` when you count customers or revenue on your server. See [Event Webhooks](/iap/event-webhooks).
+- The StoreKit sync response still carries `warning: "environment_mismatch"`. That is informational, not an error.
 
 <Note>
-  This only affects developer testing. Real users with production Apple accounts will always match the live publishable key, and their transactions will appear correctly in live mode.
+  The iOS, Android and Flutter `Entitlement` types have no test-purchase flag, so your app cannot tell a test purchase apart from a real one. Read `is_test_purchase` on your server if you need to.
 </Note>
+
+A sandbox Apple ID used with a **sandbox** publishable key (`zs_pk_test_...`) stays in the sandbox environment, as before. Test purchases only describe Apple Sandbox purchases sent with a live key.
+
+To test a TestFlight purchase end to end:
+
+1. Install the TestFlight build, configured with your live key.
+2. Sign in with a Sandbox Apple Account and buy a product.
+3. In the dashboard, stay in Live mode and open **Transactions**. Turn on **Include test purchases** if the row is hidden.
+4. Confirm the row shows the **Test** badge and the entitlement is active.
 
 ## Common Issues
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
 | Products not loading | Wrong key or no sandbox products | Verify you're using `zs_pk_test_` and that products exist in sandbox mode on the dashboard |
-| Payment sheet not appearing | Web checkout disabled for jurisdiction | Check `isWebCheckoutEnabled` and verify jurisdiction config on the dashboard |
+| Payment sheet not appearing | Web checkout disabled for jurisdiction | Verify jurisdiction config on the dashboard. On iOS you can also check `isWebCheckoutEnabled` |
 | Entitlements not updating after purchase | Webhook not delivered | Call `restoreEntitlements()` to force a refresh; check webhook delivery in the Stripe dashboard |
 | "Web checkout disabled" error | Web checkout not enabled | Enable web checkout for the target jurisdiction on the dashboard |
 | Transaction succeeds but delegate not called | Delegate not set | Ensure `ZeroSettle.shared.delegate = self` is set before triggering the purchase |
-| StoreKit purchase not showing on dashboard | Sandbox Apple account with live key | Switch to sandbox mode on the dashboard, or use a sandbox publishable key |
+| StoreKit purchase from TestFlight or Xcode missing from Live figures | Test purchases are excluded by default | Turn on **Include test purchases** in the dashboard sidebar, or open Transactions and show test purchases |
