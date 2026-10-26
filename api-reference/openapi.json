@@ -837,7 +837,7 @@
       "patch": {
         "operationId": "updateStorekitStatus",
         "summary": "Update StoreKit Status",
-        "description": "Reports a StoreKit subscription state change for a migration transaction. As of 2026-04-27, this is a *trigger to verify* endpoint: when the SDK reports `storekit_status=2` (anything other than active), the backend queries Apple's App Store Server API itself and persists what Apple reports onto the transaction's `storekit_apple_status` and `storekit_subscription_end` fields. Billing-relevant data is never sourced from the client.",
+        "description": "Reports a StoreKit subscription state change for a migration transaction. This is a *trigger to verify* endpoint: for either `storekit_status` value the backend answers `{\"ok\": true}` at once and queries Apple's App Store Server API in the background, then stores what Apple reports (`storekit_status`, `storekit_apple_status` and `storekit_subscription_end`) a few seconds later. The value the device sends is never stored, and when Apple cannot be reached the transaction is left unchanged. The response is the same either way. Billing-relevant data is never sourced from the client.",
         "tags": [
           "StoreKit"
         ],
@@ -868,7 +868,7 @@
                       1,
                       2
                     ],
-                    "description": "`1` = active (finished successfully, no further action). `2` = anything-not-active (cancelled, expired, billing retry, grace period, revoked). When `2` is reported, the backend triggers a server-side Apple App Store Server API query to resolve the canonical state."
+                    "description": "`1` = active. `2` = anything-not-active (cancelled, expired, billing retry, grace period, revoked). The value is a trigger only: the backend resolves the canonical state from Apple's App Store Server API and stores that instead."
                   },
                   "storekit_original_transaction_id": {
                     "type": "string",
@@ -887,7 +887,7 @@
         },
         "responses": {
           "200": {
-            "description": "Status updated",
+            "description": "Accepted. Verification with Apple runs in the background.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1073,7 +1073,7 @@
       "post": {
         "operationId": "claimEntitlement",
         "summary": "Claim Entitlement",
-        "description": "Transfers an existing StoreKit entitlement to the calling user. Used when an Apple ID's StoreKit subscription is owned by a different ZeroSettle account and needs to be moved to the current account (account migration, support flows, sandbox testing). The backend verifies the supplied JWS, revokes the entitlement from the previous owner, and grants it to `user_id` in a single atomic transaction. The bundle id in the JWS is checked and logged on claim but does not refuse the request, unlike Sync StoreKit Transaction.",
+        "description": "Transfers an existing StoreKit entitlement to the calling user. Used when an Apple ID's StoreKit subscription is owned by a different ZeroSettle account and needs to be moved to the current account (account migration, support flows, sandbox testing). The backend verifies the supplied JWS, revokes the entitlement from the previous owner, and grants it to `user_id` in a single atomic transaction. The claim is refused when the JWS bundle id does not belong to this app (the same check as Sync StoreKit Transaction, enforced in production) or when the purchase no longer grants access: it was revoked or refunded, or the subscription has lapsed and Apple confirms it.",
         "tags": [
           "Entitlements"
         ],
@@ -1151,7 +1151,7 @@
             }
           },
           "400": {
-            "description": "Bad request. The error is one of: `Invalid JSON body`; `jws_representation is required`; `user_id is required`; `Cannot claim entitlement to a synthetic identity` (a `user_id` starting with `apple_otid:`); `Consumable products cannot be claimed`; `Missing productId in JWS payload`; `No originalTransactionId in JWS`.",
+            "description": "Bad request. The error is one of: `Invalid JSON body`; `jws_representation is required`; `user_id is required`; `Cannot claim entitlement to a synthetic identity` (a `user_id` starting with `apple_otid:`); `Consumable products cannot be claimed`; `Missing productId in JWS payload`; `No originalTransactionId in JWS`. A refused claim carries a `code`: `bundle_id_mismatch` (the JWS bundle id does not belong to this app), `transaction_revoked` (the purchase was revoked or refunded) or `subscription_expired` (the expiry is more than 24 hours past, no later renewal is recorded and Apple confirms the subscription is expired or revoked; if Apple cannot be asked the claim is allowed). The refusals for the last two use the error `This transaction no longer grants access.`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1268,7 +1268,7 @@
                     },
                     "owned": {
                       "type": "boolean",
-                      "description": "`true` when the entitlement now belongs to `user_id`. `false` when another user owns it (see `conflict`)."
+                      "description": "`true` when the entitlement now belongs to `user_id`. `false` when another user owns it (see `conflict`) or when the transaction is revoked (see `revoked`)."
                     },
                     "original_transaction_id": {
                       "type": "string",
@@ -1304,6 +1304,10 @@
                     "warning_message": {
                       "type": "string",
                       "description": "Human-readable detail for `warning`."
+                    },
+                    "revoked": {
+                      "type": "boolean",
+                      "description": "Present and `true` when the signed transaction carries a revocation date. The response is still `200` so the SDK can finish the transaction, but `owned` is `false`, nothing is granted and nothing is saved."
                     }
                   },
                   "required": [
@@ -2046,7 +2050,7 @@
       "post": {
         "operationId": "acceptCancelFlowOffer",
         "summary": "Accept Cancel Flow Offer",
-        "description": "Accepts the retention offer from the cancel flow and applies it to the user's Stripe subscription: a percentage discount for a number of months, or a free period. Calling it again for a subscription that already carries the offer returns the offer that is applied.",
+        "description": "Accepts the retention offer from the cancel flow and applies it to the user's Stripe subscription: a percentage discount for a number of months, or a free period. A save offer is accepted once per subscription. A repeat call applies nothing and returns `200` with `message` `Offer already applied` and null `discount_percent` and `duration_months`.",
         "tags": [
           "Cancel Flow"
         ],
@@ -2080,7 +2084,7 @@
         },
         "responses": {
           "200": {
-            "description": "Offer accepted",
+            "description": "Offer accepted, or already applied on this subscription (`message` `Offer already applied`, null figures).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2137,7 +2141,7 @@
             }
           },
           "502": {
-            "description": "Stripe returned an error.",
+            "description": "Stripe returned an error, or the subscription could not be read from Stripe to check whether an offer was already accepted (`Could not verify the offer status. Try again.`). Nothing is applied.",
             "content": {
               "application/json": {
                 "schema": {

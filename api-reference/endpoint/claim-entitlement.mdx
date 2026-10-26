@@ -11,7 +11,31 @@ openapi: 'POST /iap/claim-entitlement/'
 | `400` | `Cannot claim entitlement to a synthetic identity` | `user_id` starts with `apple_otid:`. Those are placeholders created from App Store notifications; claim to a real user id. |
 | `400` | `Consumable products cannot be claimed` | Consumables cannot be claimed. Subscriptions, non-consumables and non-renewing purchases can. |
 | `400` | `Missing productId in JWS payload`, `No originalTransactionId in JWS` | The JWS does not describe a claimable purchase. |
+| `400` | `The transaction's bundle id does not belong to this app.` with `code: "bundle_id_mismatch"` | The JWS `bundleId` is not the bundle id registered for this app. Follows the same bundle check as [Sync StoreKit Transaction](/api-reference/endpoint/sync-storekit-transaction), which is enforced in production. |
+| `400` | `This transaction no longer grants access.` with `code: "transaction_revoked"` | The purchase was revoked or refunded. See below. |
+| `400` | `This transaction no longer grants access.` with `code: "subscription_expired"` | The subscription has lapsed. See below. |
 | `401` | `JWS signature verification failed` | The JWS did not verify against Apple's certificate chain. |
 | `404` | `No entitlement found for this transaction` | Nothing is recorded for this `originalTransactionId`, so there is nothing to claim. |
+
+## When a claim is refused
+
+A claim needs a purchase that still grants access. Nothing is moved when it is refused.
+
+`transaction_revoked` is returned when any of these is true:
+
+- The JWS carries a `revocationDate`.
+- ZeroSettle has a refunded transaction for that exact StoreKit transaction id.
+- The latest recorded lifecycle event for that transaction or product is a revocation. A later re-purchase on the same original transaction id clears it.
+- ZeroSettle has no record of the purchase and Apple reports it expired or revoked.
+
+`subscription_expired` is returned only when all of these are true:
+
+- The JWS `expiresDate` is more than 24 hours in the past.
+- No active entitlement for the same original transaction id expires later (no renewal since the JWS was signed).
+- Apple's App Store Server API confirms the subscription is expired or revoked.
+
+If Apple cannot be asked (no App Store Connect key, a timeout or an error), the claim is allowed. A past expiry on its own never refuses a claim, because the subscription may have renewed or be in billing grace.
+
+Test purchases (TestFlight, App Review, Xcode) made with a live key are still accepted and saved in Live as test purchases.
 
 When the entitlement already belongs to `user_id`, the call returns `200` with `"claimed": false` and `"message": "Already owned by this account"`. When it moves, the response also carries `entitlement_states_transferred` and `transactions_reassigned`.

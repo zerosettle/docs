@@ -7,6 +7,10 @@ When Apple processed the purchase as a sandbox purchase (TestFlight, App Review 
 
 If the StoreKit transaction id already belongs to a different project, the request is rejected with `409` and `{"error": "storekit_transaction_id_conflict", "message": "This StoreKit transaction id already belongs to a different project."}`. Nothing is saved. Check that the app is using the publishable key of the project the purchase belongs to.
 
+## Revoked transaction
+
+If the signed transaction carries a `revocationDate` (Apple refunded or revoked it), the request still succeeds so the SDK can finish the transaction and stop retrying it. The response is `{"status": "ok", "owned": false, "revoked": true, "original_transaction_id": "...", "resolved_via": "none", "is_test_purchase": false}`. No access is granted and nothing is saved. The iOS SDK (1.6.2) finishes the transaction and does not grant access for it.
+
 ## Bundle id mismatch (400)
 
 The JWS is signed by Apple and carries the `bundleId` of the app that made the purchase. ZeroSettle compares it with the bundle id registered for your app in the dashboard. If they differ, the request is refused with `400`:
@@ -43,7 +47,7 @@ Skip reasons:
 
 - `jws_verification_failed`: the signed payload did not verify.
 - `app_account_token_mismatch`: the transaction's app account token does not belong to the request `user_id`.
-- `environment_mismatch`: the transaction's environment does not match the request key.
+- `environment_mismatch`: the transaction's environment does not match the request key, or its bundle id does not belong to this app. An entry with no bundle id is skipped the same way when the project has a registered bundle id and the bundle check is enforced (it is, in production). Projects with no registered bundle id are not checked.
 - `cross_user_otid_skipped`: no row for this user has that original transaction id.
 - `product_row_missing`: the user has rows for that original transaction id, but none for the transaction's product. This can happen briefly during a crossgrade, before the new product's sync lands. It clears on the next reconcile.
 - `stale_signed_date`: the renewal info is older than what is already stored.

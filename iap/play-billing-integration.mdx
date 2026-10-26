@@ -170,6 +170,12 @@ If a customer buys a Google Play one-time product that isn't linked to a product
 
 The dashboard's catalog sheet shows how many purchases are waiting on each unlinked product. When you link it, ZeroSettle finishes those purchases: a non-consumable grants access to each buyer, and a consumable needs nothing more.
 
+## Pending and cancelled one-time purchases
+
+A Google Play one-time purchase grants access only once Google reports it as purchased. While it is pending (for example a slow payment method) or if it was cancelled, the sync call answers `owned: false`, nothing is recorded and nothing is granted. Access is granted when the purchase completes and Google reports it paid.
+
+With Android SDK 1.2.1, `owned: false` leaves the purchase unacknowledged and the purchase call reports a `not_owned` failure. Play redelivers an unacknowledged purchase, so the SDK syncs it again later and it is granted once it has completed.
+
 ## Acknowledgement model
 
 Google Play refunds a purchase that is not acknowledged within 3 days, so the order in which the SDK finalizes a purchase matters. The SDK acknowledges non-consumables and subscriptions, and consumes consumables so the buyer can purchase them again.

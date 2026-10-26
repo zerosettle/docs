@@ -2,3 +2,12 @@
 title: 'Accept Cancel Flow Offer'
 openapi: 'POST /iap/cancel-flow/accept-offer/'
 ---
+
+## One offer per subscription
+
+A save offer is accepted once per Stripe subscription. A repeat call is not an error and applies nothing:
+
+- If an offer was accepted on this subscription before, running or lapsed, the response is `200` with `{"message": "Offer already applied", "discount_percent": null, "duration_months": null}`.
+- If the subscription carries a retention discount from before ZeroSettle recorded acceptances, the response is `200` with that discount's real figures, for example `{"message": "20% off for 3 months", "discount_percent": 20, "duration_months": 3}`.
+
+If ZeroSettle cannot read the subscription from Stripe to check, the call returns `502` with `{"error": "Could not verify the offer status. Try again."}` and nothing is applied. Retry later; it is safe.

@@ -158,7 +158,7 @@ This:
 ### Limitations
 
 - **Subscriptions and non-consumables only** — consumables cannot be claimed (they're single-use)
-- **Requires an active StoreKit transaction** — if the subscription has expired on the Apple ID, there's nothing to claim
+- **Requires an active StoreKit transaction** — if the subscription has expired on the Apple ID, there's nothing to claim. A claim is refused with `400` and `code` `transaction_revoked` (revoked or refunded), `subscription_expired` (lapsed, confirmed by Apple) or `bundle_id_mismatch` (the purchase belongs to another app). See [Claim Entitlement](/api-reference/endpoint/claim-entitlement)
 - **Atomic** — the revoke and grant happen in a single database transaction. If the grant fails, the revoke rolls back too
 
 ### Use Cases

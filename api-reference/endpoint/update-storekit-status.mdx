@@ -17,20 +17,25 @@ builds continue to work; new SDK releases should omit the field entirely.
 
 ## Behavior by status code
 
-- **`storekit_status: 1`** (active) — Persisted directly. No Apple verification
-  call is made.
-- **`storekit_status: 2`** (anything-not-active: cancelled, expired, billing
-  retry, grace period, revoked) — Triggers a server-side query against Apple's
-  App Store Server API when the tenant has App Store Connect credentials
-  configured. The response populates two fields on the transaction:
-    - `storekit_apple_status` — Apple's full 5-state code (1 Active, 2 Expired,
-      3 BillingRetry, 4 GracePeriod, 5 Revoked)
-    - `storekit_subscription_end` — Apple's reported expiry timestamp
+The `storekit_status` value (`1` or `2`) only triggers the check. The value the
+device sends is never stored.
 
-  When ASC credentials are not configured (or the Apple call fails
-  transiently), only the coarse `storekit_status` flag is persisted. The
-  endpoint still returns success in that case — the verification is a
-  best-effort enrichment, not a hard dependency.
+The endpoint answers `{"ok": true}` at once and verifies with Apple in the
+background. When the tenant has App Store Connect credentials configured, a few
+seconds later the backend stores Apple's answer on the transaction:
+
+- `storekit_status` — Apple's coarse answer (1 active and renewing, 2 anything else)
+- `storekit_apple_status` — Apple's full 5-state code (1 Active, 2 Expired,
+  3 BillingRetry, 4 GracePeriod, 5 Revoked)
+- `storekit_subscription_end` — Apple's reported expiry timestamp
+
+When ASC credentials are not configured, or the Apple call fails or times out,
+the transaction is left unchanged. The response is the same `{"ok": true}` in
+every case, so a success response does not mean the status was updated.
+Transactions that are superseded or failed are not verified.
+
+For a developer, the status fields update shortly after the call instead of
+inside it. Nothing changes in the SDK or in the request you send.
 
 ## Migration note
 

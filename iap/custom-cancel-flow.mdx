@@ -296,6 +296,8 @@ try {
 
 </CodeGroup>
 
+A save offer is accepted once per subscription. If the user accepts again, `acceptSaveOffer` succeeds without applying a second offer. The result has the message `Offer already applied` and no discount percent or duration, so handle those fields being empty. If ZeroSettle cannot read the subscription from Stripe, the call fails with a `502` and nothing is applied, so show your error state and let the user try again.
+
 ### SaveOfferResult
 
 | Field | Type | Description |
