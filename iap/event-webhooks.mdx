@@ -143,7 +143,7 @@ sends no further event.
 The same rule, current period versus earlier period, applies to App Store refunds.
 
 <Note>
-  A store transaction whose price Apple or Google has not reported yet has `amount_cents: 0`. If it is refunded before the price arrives, `transaction.refunded` carries `amount_cents: 0`. The event is not sent again once the price is known.
+  A store transaction whose price Apple or Google has not reported yet has `amount_cents: 0`. If it is refunded before the price arrives, `transaction.refunded` carries `data.transaction.amount_cents: 0`. The event is not sent again once the price is known.
 </Note>
 
 ## Payload
