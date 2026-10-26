@@ -34,106 +34,111 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting Started",
+            "group": "Get started",
             "pages": [
               "index",
+              "iap/overview",
+              "iap/account-setup",
+              "iap/dashboard",
+              "iap/installation",
+              "iap/quickstart",
+              "iap/quickstart-android",
+              "iap/quickstart-flutter",
+              "iap/user-identity"
+            ]
+          },
+          {
+            "group": "Connect your stores",
+            "pages": [
+              "iap/connect-app-store",
+              "iap/google-play-setup"
+            ]
+          },
+          {
+            "group": "Checkout",
+            "pages": [
+              "iap/payment-sheet",
+              "iap/preloading",
+              "iap/promotions",
+              "iap/checkout-errors",
+              "iap/universal-links",
+              "iap/checkout-branding",
+              "iap/custom-domains",
+              "iap/stripe-integration",
+              "iap/stripe-catalog"
+            ]
+          },
+          {
+            "group": "Entitlements",
+            "pages": [
+              "iap/subscription-state",
+              "iap/entitlement-ownership",
+              "iap/storekit-integration",
+              "iap/play-billing-integration",
+              "iap/analytics-only",
+              "iap/revenuecat-integration"
+            ]
+          },
+          {
+            "group": "Your server",
+            "pages": [
+              "iap/event-webhooks",
+              "iap/webhooks",
+              "iap/refunding-payments",
+              "iap/payouts"
+            ]
+          },
+          {
+            "group": "Retention and growth",
+            "pages": [
+              {
+                "group": "Switch & Save and offers",
+                "pages": [
+                  "iap/campaigns",
+                  "iap/switch-and-save",
+                  "iap/offer-tip-view",
+                  "iap/offer-manager",
+                  "iap/upgrade-offer"
+                ]
+              },
+              {
+                "group": "Cancel flow",
+                "pages": [
+                  "iap/cancel-flow",
+                  "iap/customer-portal",
+                  "iap/custom-cancel-flow"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Launch",
+            "pages": [
+              "iap/testing",
+              "iap/go-live",
+              "iap/troubleshooting"
+            ]
+          },
+          {
+            "group": "Compliance",
+            "pages": [
+              "iap/compliance",
+              "iap/external-purchase-reporting"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "iap/best-practices",
+              "iap/sample-app",
+              "iap/sdk-versions",
+              "iap/migration-guide",
+              "iap/migration-manager",
               "changelog"
             ]
           },
           {
-            "group": "In-App Purchase",
-            "pages": [
-              "iap/overview",
-              {
-                "group": "Getting Started",
-                "icon": "circle-play",
-                "pages": [
-                  "iap/account-setup",
-                  "iap/installation",
-                  "iap/quickstart",
-                  "iap/quickstart-android",
-                  "iap/quickstart-flutter"
-                ]
-              },
-              {
-                "group": "Dashboard",
-                "icon": "chart-line",
-                "pages": [
-                  "iap/dashboard",
-                  "iap/checkout-branding",
-                  "iap/custom-domains",
-                  "iap/stripe-catalog",
-                  "iap/cancel-flow",
-                  "iap/campaigns"
-                ]
-              },
-              {
-                "group": "Checkout",
-                "icon": "cart-shopping",
-                "pages": [
-                  "iap/payment-sheet",
-                  "iap/preloading",
-                  "iap/checkout-errors",
-                  "iap/promotions",
-                  "iap/switch-and-save",
-                  "iap/offer-tip-view",
-                  "iap/migration-manager",
-                  "iap/offer-manager",
-                  "iap/universal-links"
-                ]
-              },
-              {
-                "group": "Users & Subscriptions",
-                "icon": "users",
-                "pages": [
-                  "iap/user-identity",
-                  "iap/entitlement-ownership",
-                  "iap/subscription-state",
-                  "iap/customer-portal",
-                  "iap/custom-cancel-flow",
-                  "iap/upgrade-offer",
-                  "iap/refunding-payments",
-                  "iap/payouts"
-                ]
-              },
-              {
-                "group": "Server-Side",
-                "icon": "server",
-                "pages": [
-                  "iap/webhooks",
-                  "iap/event-webhooks",
-                  "iap/stripe-integration"
-                ]
-              },
-              {
-                "group": "Integrations",
-                "icon": "puzzle-piece",
-                "pages": [
-                  "iap/analytics-only",
-                  "iap/revenuecat-integration",
-                  "iap/storekit-integration",
-                  "iap/play-billing-integration"
-                ]
-              },
-              "iap/compliance",
-              "iap/external-purchase-reporting",
-              {
-                "group": "Testing & Launch",
-                "icon": "flask-vial",
-                "pages": [
-                  "iap/testing",
-                  "iap/troubleshooting",
-                  "iap/go-live",
-                  "iap/migration-guide",
-                  "iap/sdk-versions"
-                ]
-              },
-              "iap/best-practices",
-              "iap/sample-app"
-            ]
-          },
-          {
-            "group": "MCP Server",
+            "group": "MCP server",
             "pages": [
               "ai/overview",
               "ai/connect",
@@ -289,5 +294,19 @@
       "x": "https://x.com/zerosettle",
       "github": "https://github.com/zerosettle"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/iap/universal-links-setup",
+      "destination": "/iap/universal-links"
+    },
+    {
+      "source": "/sdk/android",
+      "destination": "/iap/quickstart-android"
+    },
+    {
+      "source": "/troubleshooting/stripe-account-restricted",
+      "destination": "/iap/troubleshooting"
+    }
+  ]
 }
