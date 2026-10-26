@@ -14,10 +14,6 @@
     {
       "url": "https://api.zerosettle.io/v1",
       "description": "Production"
-    },
-    {
-      "url": "https://api-staging.zerosettle.io/v1",
-      "description": "Staging"
     }
   ],
   "security": [
