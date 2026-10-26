@@ -10,3 +10,29 @@ Only entitlements that still grant access are returned (`active`, `cancelled`, `
 Look users up by `user_id`. An `email` lookup matches only legacy email-only checkouts, so a user your app identified with a `user_id` is not found by email.
 
 `source` is `play_store` only for Android clients (`X-ZS-SDK-Platform: android`). Other clients receive `web_checkout` for Google Play entitlements.
+
+## Plan, add-ons and features
+
+<Warning>
+  These four keys are not released yet. No released SDK reads them.
+</Warning>
+
+The response also carries four keys next to `entitlements` and `pending_actions`. The existing keys are unchanged.
+
+<ResponseExample>
+```json
+{
+  "plan": { "key": "pro", "name": "Pro", "kind": "tier" },
+  "add_ons": [{ "key": "studio", "name": "Studio", "kind": "add_on" }],
+  "features": { "custom_styles": true, "export_quality": "4K" },
+  "balances": { "credits": { "remaining": 318, "limit": 500 } }
+}
+```
+</ResponseExample>
+
+- `plan` is the person's one plan: the highest-ranked plan among the products they hold, otherwise the Free plan (`{"key": "free", "name": "Free", "kind": "tier"}`). Unknown users, and apps that have not set up plans, also get the Free plan.
+- `add_ons` lists the add-on plans the person holds. They stack on top of the plan.
+- `features` maps each feature key to its value. On-or-off features are `true` or `false`. Value features are a string from the developer's ordered list, or `null`. The value is the best across the plan and add-ons. For apps without plans, `features` is empty.
+- `balances` maps each currency key to a balance (the example shows two of its fields; the full shape is in the API reference below). It is `{}` when the app has no live currency.
+
+If ZeroSettle cannot compute these four fields, it leaves them out together and a client keeps its last-known values. `entitlements` and `pending_actions` are always returned.

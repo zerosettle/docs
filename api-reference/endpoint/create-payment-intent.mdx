@@ -20,6 +20,10 @@ Call `stripe.confirmSetup()` when `intent_type == "setup"` and `stripe.confirmPa
 
 ---
 
+## Credit packs
+
+A product that is a credit pack in one of the app's currencies needs a user id. Without one, the request answers `400` with `{"error": "user_id_required"}`, so the credits always reach a known person. The batch endpoint returns the same error for that product in its result.
+
 ## Related endpoints
 
 The following two endpoints are called by the SDK and are not listed separately in this reference. Their response fields are documented here.

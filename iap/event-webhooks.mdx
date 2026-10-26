@@ -75,6 +75,17 @@ sync, trigger emails, or notify your team, without polling our API.
 
     See [Switch & Save](/iap/switch-and-save) for the flow these describe.
   </Accordion>
+  <Accordion title="Plans and credits (unreleased)">
+    These events are not released yet. They belong to [usage limits and credits](/iap/usage-limits).
+
+    | Event | When it fires |
+    |---|---|
+    | `plan.changed` | We saw a person's plan or add-ons change |
+    | `currency.limit_reached` | A request was refused because the person had too few units |
+    | `currency.granted` | A credit pack purchase added units, or units were given by hand from the dashboard |
+
+    See [Plans and credits events](#plans-and-credits-events-unreleased) for payloads.
+  </Accordion>
 </AccordionGroup>
 
 <Note>
@@ -242,6 +253,110 @@ triggered the check (for example `assn` or `claim`) and may be absent.
 Because there is no body `id`, deduplicate these on the `X-ZeroSettle-Idempotency-Key`
 header, which is stable for one state change. The two eligibility events fire when the
 state flips, not on every check.
+
+### Plans and credits events (unreleased)
+
+<Info>
+  These three events are not released yet. They use the same envelope and delivery as the
+  events above. In every payload, `data.is_test_purchase` is `true` when the purchase
+  behind the event was a test purchase, and `false` otherwise.
+</Info>
+
+A `<Plan>` object is `{"key", "name", "kind"}`, for example `{"key": "pro", "name": "Pro", "kind": "tier"}`. An add-on has kind `add_on`.
+
+#### `plan.changed`
+
+Sent when we see a person's plan or add-ons change. We see a change on a purchase or expiry event, on an app read, or on a server spend, so the event can arrive a little after the change itself.
+
+<Note>
+  `plan.changed` fires only after your project has configured plans: at least one paid plan or add-on, a feature or a currency. Until then ZeroSettle sends none, so an endpoint subscribed to all events (`*`) sees no `plan.changed`. Mapping products to the Free plan alone does not count.
+</Note>
+ `from` is `null` when ZeroSettle sees a person for the first time, after plans were first set up, and they are on a paid plan or hold an add-on. People first seen before plans were set up send nothing for their starting plan. That is not necessarily a new purchase:
+
+- An existing store subscriber seen for the first time sends one.
+- After an identity merge, the kept person can send one.
+
+```json
+{
+  "id": "evt_plan_4821_pro_3",
+  "type": "plan.changed",
+  "created": "2026-10-17T21:04:11.482913+00:00",
+  "environment": "live",
+  "project_id": 85,
+  "data": {
+    "external_user_id": "user_8f21",
+    "from": {"key": "free", "name": "Free", "kind": "tier"},
+    "to": {"key": "pro", "name": "Pro", "kind": "tier"},
+    "add_ons": [{"key": "priority_queue", "name": "Priority queue", "kind": "add_on"}],
+    "is_test_purchase": false
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `data.from` | The earlier plan, or `null` for a person with no earlier plan |
+| `data.to` | The plan now in effect |
+| `data.add_ons` | The add-ons now in effect. An empty list when there are none |
+
+#### `currency.limit_reached`
+
+Sent once per person, currency and period, when a request is refused for lack of units. Further refusals in the same period do not send it again. `limit` is the person's limit for the period and can be `null`.
+
+```json
+{
+  "id": "evt_limit_4821_credits_2026-10",
+  "type": "currency.limit_reached",
+  "created": "2026-10-17T21:04:11.482913+00:00",
+  "environment": "live",
+  "project_id": 85,
+  "data": {
+    "external_user_id": "user_8f21",
+    "currency": "credits",
+    "action": "image_generation",
+    "limit": 100,
+    "resets_at": "2026-11-01T00:00:00Z",
+    "is_test_purchase": false
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `data.currency` | The currency key |
+| `data.action` | The action that was refused |
+| `data.limit` | The person's limit for the period, or `null` |
+| `data.resets_at` | When the period resets, as UTC with second precision, or `null` |
+
+#### `currency.granted`
+
+Sent when a credit pack purchase adds units, or when units are given by hand from the dashboard. `source` is `pack` or `manual`. `transaction_id` is the integer transaction id for a pack and `null` for a manual grant. `reason` is the note given with the grant and can be an empty string.
+
+```json
+{
+  "id": "evt_granted_912",
+  "type": "currency.granted",
+  "created": "2026-10-17T21:04:11.482913+00:00",
+  "environment": "live",
+  "project_id": 85,
+  "data": {
+    "external_user_id": "user_8f21",
+    "currency": "credits",
+    "amount": 500,
+    "reason": "",
+    "source": "pack",
+    "transaction_id": 14050488,
+    "is_test_purchase": false
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `data.amount` | Units added |
+| `data.source` | `pack` or `manual` |
+| `data.transaction_id` | Integer transaction id for a pack, `null` for a manual grant |
+| `data.reason` | The note on the grant. Can be empty |
 
 ### Field reference
 

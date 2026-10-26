@@ -1,0 +1,20 @@
+---
+title: 'Finish a Hold'
+openapi: 'POST /usage/{usage_id}/finish/'
+---
+
+<Warning>
+  This endpoint is not released yet.
+</Warning>
+
+Settles a hold taken by [Spend Usage](/api-reference/endpoint/spend-usage) for a by-usage action. Send the real size once the AI call returns, as one of `amount`, `usage` with `model`, or `cost`. Authenticate with a secret key.
+
+Converting `usage` or `cost` to units needs the currency's cost per unit. The cost comes from a sent `cost` first, then `usage.cost`, then the catalog price for `usage` with `model`. Usage that can't be priced, such as an unknown model with no cost, never errors: the hold settles at its estimate and the usage is recorded. Send `amount` or `cost` when the model may not price.
+
+- The difference from the hold is settled. Settling can take the balance to zero, never below it; the excess is returned as `uncharged`, recorded and shown in the dashboard, and never carried as debt.
+- A hold with no finish settles at its estimate 15 minutes after it was made (`settled_by` is `timeout`). A finish that arrives after that, within 24 hours of the hold, still updates cost to serve but not the charge. After 24 hours the request is gone and finish answers `404 not_found`.
+- A second finish returns the stored result unchanged.
+- When the app is paused, a `usage_id` that starts with `use_paused_` answers `200` and nothing is settled, even after the app resumes. The prefix decides, not the pause. The body is `{"status": "settled", "usage_id": "<id>", "spent": 0, "uncharged": 0, "settled_by": "paused", "currency": null, "remaining": null, "limit": null, "resets_at": null, "paused": true}`. A paused id stores nothing, so `currency` and `remaining` are `null`. Check for `null` before you test `remaining <= 0`: in JavaScript `null <= 0` is true. A bad body is still `400`, and a paused id never answers `404`.
+- A finish on a by-usage request carries `"warning": "unknown_model"` under the same conditions as [Spend Usage](/api-reference/endpoint/spend-usage#how-units-are-worked-out). Send `cost` or `amount` to charge for what the call used.
+
+Errors: `400` (`bad_json`, `bad_amount` when nothing was sent to settle with, `bad_usage`, `bad_model`, `bad_cost`), `404 not_found` (no request has this id, or it is more than 24 hours old), `409 not_held` (the request was not a hold), `409 undone`, `409 try_again` (the request changed while it was being processed; send the same call again), `429 rate_limited` with a `Retry-After` header in seconds.

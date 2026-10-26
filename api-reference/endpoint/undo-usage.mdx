@@ -1,0 +1,20 @@
+---
+title: 'Undo a Request'
+openapi: 'POST /usage/{usage_id}/undo/'
+---
+
+<Warning>
+  This endpoint is not released yet.
+</Warning>
+
+Gives back what a request spent, or releases a hold, for example when a generation failed. Authenticate with a secret key.
+
+- The units go back to the parts they came from, if those still exist. An allowance whose period has rolled over gets nothing back.
+- Works within 24 hours of the request.
+- A second undo returns the stored result.
+- When the app is paused, a `usage_id` that starts with `use_paused_` answers `200` even after the app resumes. Nothing was stored, so nothing is given back. The body is `{"status": "undone", "usage_id": "<id>", "refunded": 0, "currency": null, "remaining": null, "limit": null, "resets_at": null, "paused": true}`. Check for `null` before you test `remaining <= 0`: in JavaScript `null <= 0` is true.
+- After an undo, the same `idempotency_key` on [Spend Usage](/api-reference/endpoint/spend-usage) answers `409 request_undone`. Send a new key to spend again.
+
+After 24 hours the request is gone and undo answers `404 not_found`.
+
+Errors: `404 not_found` (no request has this id, or it is more than 24 hours old), `409 nothing_spent` (the request was denied, so nothing was spent), `409 try_again` (the request changed while it was being processed; send the same call again), `429 rate_limited` with a `Retry-After` header in seconds.

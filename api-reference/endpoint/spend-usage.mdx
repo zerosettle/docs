@@ -1,0 +1,64 @@
+---
+title: 'Spend Usage'
+openapi: 'POST /usage/'
+---
+
+<Warning>
+  This endpoint is not released yet.
+</Warning>
+
+Call this from your server before each AI request, at `https://api.zerosettle.io/v1/usage/`. It spends units for one action by one person and answers whether to go ahead. Authenticate with a **secret key** (`zs_sk_test_...` or `zs_sk_live_...`) in the `X-ZeroSettle-Key` header. The key picks the environment; sandbox and live balances never mix. Never put a secret key in an app.
+
+Set a short timeout on this call and decide what to do when ZeroSettle can't be reached. See [Usage limits and credits](/iap/usage-limits).
+
+## How units are worked out
+
+- **Fixed action:** its listed cost.
+- **Unlisted action:** 1.
+- **By-usage action with `amount`:** `amount`. `amount` is ignored for fixed and unlisted actions.
+- **By-usage action with `usage` and `model`, or `cost`, that can be priced:** `ceil(cost_usd / cost_per_unit)`, at least 1. This needs the currency's cost per unit, which the dashboard requires once an action is by usage. The cost comes from a sent `cost` first, then `usage.cost`, then the catalog price for `usage` with `model`.
+- **By-usage action that can't be priced** (an unknown model and no cost): a hold of `estimate`, else the action's average units over the last 7 days, else 1. The same hold applies when no measure was sent. It is never refused. Settle a hold with [Finish a Hold](/api-reference/endpoint/finish-usage); finish with usage that still can't be priced settles at the hold.
+
+If the model may not price, send `amount` or `cost` so the charge matches the call.
+
+**Unknown model warning.** When the action is by usage, you sent a token `usage` object, you sent no `cost`, no `usage.cost` and no `amount`, and `model` is not in ZeroSettle's price catalog, the answer carries `"warning": "unknown_model"`. The request still succeeds and is held as described above. Send `cost` or `amount` to charge for what the call used. Cost to serve shows as Not measured.
+
+## Action keys
+
+The `action` key is trimmed and compared without regard to case, so `Image_Generation ` and `image_generation` are the same action. A missing or blank key is `400 action_required`. A key that is not a string, or longer than 64 characters after trimming and lowercasing, is `400 bad_action`. Stored keys keep the trimmed, lowercase form. Dashboard keys are lowercase already, so a listed action always matches.
+
+## When the app is paused
+
+If ZeroSettle has paused metering for your app, validation still runs first. Then the answer is `200` with `status: "allowed"`, `spent: 0`, `held: false`, `paused: true` and a `usage_id` that starts with `use_paused_`. `remaining`, `limit` and `resets_at` are the person's unchanged balance. `upgrade_available` and `packs` are `null`. Nothing is written and nothing is charged, so let the request go ahead.
+
+If ZeroSettle cannot read the person's plan while paused, the answer is still `allowed`, with `plan: null`, `add_ons: []`, `remaining: 0`, `limit: null`, `resets_at: null`, `upgrade_available: null`, `packs: null` and `test_purchase: false`. Do not read that `remaining: 0` as out of credits when `paused` is true.
+
+A key used while paused stores nothing, so the same key spends after the app resumes. A retry of a key from before the pause answers as it did.
+
+## Status
+
+| Status | Meaning |
+|---|---|
+| `allowed` | The units are spent (or held). Go ahead. |
+| `limit_reached` | Not enough is left. Nothing was spent. A hold is all or nothing: an estimate above the units left is `limit_reached` even when some units remain. |
+| `not_in_plan` | The person's plan and add-ons give none of this currency, and they have never held purchased units in it. Nothing was spent. Someone whose purchased units are used up gets `limit_reached`. |
+
+A by-usage request that reports `amount` or `usage` after the call takes what is left, up to the units reported, and answers `allowed` with `spent` below what was reported. The rest is recorded as uncharged and the balance never goes below zero. It answers `limit_reached` only when nothing is left.
+
+A denied request is still a `200` and still returns a `usage_id`. It is recorded for the live feed and analytics. When the status is not `allowed`, `upgrade_available` carries the upgrade offer or `packs` carries the credit packs, depending on the currency's runs-out setting.
+
+## Errors
+
+Errors look like `{"error": "<code>", "message": "<sentence>"}`.
+
+| Status | Codes |
+|---|---|
+| `400` | `bad_json`, `user_id_required`, `bad_user_id`, `action_required`, `bad_action`, `currency_required`, `unknown_currency`, `bad_amount`, `bad_usage`, `bad_model`, `bad_cost`, `bad_estimate`, `bad_idempotency_key`, `no_currencies` |
+| `409` | `idempotency_key_reused` (the same key within 24 hours with a different body, or a key in use by a concurrent request), `request_undone` (the key's request was undone) |
+| `429` | `rate_limited`, with a `Retry-After` header in seconds |
+
+A retry with the same `idempotency_key` within 24 hours returns the first answer and spends nothing more; after 24 hours it is a new request.
+
+Replay checks run in this order. A different body answers `409 idempotency_key_reused`. Then a key whose request was undone answers `409 request_undone` with the message "This request was undone. Send a new idempotency key to spend again." Otherwise the first answer comes back. After an undo, send a new key to spend again.
+
+A `401` means the key failed. Treat any `401` as an auth failure.
