@@ -33,7 +33,7 @@ Opens the checkout page inside your app using Safari's rendering engine. The use
 The checkout is embedded directly into your app's UI as a native-feeling bottom sheet or full-screen view. This provides the best conversion rates and user experience. Like SFSafariViewController, this approach may encounter more App Review scrutiny than external Safari.
 
 <Tip>
-  ZeroSettle supports all three checkout methods via remote config on the dashboard. You can switch between them without shipping an app update — start with external Safari for the smoothest review, then switch to an in-app method once approved.
+  ZeroSettle supports all three checkout methods via remote config on the dashboard. You can switch between them without shipping an app update — web view checkout is the default; switch to external Safari if you want the smoothest review.
 </Tip>
 
 ## US Geofencing
@@ -46,9 +46,9 @@ Apple Pay on web checkout requires `stripe.PaymentMethodDomain.create()` per con
 
 ## App Review Scenarios
 
-- **External Safari mode (default):** Explicitly sanctioned. Typically passes review on first submission.
-- **SFSafariViewController / WKWebView modes:** Allowed under current guidelines but reviewer may ask about the flow. Keep the external-link disclosure sheet enabled — ZeroSettle provides it automatically.
-- **Sandbox vs. Live key mismatch:** A sandbox Apple account with a live publishable key will produce StoreKit entitlements flagged `is_sandbox=True` that don't match live product catalogs. This is a developer testing artifact, not a production bug. See [troubleshooting](/iap/troubleshooting).
+- **Web view mode (default):** The embedded WKWebView checkout. Allowed under current guidelines, but a reviewer may ask about the flow. Keep the external-link disclosure sheet enabled — ZeroSettle provides it automatically.
+- **External Safari mode:** Explicitly sanctioned. Typically passes review on first submission. Choose it on the dashboard if you want the smoothest review.
+- **TestFlight and App Review purchases:** These buy in Apple's Sandbox, often with your live key. ZeroSettle keeps them in Live, marks them as test purchases, still grants access, and excludes them from revenue figures by default. See [Testing & Sandbox](/iap/testing#live-mode-test-purchases-and-testflight).
 
 <Note>
   **Legal / Compliance Note** — ZeroSettle is not a law firm and does not provide legal advice. Our products are designed to align with Apple's published App Store guidelines and external purchase/link-out requirements, as well as relevant court rulings. Review your specific implementation with your own legal counsel. For the authoritative policy summary — including EU DMA, Korea, Japan, and other jurisdictions — see [zerosettle.io/transparency](https://zerosettle.io/transparency).
