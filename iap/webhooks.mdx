@@ -8,7 +8,7 @@ ZeroSettle acts as your Merchant of Record, which means **you never need to set 
 
 Your app interacts with this system in three ways:
 
-1. **Client-side** -- the SDK receives real-time updates via delegate callbacks
+1. **Client-side** -- the SDK keeps the entitlements your app observes up to date (delegate callbacks on iOS, a `StateFlow` on Android)
 2. **Server-side** -- your backend queries the Entitlements API to verify purchase status
 3. **Event webhooks** -- ZeroSettle POSTs subscription lifecycle events to your server
 
@@ -17,6 +17,84 @@ Your app interacts with this system in three ways:
   behalf**. If you want ZeroSettle to notify **your** server when a subscription is
   purchased, renewed, cancelled or refunded, see [Event Webhooks](/iap/event-webhooks).
 </Note>
+
+## App Store Server Notifications
+
+ZeroSettle also handles Apple's **App Store Server Notifications V2** (ASSN v2) for StoreKit subscription lifecycle events. If your app uses StoreKit purchases alongside web checkout, these notifications keep entitlements in sync automatically.
+
+### Setting Up ASSN v2
+
+<Tip>
+  The quickest way: in the Dashboard, go to **Integrations → Webhooks**, open **App Store Server Notifications v2** and choose **ZeroSettle Managed**. ZeroSettle sets the URL in App Store Connect for you with your App Store Connect API key.
+</Tip>
+
+To set it yourself, configure the webhook URL in App Store Connect:
+
+<Steps>
+  <Step title="Open App Store Connect">
+    Navigate to your app in [App Store Connect](https://appstoreconnect.apple.com).
+  </Step>
+  <Step title="Go to App Information">
+    Select **App Information** from the sidebar under **General**.
+  </Step>
+  <Step title="Configure the webhook URL">
+    Under **App Store Server Notifications**, set both the **Production Server URL** and the **Sandbox Server URL** to:
+
+    ```
+    https://api.zerosettle.io/v1/webhooks/appstore-notifications/
+    ```
+
+    The same URL serves both: ZeroSettle reads the environment from Apple's signed notification, so the sandbox URL needs no query parameter. Use the `api.zerosettle.io` host; `zerosettle.io` does not receive notifications.
+
+    Select **Version 2** for the notification version.
+  </Step>
+</Steps>
+
+<Note>
+  Without these notifications, ZeroSettle learns about App Store renewals, expirations and refunds only when a customer opens the app. The dashboard shows a banner until they start arriving.
+</Note>
+
+### Handled Apple Notifications
+
+ZeroSettle processes the following ASSN v2 notification types:
+
+| Notification | What ZeroSettle Does |
+|---|---|
+| `REFUND` | Deactivates entitlement, marks transaction as refunded |
+| `REVOKE` | Deactivates entitlement (family sharing revocation) |
+| `DID_RENEW` | Extends entitlement expiry to new period end. Applies pending product changes from plan switches. |
+| `EXPIRED` | Marks entitlement as expired and deactivates access |
+| `DID_FAIL_TO_RENEW` | Marks entitlement as grace period or past due depending on subtype |
+| `DID_CHANGE_RENEWAL_STATUS` | Handles auto-renew toggle (marks cancelled or reactivated) |
+| `DID_CHANGE_RENEWAL_PREF` | Records pending product change for next renewal |
+| `GRACE_PERIOD_EXPIRED` | Deactivates access after billing grace period ends |
+| `RENEWAL_EXTENDED` | Extends entitlement expiry when Apple grants an extension |
+| `SUBSCRIBED` | Creates transaction and entitlement for new subscriptions |
+| `ONE_TIME_CHARGE` | Creates transaction and entitlement for one-time purchases |
+| `OFFER_REDEEMED` | Records offer metadata on the entitlement |
+| `REFUND_REVERSED` | Re-activates entitlement after a refund reversal |
+| `REFUND_DECLINED` | Logged only (refund request was declined by Apple) |
+| `EXTERNAL_PURCHASE_TOKEN` | Stores the external purchase token that Apple reports, so it can be matched to a purchase for external-purchase reporting. No entitlement change |
+
+<Note>
+  All Apple notifications are verified using JWS signature verification against Apple's Root CA certificate chain before processing. Duplicate notifications are automatically skipped via idempotency checks on the `notificationUUID`.
+</Note>
+
+<Note>
+  As of **2026-04-27**, the following ASSN v2 events also mirror Apple's reported state onto the originating migration `Transaction` record's `storekit_status`, `storekit_apple_status`, and `storekit_subscription_end` fields — keeping migration trial-end resolution and dashboard analytics in sync without an SDK round-trip:
+
+  - `DID_CHANGE_RENEWAL_STATUS` (subtypes `AUTO_RENEW_DISABLED`, `AUTO_RENEW_ENABLED`)
+  - `EXPIRED`
+  - `DID_FAIL_TO_RENEW` (default and `GRACE_PERIOD` subtype)
+  - `REVOKE`
+  - `REFUND`
+
+  No SDK changes are required to consume this — the propagation is purely server-side.
+</Note>
+
+### Notification Forwarding
+
+If your app needs to receive ASSN v2 notifications on your own server (e.g., for analytics or custom logic), you can configure **notification forwarding** in the ZeroSettle dashboard. When enabled, ZeroSettle processes the notification first, then forwards the original signed payload to your URL.
 
 ## How It Works
 
@@ -31,7 +109,7 @@ Your app interacts with this system in three ways:
     The webhook handler creates an immutable `Transaction` record (the payment ledger entry) and an `Entitlement` (the user's access grant). For subscriptions, it also creates the Stripe subscription and tracks renewal state.
   </Step>
   <Step title="SDK updates client-side">
-    The SDK polls for transaction completion and updates the local entitlement cache. Your delegate callback fires with the updated entitlements.
+    The SDK polls for transaction completion and updates the local entitlement cache. The entitlements your app observes update to match.
   </Step>
   <Step title="Your backend verifies via API">
     At any point, your backend can query `GET /v1/iap/entitlements` to verify a user's purchase status server-side.
@@ -46,6 +124,15 @@ Your app interacts with this system in three ways:
 
 For server-side purchase verification (e.g., unlocking content from your API, validating access in a game server, or gating API features), query the Entitlements API.
 
+### What the publishable key can and cannot do
+
+The key in the examples below is your **publishable** key. It ships inside your app, so treat it as public: anyone who extracts it from your app can call these endpoints with any `user_id` and read that user's entitlements.
+
+- Reading entitlements with it is fine for **UI** decisions, such as showing or hiding a paywall.
+- Do not grant server-side value (credits, downloads, API access, account changes) on the strength of a client claim, or of an entitlement read made with a key the client holds.
+- For server-side value, drive your records from the signed [event webhooks](/iap/event-webhooks) (verify the signature, then act). Use the Entitlements API from your server only to double-check a user you already know about.
+- Your **secret** key (`zs_sk_...`) must stay on your server. Only [Get Migration Cohort](/api-reference/endpoint/migration-cohort) uses it today.
+
 ### Query by User ID
 
 ```bash
@@ -56,7 +143,7 @@ curl --request GET \
 
 ### Query by Email
 
-For [anonymous users](/iap/user-identity#option-3-anonymous-users) who purchased without a user account:
+Email lookup is deprecated and narrow. It matches only legacy email-only checkouts, where the purchase has no `user_id` attached. It does **not** find a user your app identified with a `user_id`, and it does not find [anonymous users](/iap/user-identity#option-3-anonymous-users) from the SDK: those carry a generated UUID as their `user_id`, so look them up by that UUID.
 
 ```bash
 curl --request GET \
@@ -84,9 +171,12 @@ curl --request GET \
       "cancelled_at": null,
       "is_test_purchase": false
     }
-  ]
+  ],
+  "pending_actions": []
 }
 ```
+
+Only entitlements that still grant access are returned (`active`, `cancelled`, `grace_period`, `past_due`). Expired and paused ones are not in the list. `product_type` is one of `consumable`, `non_consumable`, `non_renewing` or `auto_renewable`. `pending_actions` lists follow-up steps for the app to show, such as cancelling an old store subscription after Switch & Save, and is empty when there are none.
 
 `is_test_purchase` is `true` when Apple processed the purchase as a sandbox purchase (TestFlight, App Review or Xcode) but your app sent it with a live ZeroSettle key. The entitlement still grants access, so reviewers and testers are never locked out. Skip these when you count customers or revenue on your side.
 
@@ -145,12 +235,12 @@ resp, err := http.DefaultClient.Do(req)
 </CodeGroup>
 
 <Note>
-  All API endpoints authenticate with your **publishable key** (`zs_pk_live_...` or `zs_pk_test_...`) via the `X-ZeroSettle-Key` header -- the same key you use in the SDK. Use `zs_pk_test_...` for sandbox queries and `zs_pk_live_...` for production.
+  These endpoints authenticate with your **publishable key** (`zs_pk_live_...` or `zs_pk_test_...`) via the `X-ZeroSettle-Key` header -- the same key you use in the SDK. Use `zs_pk_test_...` for sandbox queries and `zs_pk_live_...` for production. The one server-to-server endpoint, [Get Migration Cohort](/api-reference/endpoint/migration-cohort), takes a secret key instead.
 </Note>
 
 ### Transaction History
 
-For a full history of all transactions (including failed, refunded, and expired), use the transaction history endpoint:
+For a full history of a user's transactions (including failed and refunded ones), use the transaction history endpoint:
 
 ```bash
 curl --request GET \
@@ -158,11 +248,11 @@ curl --request GET \
   --header 'X-ZeroSettle-Key: zs_pk_live_...'
 ```
 
-This returns all transactions regardless of status, including consumed consumables, expired subscriptions, and refunds. The `limit` parameter defaults to 50 (max 100).
+This returns the user's transactions with the statuses `completed`, `pending`, `processing`, `failed` and `refunded` (a disputed transaction is reported as `refunded`), including consumed consumables, expired subscriptions, and refunds. Abandoned checkout sessions are not returned. The `limit` parameter defaults to 50 (max 100); there is no cursor.
 
 ## Client-Side Updates
 
-The SDK provides real-time delegate callbacks when entitlements change. These fire after purchases, restores, refunds, and subscription renewals.
+The SDK tells your app when entitlements change on the device: a delegate on iOS, a `StateFlow` on Android, a hook in React Native and a stream in Flutter. Updates follow purchases, restores, refunds, and subscription renewals that the SDK sees.
 
 ### Delegate Callbacks
 
@@ -192,17 +282,18 @@ class PurchaseManager: ZeroSettleDelegate {
 ```
 
 ```kotlin Kotlin
-class PurchaseManager : ZeroSettleDelegate {
+// Android has no delegate. Collect the entitlements flow instead.
+class PurchaseManager(scope: CoroutineScope) {
     init {
-        ZeroSettle.delegate = this
-    }
-
-    override fun zeroSettleEntitlementsDidUpdate(entitlements: List<Entitlement>) {
-        for (entitlement in entitlements) {
-            if (entitlement.isActive) {
-                unlockFeature(entitlement.productId)
-            } else {
-                lockFeature(entitlement.productId)
+        scope.launch {
+            ZeroSettle.entitlements.collect { entitlements ->
+                for (entitlement in entitlements) {
+                    if (entitlement.isActive) {
+                        unlockFeature(entitlement.productId)
+                    } else {
+                        lockFeature(entitlement.productId)
+                    }
+                }
             }
         }
     }
@@ -244,7 +335,7 @@ ZeroSettle.instance.entitlementUpdates.listen((entitlements) {
 </CodeGroup>
 
 <Note>
-  Entitlement updates are triggered by SDK operations (purchases, restores). They are **not** pushed from the backend in real-time via WebSocket or push notification. For server-authoritative access control, use the Entitlements API on your backend.
+  Entitlement updates are triggered by SDK operations (purchases, restores). They are **not** pushed from the backend in real-time via WebSocket or push notification. For server-authoritative access control, use signed [event webhooks](/iap/event-webhooks) and the Entitlements API on your backend.
 </Note>
 
 ### Reactive UI Observation
@@ -377,88 +468,11 @@ If you use [BYOS mode](/iap/stripe-catalog) with your own Stripe account connect
   Do not configure your own webhook endpoint for the same events on your connected Stripe account. Duplicate processing can cause entitlement conflicts.
 </Warning>
 
-## App Store Server Notifications
-
-ZeroSettle also handles Apple's **App Store Server Notifications V2** (ASSN v2) for StoreKit subscription lifecycle events. If your app uses StoreKit purchases alongside web checkout, these notifications keep entitlements in sync automatically.
-
-### Setting Up ASSN v2
-
-<Tip>
-  The quickest way: in the Dashboard, go to **Integrations → Webhooks**, open **App Store Server Notifications v2** and choose **ZeroSettle Managed**. ZeroSettle sets the URL in App Store Connect for you with your App Store Connect API key.
-</Tip>
-
-To set it yourself, configure the webhook URL in App Store Connect:
-
-<Steps>
-  <Step title="Open App Store Connect">
-    Navigate to your app in [App Store Connect](https://appstoreconnect.apple.com).
-  </Step>
-  <Step title="Go to App Information">
-    Select **App Information** from the sidebar under **General**.
-  </Step>
-  <Step title="Configure the webhook URL">
-    Under **App Store Server Notifications**, set both the **Production Server URL** and the **Sandbox Server URL** to:
-
-    ```
-    https://api.zerosettle.io/v1/webhooks/appstore-notifications/
-    ```
-
-    The same URL serves both: ZeroSettle reads the environment from Apple's signed notification, so the sandbox URL needs no query parameter. Use the `api.zerosettle.io` host; `zerosettle.io` does not receive notifications.
-
-    Select **Version 2** for the notification version.
-  </Step>
-</Steps>
-
-<Note>
-  Without these notifications, ZeroSettle learns about App Store renewals, expirations and refunds only when a customer opens the app. The dashboard shows a banner until they start arriving.
-</Note>
-
-### Handled Apple Notifications
-
-ZeroSettle processes the following ASSN v2 notification types:
-
-| Notification | What ZeroSettle Does |
-|---|---|
-| `REFUND` | Deactivates entitlement, marks transaction as refunded |
-| `REVOKE` | Deactivates entitlement (family sharing revocation) |
-| `DID_RENEW` | Extends entitlement expiry to new period end. Applies pending product changes from plan switches. |
-| `EXPIRED` | Marks entitlement as expired and deactivates access |
-| `DID_FAIL_TO_RENEW` | Marks entitlement as grace period or past due depending on subtype |
-| `DID_CHANGE_RENEWAL_STATUS` | Handles auto-renew toggle (marks cancelled or reactivated) |
-| `DID_CHANGE_RENEWAL_PREF` | Records pending product change for next renewal |
-| `GRACE_PERIOD_EXPIRED` | Deactivates access after billing grace period ends |
-| `RENEWAL_EXTENDED` | Extends entitlement expiry when Apple grants an extension |
-| `SUBSCRIBED` | Creates transaction and entitlement for new subscriptions |
-| `ONE_TIME_CHARGE` | Creates transaction and entitlement for one-time purchases |
-| `OFFER_REDEEMED` | Records offer metadata on the entitlement |
-| `REFUND_REVERSED` | Re-activates entitlement after a refund reversal |
-| `REFUND_DECLINED` | Logged only (refund request was declined by Apple) |
-
-<Note>
-  All Apple notifications are verified using JWS signature verification against Apple's Root CA certificate chain before processing. Duplicate notifications are automatically skipped via idempotency checks on the `notificationUUID`.
-</Note>
-
-<Note>
-  As of **2026-04-27**, the following ASSN v2 events also mirror Apple's reported state onto the originating migration `Transaction` record's `storekit_status`, `storekit_apple_status`, and `storekit_subscription_end` fields — keeping migration trial-end resolution and dashboard analytics in sync without an SDK round-trip:
-
-  - `DID_CHANGE_RENEWAL_STATUS` (subtypes `AUTO_RENEW_DISABLED`, `AUTO_RENEW_ENABLED`)
-  - `EXPIRED`
-  - `DID_FAIL_TO_RENEW` (default and `GRACE_PERIOD` subtype)
-  - `REVOKE`
-  - `REFUND`
-
-  No SDK changes are required to consume this — the propagation is purely server-side.
-</Note>
-
-### Notification Forwarding
-
-If your app needs to receive ASSN v2 notifications on your own server (e.g., for analytics or custom logic), you can configure **notification forwarding** in the ZeroSettle dashboard. When enabled, ZeroSettle processes the notification first, then forwards the original signed payload to your URL.
-
 ## Best Practices
 
 <AccordionGroup>
   <Accordion title="Use server-side verification for access control">
-    For content gating on your backend (API access, downloadable content, server-side features), always verify entitlements via the REST API rather than trusting client-side state. The SDK cache is convenient for UI but should not be the source of truth for authorization decisions.
+    For content gating on your backend (API access, downloadable content, server-side features), do not trust client-side state or a claim sent by the app. Drive access from signed [event webhooks](/iap/event-webhooks), and check the REST API from your server when you need to confirm a user. The SDK cache is convenient for UI but should not be the source of truth for authorization decisions.
   </Accordion>
 
   <Accordion title="Call restoreEntitlements() on app launch">

@@ -73,6 +73,11 @@ sync, trigger emails, or notify your team, without polling our API.
   </Accordion>
 </AccordionGroup>
 
+<Note>
+  The `migration.*` events use a different envelope from the other events. See
+  [Switch & Save events](#switch-and-save-events).
+</Note>
+
 <Tip>
   `subscription.cancelled` and `subscription.expired` are easy to confuse. Cancelled means
   they turned off auto-renew and **still have access**. Expired means access has ended.
@@ -84,7 +89,7 @@ sync, trigger emails, or notify your team, without polling our API.
 We do not repeat an event for a change you have already been told about. A single
 cancellation produces one `subscription.cancelled`, and a single expiry produces one
 `subscription.expired`, even when more than one system reports the same change. Retries
-of a delivery still repeat the same event, so keep deduplicating on `X-ZeroSettle-Event-Id`.
+of a delivery still repeat the same event, so keep deduplicating (see [Deduplicating](#deduplicating)).
 
 ### Renewals
 
@@ -114,6 +119,10 @@ until then. Billing Grace Period is opt-in, set to 3, 16 or 28 days (weekly plan
 
 ### Refunds
 
+A payment produces **one** `transaction.refunded`. Its `id` is `evt_txn_<transaction id>`,
+so a second refund on the same payment (for example a partial refund followed by the rest)
+sends no further event.
+
 - **Full refund of the current billing period.** The subscription and access end. You
   receive `subscription.expired` and `transaction.refunded`, in either order. Revoke on
   `expired`, and treat `transaction.refunded` as the payment record. For web checkout we
@@ -127,7 +136,9 @@ The same rule, current period versus earlier period, applies to App Store refund
 
 ## Payload
 
-Subscription and trial events share one envelope:
+Subscription, trial and `transaction.refunded` events share one envelope shape
+(`id`, `type`, `created`, `environment`, `project_id`, `data`). The `migration.*` events are
+different: see [Switch & Save events](#switch-and-save-events). Subscription and trial events:
 
 ```json
 {
@@ -175,16 +186,70 @@ Subscription and trial events share one envelope:
 }
 ```
 
+### Switch & Save events
+
+`migration.eligible`, `migration.ineligible` and `migration.completed` do **not** use the
+envelope above. They have no `id`, `type`, `created` or `environment`. They carry
+`event_type`, `project_id`, `is_sandbox` and `fired_at`, and the same value as
+`event_type` is in the `X-ZeroSettle-Event-Type` header. Read the header or `event_type`
+to route them.
+
+```json
+{
+  "event_type": "migration.eligible",
+  "project_id": 85,
+  "is_sandbox": false,
+  "fired_at": "2026-09-10T03:22:24.728189+00:00",
+  "source": "assn",
+  "data": {
+    "external_user_id": "firebase-uid-or-anonymous-uuid",
+    "product_id": "com.yourapp.premium.monthly",
+    "is_eligible": true,
+    "reason": null,
+    "days_subscribed": 21,
+    "rollout_bucket": 42,
+    "eligible_at": null
+  }
+}
+```
+
+`migration.ineligible` has the same shape with `is_eligible` set to `false` and a `reason`
+such as `tenure_too_short`, `tenure_too_long`, `outside_rollout`, `blocking_status`,
+`no_active_sub`, `campaign_disabled`, `not_checkout_ready` or `product_not_eligible`.
+`reason` and `eligible_at` are `null` when the user is eligible. `source` says what
+triggered the check (for example `assn` or `claim`) and may be absent.
+`migration.completed`:
+
+```json
+{
+  "event_type": "migration.completed",
+  "project_id": 85,
+  "is_sandbox": false,
+  "fired_at": "2026-09-10T03:22:24.728189+00:00",
+  "data": {
+    "external_user_id": "firebase-uid-or-anonymous-uuid",
+    "storekit_product_id": "com.yourapp.premium.monthly",
+    "web_product_id": "com.yourapp.premium.monthly.web",
+    "web_transaction_id": 14050487
+  }
+}
+```
+
+Because there is no body `id`, deduplicate these on the `X-ZeroSettle-Idempotency-Key`
+header, which is stable for one state change. The two eligibility events fire when the
+state flips, not on every check.
+
 ### Field reference
 
 | Field | Notes |
 |---|---|
-| `id` | Unique, stable per event. Also sent as `X-ZeroSettle-Event-Id`. Use it to deduplicate |
+| `id` | Unique and stable per event, the same for every endpoint you have. It is **not** the `X-ZeroSettle-Event-Id` header. Use it to deduplicate |
 | `type` | The event type. **Note the field is `type`, not `event_type`** |
 | `environment` | `live` or `sandbox` |
 | `data.external_user_id` | Whatever you passed to `identify(_:)`. For anonymous users this is a generated UUID that will not match a user in your system |
 | `data.product_id` | Your canonical product reference id |
-| `data.source` | The rail the subscription is on: `web_checkout`, `store_kit` or `play_store`. It is also set on `subscription.cancelled` and `subscription.expired`. It is `null` only for an entitlement granted manually from the dashboard that has never been on a rail — see below |
+| `data.source` | The rail the subscription is on: `web_checkout`, `store_kit` or `play_store`. It is also set on `subscription.cancelled` and `subscription.expired`. It is `null` only for an entitlement granted manually from the dashboard that has never been on a rail — see below. On `transaction.refunded` it is the raw payment source, which can also be `play_billing` or `play_billing_external` for Google Play |
+| `data.transaction.id` | On `transaction.refunded`: ZeroSettle's internal transaction number (an integer). Not a Stripe or Apple id |
 | `data.is_test_purchase` | `true` when Apple processed the purchase as a sandbox purchase (TestFlight, App Review or Xcode) but your app sent it with a live key. Ignore these events for billing and analytics. Always present, `false` for real purchases |
 | `data.entitlement.status` | Current status — see below |
 | `data.entitlement.expires_at` | When the current period ends. During a billing problem the meaning depends on the rail — see [Billing problems](#billing-problems) |
@@ -224,22 +289,40 @@ Every request carries these headers:
 
 | Header | Purpose |
 |---|---|
-| `X-ZeroSettle-Event-Id` | Unique event id — deduplicate on this |
-| `X-ZeroSettle-Event-Type` | Same value as the body's `type` |
+| `X-ZeroSettle-Event-Id` | Id of this delivery to this endpoint: 32 hex characters, the same on every retry and replay of it. It is not the body `id` |
+| `X-ZeroSettle-Event-Type` | The event type. Same as the body's `type` (or `event_type` for `migration.*`) |
 | `X-ZeroSettle-Idempotency-Key` | Stable key for the underlying state change |
 | `X-ZeroSettle-Signature` | `t=<unix_ts>,v1=<hmac_sha256_hex>` |
+
+The request also sets `User-Agent: ZeroSettle-Webhooks/1.0` and `Content-Type: application/json`.
+
+### Deduplicating
+
+Two ids are in play, and they are not the same value:
+
+- The body `id` (`evt_...`) names the event. It is identical for every endpoint you have and for every retry. Deduplicate on it.
+- `X-ZeroSettle-Event-Id` names one delivery to one endpoint. It is the same on retries and replays, but it differs per endpoint and never equals the body `id`.
+
+For `migration.*` events, which have no body `id`, use `X-ZeroSettle-Idempotency-Key`.
 
 Return any `2xx` to acknowledge. We time out after 10 seconds, so acknowledge first and
 do your work asynchronously.
 
 ### Retries
 
-Failed deliveries retry six times with backoff: **30s, 2m, 10m, 1h, 6h, 24h**. A `4xx`
-is treated as permanent and not retried, except `408` and `429`. Full delivery history
-and a **Replay** button are in the Dashboard.
+A delivery is tried up to **6 times**: the first attempt, then 5 retries. Each retry
+waits after the previous failure: **2 minutes, 10 minutes, 1 hour, 6 hours, 24 hours**.
+After the sixth failed attempt the delivery is marked failed. A timeout, a connection
+error, a `5xx`, `408` or `429` is retried. Any other `4xx` is treated as permanent and not
+retried.
+
+Retries are sent only for deliveries less than 48 hours old, so a delivery that is still
+failing after that is not sent again on its own. Full delivery history and a **Replay**
+button are in the Dashboard. A replay sends the delivery again whatever its age.
 
 <Tip>
-  Retries mean your handler must be idempotent. Deduplicate on `X-ZeroSettle-Event-Id`.
+  Retries mean your handler must be idempotent. Deduplicate on the body `id` (see
+  [Deduplicating](#deduplicating)).
 </Tip>
 
 ## Verifying signatures
@@ -338,14 +421,21 @@ app.post('/webhooks/zerosettle', express.raw({ type: 'application/json' }), (req
 ## Current limitations
 
 <Info>
-  Two gaps worth designing around. If either blocks you, tell us — both are additive
+  Four gaps worth designing around. If one blocks you, tell us — they are additive
   changes we can make.
 </Info>
 
-- **Pause, resume and dispute reversals do not emit events.** If you offer
+- **No event for one-time or consumable purchases.** Consumable purchases send no event
+  at all, and there is no event type for a one-time purchase. The only payment-level event
+  is `transaction.refunded`. For these purchases, read
+  [`GET /v1/iap/transaction-history/`](/api-reference/endpoint/get-transaction-history)
+  or [`GET /v1/iap/entitlements/`](/api-reference/endpoint/get-entitlements) from your
+  server.
+- **Pause, resume, auto-renew turned back on and dispute reversals do not emit events.** If you offer
   [pause](/iap/custom-cancel-flow) as a cancel-flow option, the access change reaches
-  your server through no event — and neither does a chargeback being reversed in your
-  favour. A chargeback itself **does** arrive, as `subscription.expired`. Until this gap
+  your server through no event. A customer turning auto-renew back on after cancelling
+  also sends nothing: the next event is the renewal. Neither does a chargeback being
+  reversed in your favour. A chargeback itself **does** arrive, as `subscription.expired`. Until this gap
   closes, re-check entitlement state on app foreground rather than treating the event
   stream as the complete picture.
 - **No store resource id.** The payload does not include the Stripe subscription id or
