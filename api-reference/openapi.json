@@ -3114,7 +3114,7 @@
         "tags": [
           "Identity"
         ],
-        "description": "Moves a guest id's experiment and analytics rows to the signed-in id, from the app, with the publishable key. Use it to keep a pre-login funnel and experiment assignment when the person logs in.\n\n**Without `link_token`** this endpoint never moves purchases and never touches a customer record. It moves experiment impressions, assignments, exposures, outcome rows and funnel events from `previous_user_id` (or `previous_install_id`) to `user_id`. It skips an id that a live account owns, and an id that was already merged away, and answers `status: \"skipped\"` with zero counts. Where `user_id` already holds a row for the same experiment, that row wins and the guest's row is left in place. Nothing is dropped.\n\n**With `link_token`** it is a full reconcile, the same as Present Link Token: purchases move too, the same limits and refusals apply, and the response also carries `reconciliation_id`. Ids sent beside a token must both be present and match the token, or neither.\n\nWithout a token it is rate limited to 60 calls a minute per client IP and 6,000 a minute per app. Over a limit the response is `429` with `Retry-After`.",
+        "description": "Moves a guest id's experiment and analytics rows to the signed-in id, from the app, with the publishable key. Use it to keep a pre-login funnel and experiment assignment when the person logs in.\n\n**Without `link_token`** this endpoint never moves purchases and never touches a customer record. It moves experiment impressions, assignments, exposures, outcome rows and funnel events from `previous_user_id` (or `previous_install_id`) to `user_id`. It skips an id that a live account owns, and an id that was already merged away, and answers `status: \"skipped\"` with zero counts. Where `user_id` already holds a row for the same experiment, that row wins and the guest's row is left in place. Nothing is dropped.\n\n**With `link_token`** it is a full reconcile, the same as Present Link Token: purchases move too, the same limits and refusals apply, and the response also carries `reconciliation_id`. Ids sent beside a token must both be present and match the token, or neither.\n\n**With a `zs_anon_` `previous_user_id`** (an id minted by the next SDK release) and no token, the endpoint folds the anonymous id into the account. If `user_id` has no history yet (no purchases, entitlements, Stripe customer or funnel events), everything moves: purchases, entitlements, events and experiment assignments, and `identity.reconciled` fires with `actor` of `identity_link`. If `user_id` already has history, nothing moves and the answer is `switched`. A retry returns the same result. Ids without the prefix behave as described above. `user_id` must not start with `zs_anon_`: that prefix is reserved and answers `400 invalid_user_id`. The merge is authorized by the publishable key alone, so make user ids hard to guess.\n\nWithout a token it is rate limited to 60 calls a minute per client IP and 6,000 a minute per app. Over a limit the response is `429` with `Retry-After`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3159,9 +3159,11 @@
                       "type": "string",
                       "enum": [
                         "ok",
-                        "skipped"
+                        "skipped",
+                        "merged",
+                        "switched"
                       ],
-                      "description": "`skipped` when the guest id belongs to a live account or was merged away and no token was sent. Counts are then zero."
+                      "description": "`skipped` when the guest id belongs to a live account or was merged away and no token was sent. Counts are then zero. `merged` and `switched` are only for a `zs_anon_` `previous_user_id`: `merged` means the anonymous id was folded into the account (also on a retry), `switched` means the account already had history, so nothing moved."
                     },
                     "impressions_moved": {
                       "type": "integer"
@@ -3200,8 +3202,11 @@
                       "type": "integer"
                     },
                     "reconciliation_id": {
-                      "type": "integer",
-                      "description": "Present only when a `link_token` was sent."
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "description": "Present when a `link_token` was sent. For a `zs_anon_` `previous_user_id` it is an integer on a merge and `null` otherwise."
                     }
                   }
                 },
@@ -3224,11 +3229,24 @@
             }
           },
           "400": {
-            "description": "`user_id` and one of `previous_user_id` or `previous_install_id` are required, or the body is not valid JSON.",
+            "description": "`user_id` and one of `previous_user_id` or `previous_install_id` are required, or the body is not valid JSON. `invalid_user_id` when `user_id` starts with the reserved `zs_anon_` prefix.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdentityError"
+                    }
+                  ]
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_user_id",
+                    "message": "That user id is reserved."
+                  }
                 }
               }
             }

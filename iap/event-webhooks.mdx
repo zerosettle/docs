@@ -280,7 +280,7 @@ state flips, not on every check.
 | `data.reconciliation_id` | The id of the reconciliation record. Same as `reconciliation_id` in the reconcile endpoint response |
 | `data.from_user_id` | The id that was merged away. Later events and reads under it forward to `into_user_id`. `null` when the source had no external id (an email-only restore) |
 | `data.into_user_id` | The id that kept the purchases |
-| `data.actor` | Who asked for the merge: `secret_key`, `link_token`, `dashboard_user`, `restore_purchases`, `identity_link` or `system`. Tolerate other values |
+| `data.actor` | Who asked for the merge: `secret_key`, `link_token`, `dashboard_user`, `restore_purchases`, `identity_link` or `system`. `identity_link` is the SDK folding a `zs_anon_` guest id into the account at sign-in, and `from_user_id` is then that `zs_anon_` id. Tolerate other values |
 | `data.moved.transactions` | Transactions that moved |
 | `data.moved.entitlements` | Entitlements that moved |
 

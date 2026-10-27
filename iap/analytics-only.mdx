@@ -172,7 +172,7 @@ public nonisolated static func trackEvent(
 
 `screenName` and `metadata` are free-form — use them to tell one paywall entry point from another.
 
-Events sent before `configure()` are dropped rather than queued. Up to the current SDK release, events sent before `identify(_:)` are attributed to the literal user `"anonymous"`. From the next SDK release they carry a per-device id (`analyticsUserId`) instead. It is the same id `identify(.anonymous)` adopts later, and a [guest-to-account reconcile](/iap/guest-to-account) moves those events to the account. In that release, iOS events also carry the StoreKit environment (`Production`, `Sandbox` or `Xcode`), and Android gains `trackEvent` with the same behavior.
+Events sent before `configure()` are dropped rather than queued. Up to the current SDK release, events sent before `identify(_:)` are attributed to the literal user `"anonymous"`, which no longer counts as an active user. From the next SDK release they carry a per-device id (`analyticsUserId`) instead. It is the same id `identify(.anonymous)` adopts later (a `zs_anon_` id on new installs), and it folds into the account at sign-in. A [guest-to-account reconcile](/iap/guest-to-account) moves those events to the account. In that release, iOS events also carry the StoreKit environment (`Production`, `Sandbox` or `Xcode`), and Android gains `trackEvent` with the same behavior.
 
 ## Testing
 

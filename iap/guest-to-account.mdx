@@ -16,6 +16,17 @@ ZeroSettle handles this with **reconciliation**: your server tells ZeroSettle th
   The server endpoints work for every app. The in-app calls on this page, `analyticsUserId` and `reconcile`, and `currentUserId` on iOS, are in the next SDK release for iOS, Android and Flutter. Until you update, identify guests with an id your app mints itself (see [User Identity](/iap/user-identity)), so you already know it, and use [Option 1](#option-1-your-server-calls-the-endpoint).
 </Info>
 
+## Automatic merge at sign-in
+
+From the next SDK release, you do not need your server for the common case. Call `identify(.anonymous)` at launch and `identify(.user(id:))` at sign-in, and the SDK asks ZeroSettle to fold the `zs_anon_` id into the account. If the account has no history yet, purchases, entitlements, events and experiment assignments all move, and an `identity.reconciled` webhook fires with `actor` of `identity_link`. See [Anonymous users](/iap/user-identity#anonymous-first-then-sign-in).
+
+You still need the server-side flow below when:
+
+- The account already has history. The SDK moves nothing and just switches to the account.
+- The guest id existed before this release (a bare UUID rather than a `zs_anon_` id). Those ids do not get the automatic merge.
+
+User ids must be hard to guess, because the automatic merge is authorized by the publishable key. Ids that start with `zs_anon_` are reserved and are refused as the `into` id.
+
 ## How it works
 
 <Steps>
@@ -397,6 +408,7 @@ To your server a refusal is `409 reconcile_refused` (and `reconcileRefused` in t
 | `conflict` | Both customers hold a live entitlement to the same non-consumable product. The dashboard names the products |
 | `already_reconciled` | The `from` id was already merged into another customer |
 | `into_reconciled` | The `into` id was merged away and has no customer to forward to |
+| `into_anonymous` | The `into` id starts with the reserved `zs_anon_` prefix |
 | `same_identity` | Both ids are the same customer. Ids that differ only in letter case count as the same |
 | `environment_mismatch` | The ids belong to different environments (live and sandbox) |
 | `invalid_id` | An id is empty or too long |

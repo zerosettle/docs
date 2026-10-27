@@ -12,7 +12,7 @@ ZeroSettle establishes user identity **once per session** with `identify(...)`, 
 
 ## The `Identity` Type
 
-`identify()` takes an `Identity` value. Pick exactly one mode per session — never mix `user` and `anonymous` for the same person.
+`identify()` takes an `Identity` value. If your app has accounts, the recommended flow is `identify(.anonymous)` at launch and `identify(.user(id:))` when the person signs in. From the next SDK release, ZeroSettle folds the anonymous id into the account for you, see [Option 3](#option-3-anonymous-users). Before that release, pick one mode per person and do not switch between them.
 
 | Mode | When to use |
 |------|-------------|
@@ -61,8 +61,8 @@ The SDK exposes the id it is acting as, and an id for analytics that is availabl
 
 | Property | What it returns |
 |---|---|
-| `currentUserId` | The id the SDK is acting as: your id after `identify(.user)`, the generated UUID after `identify(.anonymous)`. `nil` before any `identify()` and after `logout()` |
-| `analyticsUserId` | Set before sign-in too. The current id when there is one, otherwise a per-device UUID that is generated and stored on first use. It is the same UUID `identify(.anonymous)` adopts later, so paywall views recorded before identify join the purchase made after it |
+| `currentUserId` | The id the SDK is acting as: your id after `identify(.user)`, the generated id after `identify(.anonymous)`. In the next SDK release a new install's generated id starts with `zs_anon_`. `nil` before any `identify()` and after `logout()` |
+| `analyticsUserId` | Set before sign-in too. The current id when there is one, otherwise a per-device UUID that is generated and stored on first use. It is the same id `identify(.anonymous)` adopts later (a `zs_anon_` id on new installs), so paywall views recorded before identify join the purchase made after it |
 
 <CodeGroup>
 
@@ -341,14 +341,59 @@ final transaction = await ZeroSettle.instance.purchase(
 
 </CodeGroup>
 
-**How it works**: `Identity.anonymous` persists a stable UUID in on-device storage. The same identity is reused across app launches until you call `logout()` or the user clears app data.
+**How it works**: `Identity.anonymous` persists a stable id in on-device storage. The same identity is reused across app launches until you call `logout()` or the user clears app data. From the next SDK release, a new install's anonymous id looks like `zs_anon_<uuid>`. An install that already has an anonymous UUID keeps it, and that id does not get the automatic merge below.
 
-**Restoration**: `restoreEntitlements()` works for anonymous users — entitlements are tied to the persisted UUID.
+**Restoration**: `restoreEntitlements()` works for anonymous users. Entitlements are tied to the persisted id.
+
+### Anonymous first, then sign in
+
+If your app has accounts, call `identify(.anonymous)` at launch, then `identify(.user(id:))` when the person signs in. The person counts as an active user from first launch, before sign-in, and counts once after.
+
+<CodeGroup>
+
+```swift Swift
+// At launch
+try await ZeroSettle.shared.identify(.anonymous)
+
+// When the person signs in
+try await ZeroSettle.shared.identify(.user(id: account.id))
+```
+
+```kotlin Kotlin
+// At launch
+ZeroSettle.identify(Identity.Anonymous)
+
+// When the person signs in
+ZeroSettle.identify(Identity.User(id = account.id))
+```
+
+```dart Flutter
+// At launch
+await ZeroSettle.instance.identify(Identity.anonymous());
+
+// When the person signs in
+await ZeroSettle.instance.identify(Identity.user(id: account.id));
+```
+
+</CodeGroup>
+
+At sign-in the SDK asks ZeroSettle to fold the anonymous id into the account:
+
+- **The account has no history yet** (no purchases, entitlements, Stripe customer or funnel events). Everything moves: purchases, entitlements, events and experiment assignments. The person counts once in active users, and an [`identity.reconciled`](/iap/event-webhooks#identity-reconciled) webhook fires with `actor` of `identity_link` and `from_user_id` set to the `zs_anon_` id.
+- **The account already has history.** Nothing moves. The app switches to the account. The guest's purchases can move later through Restore Purchases or the server-side reconcile in [Guest to Account](/iap/guest-to-account).
+
+Retries are safe. If the call fails, the SDK retries on the next launch or sign-in.
 
 <Warning>
-  **An anonymous id is install-scoped.** The UUID lives on the device, so a reinstall or an app-data clear loses it, and with it the link to the purchases made under it.
+  **Make user ids hard to guess.** The merge is authorized by your publishable key, so use a random UUID or your auth provider's opaque id for `Identity.user(id:)`. Do not use an email or a sequential number.
 
-  If the person later creates an account, your server can move the guest's purchases to it, see [Guest to Account](/iap/guest-to-account). Without that step, calling `identify(.user(id:))` starts a new identity and the guest's purchase history stays behind on the old one. If you expect real user IDs eventually, you can also mint a stable identifier you own on first launch and pass it to `Identity.user(id:)` from day one, see [Picking an identity on iOS](#picking-an-identity-on-ios).
+  The `zs_anon_` prefix is reserved. `identify(.user(id:))` with an id that starts with it fails with an invalid user id error, and the server refuses it as a merge target (`into_anonymous` on reconcile, `invalid_user_id` with status 400 on `identity-link`).
+</Warning>
+
+<Warning>
+  **An anonymous id is install-scoped.** The id lives on the device, so a reinstall or an app-data clear loses it. A reinstall gets a new anonymous id, and it folds into the account when the person signs in again.
+
+  Before the next SDK release, calling `identify(.user(id:))` starts a new identity and the guest's purchase history stays behind on the old one. Your server can move it, see [Guest to Account](/iap/guest-to-account). You can also mint a stable identifier you own on first launch and pass it to `Identity.user(id:)` from day one, see [Picking an identity on iOS](#picking-an-identity-on-ios).
 </Warning>
 
 ## Picking an identity on iOS
@@ -525,7 +570,7 @@ The SDK merges entitlements from all sources when you call `restoreEntitlements(
 | Use your backend's user ID for `Identity.user(id:)` | Use device identifiers (they change) |
 | Use a UUID you generate | Use email (users change emails) |
 | Keep it consistent across platforms | Use different IDs per platform |
-| Use `Identity.anonymous` when you have no auth system | Mix `Identity.user` and `Identity.anonymous` for the same person |
+| Use `Identity.anonymous` at launch and `Identity.user(id:)` at sign-in (next SDK release) | Pass an email or a sequential number as a user id |
 
 <Card title="Quickstart" icon="rocket" href="/iap/quickstart">
   Get started with the full SDK setup
