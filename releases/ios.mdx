@@ -4,7 +4,7 @@ description: 'Release notes for ZeroSettleKit — the Swift SDK for iOS'
 icon: 'apple'
 ---
 
-**Current version:** `1.6.2`
+**Current version:** `1.7.0`
 **Package:** Swift Package Manager / CocoaPods
 **Minimum requirements:** iOS 17.0+, Swift 6.1+, Xcode 16.3+
 
@@ -19,6 +19,25 @@ icon: 'apple'
 ---
 
 ## October 2026
+
+<Update label="1.7.0" description="2026-10-27">
+### Guest-to-account reconcile and anonymous merge at sign-in
+
+1.7.0 is a drop-in upgrade from 1.6.2 apart from three new `ZeroSettleError` cases that exhaustive `switch` statements must handle. It requires the matching backend (`iap/identity-link/` endpoint and reconcile link token support, live on `api.zerosettle.io` as of 2026-10-27).
+
+**Anonymous to account merge.** New anonymous ids use a `zs_anon_` prefix. When `identify(.user)` is called with an account that has no prior history, the SDK automatically folds the stored anonymous id into that account via `POST /v1/iap/identity-link/`. The call has a hard 5-second deadline and is retried on the next `identify` or `configure` if it fails transiently — so `identify(.user)` is never stalled. Ids starting with `zs_anon_` are reserved; passing one to `identify(.user)` throws `ZeroSettleError.invalidUserId`.
+
+**Guest-to-account reconcile.** Call `ZeroSettle.reconcile(linkToken:)` with a token your server minted to explicitly merge a guest account into a signed-in account. It returns a `ReconcileResult` carrying the counts of moved transactions and entitlements, and a `switchedToAccount` flag.
+
+- **Feature**: `ZeroSettle.reconcile(linkToken:) async throws -> ReconcileResult` — explicit guest-to-account merge using a server-minted link token
+- **Feature**: `ReconcileResult` — new public struct with `transactionCount: Int`, `entitlementCount: Int`, and `switchedToAccount: Bool`
+- **Feature**: `ZeroSettle.analyticsUserId: String` — the id the SDK sends with funnel and offer events; the persisted anonymous id when no user is signed in (was always `"anonymous"` before)
+- **Feature**: `ZeroSettle.currentUserId: String?` — now public (previously private)
+- **Feature**: Anonymous-to-account merge — automatic on `identify(.user)` when the account has no prior history; `zs_anon_`-prefixed ids are reserved
+- **Feature**: New `ZeroSettleError` cases: `reconcileRefused`, `invalidLinkToken`, `rateLimited(retryAfter: TimeInterval?)` — apps that switch exhaustively over `ZeroSettleError` without a `default` must add branches for these cases
+- **Improvement**: Funnel events now carry the StoreKit `environment` field (wait capped at 1.5 seconds)
+- **Improvement**: `identify(.user)` logs a warning when one signed-in user replaces another without a `logout()` call
+</Update>
 
 <Update label="1.6.2" description="2026-10-16">
 ### Smaller StoreKit reconcile payload and shared-device fix

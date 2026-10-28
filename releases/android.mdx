@@ -4,17 +4,39 @@ description: 'Release notes for zerosettle-android — the Kotlin SDK'
 icon: 'android'
 ---
 
-**Current version:** `1.2.1`
+**Current version:** `1.4.0`
 **Package:** Maven Central (`io.zerosettle:zerosettle-android` — headless core; `io.zerosettle:zerosettle-android-ui` — optional Compose components)
 **Minimum requirements:** Android API 23+, Kotlin 2.1+
 
 <Tip>
   Add to your `build.gradle.kts`:
   ```kotlin
-  implementation("io.zerosettle:zerosettle-android:1.2.1")
-  implementation("io.zerosettle:zerosettle-android-ui:1.2.1")  // optional Compose UI
+  implementation("io.zerosettle:zerosettle-android:1.4.0")
+  implementation("io.zerosettle:zerosettle-android-ui:1.4.0")  // optional Compose UI
   ```
 </Tip>
+
+---
+
+## October 2026
+
+<Update label="1.4.0" description="2026-10-27">
+### Guest-to-account reconcile, anonymous merge, and analytics user id
+
+Mirrors ZeroSettleKit 1.7.0. Drop-in upgrade from 1.2.1 for most apps — apps that match exhaustively over `ZeroSettleError` without an `else` branch must add cases for `ReconcileRefused`, `InvalidLinkToken`, and `RateLimited`. Requires the matching backend (`iap/identity-link/` endpoint and reconcile link token support, live on `api.zerosettle.io` as of 2026-10-27).
+
+**Anonymous to account merge.** New anonymous ids use a `zs_anon_` prefix. `identify(Identity.User)` folds the stored anonymous id into a new account (one with no prior history) via `POST /v1/iap/identity-link/`. The call is bounded to 5 seconds and is retried at `configure` and each `identify` on transient failures. Ids starting with `zs_anon_` are reserved and cause `identify` to fail with `ZeroSettleError.InvalidUserId`.
+
+- **Feature**: `ZeroSettle.reconcile(linkToken)` returning `Result<ReconcileResult>` — explicit guest-to-account merge using a server-minted link token
+- **Feature**: `ReconcileResult` — new public data class with `transactionCount: Int` and `entitlementCount: Int`
+- **Feature**: `ZeroSettle.analyticsUserId(): String` — the id sent with funnel and offer events; the persisted anonymous id when no user is signed in (previously sent the literal `"anonymous"`)
+- **Feature**: `ZeroSettle.trackEvent(FunnelEventType, productId, screenName, metadata)` — fire-and-forget paywall and checkout funnel event (`paywall_viewed`, `checkout_started`, `checkout_abandoned`)
+- **Feature**: New `ZeroSettleError` sealed subclasses: `ReconcileRefused`, `InvalidLinkToken`, `RateLimited(retryAfterSeconds: Int?)` — exhaustive `when` expressions must add these cases or an `else` branch
+- **Feature**: Anonymous-to-account merge — `zs_anon_`-prefixed ids are reserved; passing one to `identify` fails with `InvalidUserId`
+- **Improvement**: `identify(Identity.User)` logs a warning when one signed-in user replaces another without `logout()`
+- **Improvement**: Play sync rows keep their own user id on account switch; re-identifying no longer wipes the pending sync queue
+- **Fix**: `logout()` now clears the identity store synchronously, so `analyticsUserId()` immediately after `logout()` never returns the previous user's id
+</Update>
 
 ---
 

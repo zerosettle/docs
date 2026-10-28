@@ -4,7 +4,7 @@ description: 'Release notes for the ZeroSettle Flutter plugin'
 icon: 'mobile'
 ---
 
-**Current version:** `1.7.0`
+**Current version:** `1.9.0`
 **Package:** pub.dev (`zerosettle`)
 **Minimum requirements:** Flutter 3.38.9+, Dart 3.10.8+, iOS 18.0+, Android API 26+
 
@@ -12,9 +12,34 @@ icon: 'mobile'
   Add to your `pubspec.yaml`:
   ```yaml
   dependencies:
-    zerosettle: ^1.7.0
+    zerosettle: ^1.9.0
   ```
 </Tip>
+
+---
+
+## October 2026
+
+<Update label="1.9.0" description="2026-10-27">
+### Guest-to-account reconcile, anonymous merge, and analytics user id
+
+1.9.0 raises the native SDK floors to ZeroSettleKit `~> 1.7.0` (iOS) and `zerosettle-android 1.4.0` (Android) and surfaces their new reconcile and identity APIs through the Dart layer. Most apps upgrade without code changes — apps that switch exhaustively over the plugin's exception types need a default case for the three new exceptions.
+
+**Behavior change: `getCurrentUserId()` on iOS.** After `identify(Identity.anonymous())`, `getCurrentUserId()` now returns the persisted anonymous id instead of `null`. Apps that treated a non-null return value as "user is signed in" must track their own sign-in state separately.
+
+- **Feature**: `ZeroSettle.analyticsUserId()` returning `Future<String>` — the id the SDK uses for events; non-null and stable even before sign-in
+- **Feature**: `ZeroSettle.reconcile({required String linkToken})` returning `Future<ReconcileResult>` — explicit guest-to-account merge using a server-minted link token; `ReconcileResult` carries `transactionCount`, `entitlementCount`, and `switchedToAccount`
+- **Feature**: New exceptions: `ZSReconcileRefusedException`, `ZSInvalidLinkTokenException`, `ZSRateLimitedException` (with `retryAfter: Duration?`) — apps that switch exhaustively over the plugin's exceptions need a default case
+- **Behavior change**: `getCurrentUserId()` on iOS now returns the persisted anonymous id after `Identity.anonymous()` (was `null`); matches existing Android behavior
+- **Improvement**: Android bridge now forwards `trackEvent` to the SDK instead of silently dropping it; Android `reconcile` derives `switchedToAccount` locally (not in the native `ReconcileResult`)
+- **Improvement**: Signed-out events now carry the persisted anonymous id instead of the literal `"anonymous"`; funnel events carry the StoreKit environment on iOS
+- **Improvement**: Android `logout()` now blocks the calling thread for one DataStore write — no Dart API impact
+
+### Bumped
+
+- ZeroSettleKit (iOS) `~> 1.7.0`
+- zerosettle-android / zerosettle-android-ui `1.4.0`
+</Update>
 
 ---
 
