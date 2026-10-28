@@ -6,7 +6,7 @@ icon: 'clock-rotate-left'
 
 Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift SDK — the primary and most feature-complete platform. Android (Kotlin) and Flutter SDKs follow closely and share the same API endpoints.
 
-**Current version:** `1.6.2`
+**Current version:** `1.7.0`
 **Minimum requirements:** iOS 17.0+, Swift 6.1+, Xcode 16.3+
 
 <Tip>
@@ -32,16 +32,16 @@ Your server can now tell ZeroSettle that a guest id and an account id are the sa
 
 **Changed: `POST /v1/iap/restore-purchases/`.** The request shape is the same. A restore that would put two live entitlements to the same non-consumable product on one user now restores nothing from that guest and answers `200`. `restored` counts only what moved, and the message tells the person to contact support. `target_identity_id` is an integer when a guest matched. A restore now sends `identity.reconciled` instead of `subscription.purchased`, and the endpoint is rate limited: over a limit it returns `429` with `Retry-After`, so a restore button should treat a `429` as a failed restore.
 
-**Changed with the next SDK release: paywall events before `identify`.** Updated SDKs send a per-device id instead of the literal `anonymous`, and iOS events include the StoreKit environment. Counts of app users and paywall viewers can rise as apps update.
+**Changed in iOS 1.7.0, Android 1.4.0 and Flutter 1.9.0: paywall events before `identify`.** These SDKs send a per-device id instead of the literal `anonymous`, and iOS events include the StoreKit environment. Counts of app users and paywall viewers can rise as apps update.
 
-**Anonymous users merge into their account (next SDK release).** New anonymous ids look like `zs_anon_<uuid>`. Call `identify(.anonymous)` at launch and `identify(.user(id:))` at sign-in, and the SDK folds the anonymous id into the account. If the account has no history yet, purchases, entitlements, events and experiment assignments all move, the person counts once in active users, and `identity.reconciled` fires with `actor` of `identity_link`. If the account already has history, nothing moves. Existing anonymous ids keep working and do not get the merge. The `zs_anon_` prefix is reserved: `identify(.user(id:))` rejects it, `POST /v1/iap/identity-link/` answers `400 invalid_user_id`, and reconcile refuses it as `into_anonymous`. `identity-link` also answers `status` of `merged` or `switched` for a `zs_anon_` id. Make user ids hard to guess, because the merge is authorized by the publishable key. See [User identity](/iap/user-identity#anonymous-first-then-sign-in).
+**Anonymous users merge into their account (iOS 1.7.0, Android 1.4.0 and Flutter 1.9.0).** New anonymous ids look like `zs_anon_<uuid>`. Call `identify(.anonymous)` at launch and `identify(.user(id:))` at sign-in, and the SDK folds the anonymous id into the account. If the account has no history yet, purchases, entitlements, events and experiment assignments all move, the person counts once in active users, and `identity.reconciled` fires with `actor` of `identity_link`. If the account already has history, nothing moves. Existing anonymous ids keep working and do not get the merge. The `zs_anon_` prefix is reserved: `identify(.user(id:))` rejects it, `POST /v1/iap/identity-link/` answers `400 invalid_user_id`, and reconcile refuses it as `into_anonymous`. `identity-link` also answers `status` of `merged` or `switched` for a `zs_anon_` id. Make user ids hard to guess, because the merge is authorized by the publishable key. See [User identity](/iap/user-identity#anonymous-first-then-sign-in).
 
 **Changed: active users.** People now count from first launch, before sign-in. The placeholder user `"anonymous"` that older SDKs send before `identify` no longer counts as an active user.
 
-**SDKs (next release of each):**
+**SDKs (iOS 1.7.0, Android 1.4.0 and Flutter 1.9.0, released 2026-10-27):**
 - iOS: `currentUserId` is public (read-only), new `analyticsUserId`, `reconcile(linkToken:)` returning `ReconcileResult` (with `switchedToAccount`), and new `ZeroSettleError` cases `reconcileRefused`, `invalidLinkToken` and `rateLimited(retryAfter:)`. Apps that switch exhaustively over `ZeroSettleError` need the new cases or a `default`.
 - Android: `trackEvent` (new), `analyticsUserId()`, `reconcile(linkToken)` returning `Result<ReconcileResult>`, and new `ZeroSettleError` cases `ReconcileRefused`, `InvalidLinkToken` and `RateLimited`.
-- Flutter (iOS and Android): `analyticsUserId()` and `reconcile(linkToken:)`. `trackEvent` already existed; on Android the bridge now sends events instead of dropping them.
+- Flutter (iOS and Android): `analyticsUserId()` and `reconcile(linkToken:)`, with new exceptions `ZSReconcileRefusedException`, `ZSInvalidLinkTokenException` and `ZSRateLimitedException`. `trackEvent` already existed; on Android the bridge now sends events instead of dropping them. Behavior change: on iOS, `getCurrentUserId()` now returns the anonymous id after `identify(Identity.anonymous())` instead of `null`, matching Android, so do not treat a non-null value as signed in.
 - All: `identify(.user)` logs a warning when one signed-in user replaces another without `logout()`.
 </Update>
 
