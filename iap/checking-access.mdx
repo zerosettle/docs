@@ -76,7 +76,7 @@ The SDK saves its last answer on the device and reads it when you call `configur
 - While your sign-in session restores, call `identify(.deferred)`, or nothing. When it resolves, call `identify(.user(id:))`.
 - Do not call `identify(.anonymous)` first. That mints a new anonymous id, which is another person to the SDK. The signed-in person's saved answer is cleared on every launch, the first frame flickers off, and offline only a local App Store purchase remains.
 - Call `logout()` before a different person signs in on the same device. It clears the saved answer.
-- Before `identify` runs, `access(for:)` answers for the last person who used the device (the saved answer). It is replaced once `identify` settles for that person and cleared when a different person identifies.
+- Before `identify` runs, `access(for:)` answers for the last person who used the device (the saved answer). It is replaced once `identify` settles for that person and cleared when a different person identifies (a guest's answer carries into the account it links to).
 - While a sign-in link runs (`identify(.user)` folding a guest into an account, or `reconcile(linkToken:)`), access keeps showing the answer it had until the link settles. That is up to about 10 seconds on a network that hangs, and at once offline. In that time the previous person's answer can show, which is why `logout()` comes first.
 
 See [User Identity](/iap/user-identity) for the full identity flow.
