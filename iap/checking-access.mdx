@@ -1,0 +1,97 @@
+---
+title: 'Checking Access'
+description: 'One answer to "does this person have access", including access you grant'
+icon: 'key'
+---
+
+<Info>
+  `access(for:)` ships in ZeroSettleKit 1.8.0 for iOS, which is not released yet. Until then, keep reading `entitlements`. Android and Flutter keep their current entitlement calls for now.
+</Info>
+
+Some people have access to a product because they paid for it. Some have it because you gave it to them for free. ZeroSettleKit 1.8.0 joins both into one answer that is ready on the first frame of your app.
+
+<Warning>
+  **Every gate reads access.** Use `access(for:)`, `hasAccess(to:)`, `hasAccess(toAny:)` or `accessUpdates`. Never gate on `entitlements`. On 1.8.0 the `entitlements` list holds paid purchases only and carries no granted access, so a gate that still reads it fails silently for someone who has free access and nothing else.
+</Warning>
+
+## Check access
+
+```swift Swift
+// Yes or no
+if ZeroSettle.shared.hasAccess(to: "pro_monthly") {
+    showPro()
+}
+
+// Any of several products
+if ZeroSettle.shared.hasAccess(toAny: ["pro_monthly", "pro_yearly"]) {
+    showPro()
+}
+
+// The detail behind the answer
+let access = ZeroSettle.shared.access(for: "pro_monthly")
+access.isActive   // true while any component is still live
+access.endsAt     // the latest end, nil when a live component has no end
+access.components // .paid(...) and .granted(...)
+```
+
+These calls are synchronous and never throw. A product the person cannot use returns an `Access` that is not active.
+
+Each component says why the person has access:
+
+| Component | Fields |
+|-----------|--------|
+| `.paid` | `source` (`.storeKit`, `.webCheckout`, `.playStore`), `expiresAt`, `willRenew`, `inOfferPeriod` |
+| `.granted` | `origin` (`.manual`, `.api`), `endsAt`, `rewardId` |
+
+A subscription that is cancelled but still inside the period it paid for shows a paid component until that period ends.
+
+## React to changes
+
+Iterate `accessUpdates` once, from a task that lives for the whole launch:
+
+```swift Swift
+.task {
+    for await accesses in ZeroSettle.shared.accessUpdates {
+        store.apply(accesses)
+    }
+}
+```
+
+<Warning>
+  `accessUpdates` has a single consumer. If the task that iterates it is cancelled, for example by a SwiftUI `.task` that restarts, the stream ends and stays ended until the next launch. Start it from something that lives as long as the app, such as your app's root store.
+</Warning>
+
+It yields when access changes, not when time passes. When a subscription or a granted period ends while your app is open, nothing is yielded. Check `access(for:)` at the point where you use it, or check again when the app comes to the foreground.
+
+## The first frame
+
+The SDK saves its last answer on the device and reads it when you call `configure()`. `access(for:)` is right on the very first frame, before any network call, and offline. The answer is worked out from the clock each time, so a granted period that ended while the app was closed reads as not active after an offline relaunch.
+
+## Identity
+
+- While your sign-in session restores, call `identify(.deferred)`, or nothing. When it resolves, call `identify(.user(id:))`.
+- Do not call `identify(.anonymous)` first. That mints a new anonymous id, which is another person to the SDK. The signed-in person's saved answer is cleared on every launch, the first frame flickers off, and offline only a local App Store purchase remains.
+- Call `logout()` before a different person signs in on the same device. It clears the saved answer.
+- While a sign-in link runs (`identify(.user)` folding a guest into an account, or `reconcile(linkToken:)`), access keeps showing the answer it had until the link settles. That is up to about 10 seconds on a network that hangs, and at once offline. In that time the previous person's answer can show, which is why `logout()` comes first.
+
+See [User Identity](/iap/user-identity) for the full identity flow.
+
+## Refunds
+
+The SDK does not take access away on the device when a refund happens. A refund the SDK's own reconcile records ends access within seconds, because the SDK reads again after a reconcile that changed something. A refund ZeroSettle learns of only from an App Store notification ends access at the next read: the next launch, a StoreKit update or a restore.
+
+## Whose purchase is it
+
+`access(for:)` leaves out a local App Store purchase only when ZeroSettle has explicitly refused it for this person, for example because another account in your app holds it on the same Apple ID. The refusal is remembered on the device for that person. If ZeroSettle cannot be reached, a local purchase counts, so a purchase made while it is down is active at once. See [Entitlement Ownership](/iap/entitlement-ownership).
+
+A sign-out, a switch to another person or an anonymous sign-in link forgets the refusals. On a fresh install, and after any of those, until ZeroSettle answers for that purchase (seconds online, as long as it takes offline), a purchase another account holds on the same Apple ID gives access. The `entitlements` list keeps its older ownership filter.
+
+## Other things that do not change
+
+- The cancel flow and Switch & Save read `entitlements` and never see granted access.
+- Inside Flutter and React Native, 1.8.0 sends an `X-ZS-SDK-Host` header, and ZeroSettle keeps adding a stand-in entry to `entitlements` for granted access in those apps until a wrapper release bridges `access`. See [Get Entitlements](/api-reference/endpoint/get-entitlements#granted-access-in-entitlements).
+- `Entitlement.Source` gains `.playStore` and `.unknown(String)`. A `switch` over it with no `default` needs the new cases.
+
+## Granting access
+
+Give a customer free access from the dashboard, or from your server with [Create Access Grant](/api-reference/endpoint/create-access-grant). You hear about changes through the `access_grant` events in [Event Webhooks](/iap/event-webhooks#access-grant-events).
