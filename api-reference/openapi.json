@@ -1041,7 +1041,7 @@
             "name": "X-ZS-SDK-Host",
             "in": "header",
             "required": false,
-            "description": "Set by the Flutter and React Native wrappers (`flutter` or `react_native`) so ZeroSettle can tell they sit on top of the iOS SDK. Wrappers on an iOS SDK that reads `access` still need the stand-in entries below, so a wrapper host is treated like an iOS SDK older than 1.8.0 for that rule. You do not need to send it yourself.",
+            "description": "Sent by ZeroSettleKit 1.8.0 (coming soon) when it detects it is running inside the Flutter or React Native wrapper (`flutter` or `react_native`). Wrappers on an iOS SDK that reads `access` still need the stand-in entries below, so a wrapper host is treated like an iOS SDK older than 1.8.0 for that rule. You do not need to send it yourself.",
             "schema": {
               "type": "string",
               "enum": [
@@ -3734,7 +3734,7 @@
             }
           },
           "404": {
-            "description": "`grant_not_found` (no grant has this id in this project and environment) or `customer_not_found`.",
+            "description": "`grant_not_found` (no grant has this id in this project and environment) or `customer_not_found` (the grant's customer could not be resolved, for example it moved between customers during the revoke because of a merge).",
             "content": {
               "application/json": {
                 "schema": {

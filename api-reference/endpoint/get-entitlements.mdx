@@ -47,14 +47,14 @@ The response also carries `access`, a list with one object per product the perso
 A granted period never shows up in `entitlements` under its own name. Clients that cannot read `access` would otherwise miss it, so for those clients only, a product the person holds only through a grant gets one stand-in entry:
 
 - `source` is `web_checkout`, `id` is `grant_<grant id>`, `expires_at` is the end of the granted access (or `null` when it has no end), and `will_renew` is `false`.
-- It is added for Android clients, and for iOS clients that are older than 1.8.0, send no SDK version, or send `X-ZS-SDK-Host: flutter` or `react_native`. The Flutter and React Native wrappers send that header so they get the entry even when the iOS SDK underneath is 1.8.0.
+- It is added for Android clients, and for iOS clients that are older than 1.8.0, send no SDK version, or send `X-ZS-SDK-Host: flutter` or `react_native`. ZeroSettleKit 1.8.0 (coming soon) sends that header when it detects it is running inside the Flutter or React Native wrapper, so those apps get the entry until the wrapper reads `access`.
 - On iOS and the wrappers it is added only when the person has no paid entitlement at all. Otherwise an older SDK would read the stand-in as a web subscription next to an App Store purchase and tell the person to cancel the App Store one. In that case an older SDK does not see the grant until you update it. Android has no such check.
-- ZeroSettleKit 1.8.0 and later read `access` and are never sent a stand-in entry, apart from the wrapper case above.
+- ZeroSettleKit 1.8.0 (coming soon) and later read `access` and are never sent a stand-in entry, apart from the wrapper case above.
 - A person with a paid row for the same product never gets a stand-in for it.
-- ZeroSettle can turn stand-in entries off for a project if one of them confuses an older app. `access` is not affected.
+- ZeroSettle can turn stand-in entries off if one of them confuses an older app. `access` is not affected.
 
 Read from your own server, use `access`. It is the one list that does not depend on which SDK asked.
 
 ## Headers
 
-`X-ZS-SDK-Version`, `X-ZS-SDK-Platform` (`android`) and `X-ZS-SDK-Host` (`flutter` or `react_native`) are sent by the SDKs. You do not need to set them from a server; without them the call is treated like an older iOS client.
+`X-ZS-SDK-Version`, `X-ZS-SDK-Platform` (`android`) and `X-ZS-SDK-Host` (`flutter` or `react_native`) are sent by the SDKs (`X-ZS-SDK-Host` by ZeroSettleKit 1.8.0, coming soon). You do not need to set them from a server; without them the call is treated like an older iOS client.

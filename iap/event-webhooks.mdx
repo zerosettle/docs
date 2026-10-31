@@ -374,10 +374,10 @@ The `access_grant.*` events tell you when free access starts, is queued, is abou
 | `data.reason` | `support`, `comp`, `apology`, `promotion`, `referral` or `other` |
 | `data.starts_at` | When this grant's access starts. Later than the event for a grant queued behind another |
 | `data.ends_at` | When this grant's own access ends. `null` when it has no end |
-| `data.access_ends_at` | When the customer's granted access to the product ends, counting every grant that runs back to back. `null` **only** when the access has no end. Otherwise it is the time access ends, or for `access_grant.revoked` and `access_grant.ended`, the time it stopped |
+| `data.access_ends_at` | When the customer's granted access to the product ends, counting every grant that runs back to back. `null` means the access is permanent. Otherwise it is when access ends, or for `access_grant.revoked` and `access_grant.ended`, when it stopped |
 | `data.reward_id` | Set when the grant came from a reward, otherwise `null` |
 
-`ending_soon` and `ended` are sent by a job that runs every 15 minutes, so they can arrive a little after the time they describe. Access itself ends on time and does not wait for the event. They are delivered at least once, so deduplicate on `id`.
+`ending_soon` and `ended` are sent by a job that runs every 15 minutes, so they can arrive a little after the time they describe. Access itself ends on time and does not wait for the event. `access_grant.ended` is sent only when access to the product actually stopped, not when another grant continues it or a new grant started. Revoking a grant that has already ended sends no webhook. Events are delivered at least once, so deduplicate on `id`.
 
 These events say nothing about paid purchases. A customer whose granted access ended can still have access through a subscription, so check [`access`](/api-reference/endpoint/get-entitlements#access) before you lock anything.
 
