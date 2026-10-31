@@ -187,6 +187,14 @@
             ]
           },
           {
+            "group": "Access grants",
+            "pages": [
+              "api-reference/endpoint/list-access-grants",
+              "api-reference/endpoint/create-access-grant",
+              "api-reference/endpoint/revoke-access-grant"
+            ]
+          },
+          {
             "group": "StoreKit",
             "pages": [
               "api-reference/endpoint/sync-storekit-transaction",

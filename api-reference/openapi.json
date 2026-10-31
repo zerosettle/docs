@@ -73,6 +73,10 @@
     {
       "name": "Identity",
       "description": "Move a guest's purchases to their account (reconcile two ids)"
+    },
+    {
+      "name": "Access grants",
+      "description": "Give a customer free access to a product for a set time, or without an end, from your server"
     }
   ],
   "paths": {
@@ -1009,7 +1013,7 @@
       "get": {
         "operationId": "getEntitlements",
         "summary": "Get Entitlements",
-        "description": "Returns the entitlements a user currently has access to: active subscriptions and one-time purchases. Entitlements that have expired or are paused are not returned. Use this to decide what the user can access.",
+        "description": "Returns the entitlements a user currently has access to: active subscriptions and one-time purchases. Entitlements that have expired or are paused are not returned. Use this to decide what the user can access.\n\nThe response also carries `access`, a list with one object per product the person can use right now, built from every way they hold it: a paid purchase, a granted period, or both. Read `access` to decide what to unlock. `entitlements` keeps its meaning, paid purchases only. A granted period never appears in `entitlements` as itself; older clients get a stand-in entry only under the rule described on this page. Consumable purchases are not listed in `access`.",
         "tags": [
           "Entitlements"
         ],
@@ -1032,6 +1036,19 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "X-ZS-SDK-Host",
+            "in": "header",
+            "required": false,
+            "description": "Set by the Flutter and React Native wrappers (`flutter` or `react_native`) so ZeroSettle can tell they sit on top of the iOS SDK. Wrappers on an iOS SDK that reads `access` still need the stand-in entries below, so a wrapper host is treated like an iOS SDK older than 1.8.0 for that rule. You do not need to send it yourself.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "flutter",
+                "react_native"
+              ]
+            }
           }
         ],
         "responses": {
@@ -1046,6 +1063,13 @@
                       "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/Entitlement"
+                      }
+                    },
+                    "access": {
+                      "type": "array",
+                      "description": "One object per product the person can use right now. Absent products mean no access. Always present, empty when there is none.",
+                      "items": {
+                        "$ref": "#/components/schemas/AccessEntry"
                       }
                     },
                     "pending_actions": {
@@ -3309,6 +3333,459 @@
           }
         }
       }
+    },
+    "/referrals/people/{user_id}/access-grants/": {
+      "get": {
+        "operationId": "listAccessGrants",
+        "summary": "List Access Grants",
+        "tags": [
+          "Access grants"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "Returns every grant for one customer, newest first: scheduled, active, ended and revoked. Authenticated with your **secret key** (`zs_sk_*`); the key decides whether you read Live or Sandbox. Never call it from an app.",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "description": "The customer's id in your app, the one you pass to `identify`. An id that was merged into another customer resolves to the customer that kept it. An id that begins with `zs_try:` is reserved for dashboard stand-in people and returns `customer_not_found`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The customer's grants.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AccessGrant"
+                      }
+                    }
+                  },
+                  "required": [
+                    "grants"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a secret key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`customer_not_found`: no customer has this id in this environment, or it was deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "customer_not_found",
+                    "message": "No customer has this id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use GET or POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAccessGrant",
+        "summary": "Create Access Grant",
+        "tags": [
+          "Access grants"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "Gives a customer free access to one product for a number of days, or with no end. Authenticated with your **secret key** (`zs_sk_*`); the key decides whether the grant is Live or Sandbox. Never call it from an app.\n\nA grant on a product the customer already has a granted period on starts when the last one ends, so grants stack rather than overlap. A grant with no end cannot be stacked on, and nothing can be added behind it. A consumable cannot be granted, and neither can an archived product. A grant does not touch a paid purchase of the same product, and it is not counted as revenue.\n\nA grant sends `access_grant.started`, or `access_grant.extended` when the customer already had granted access to the product. See [Event Webhooks](/iap/event-webhooks#access-grant-events).\n\n**Idempotency.** Send an `Idempotency-Key`. A replay with the same key and body returns the stored result. A key reused with a different request is refused with `409 idempotency_key_reused`.",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "description": "The customer's id in your app, the one you pass to `identify`. An id that was merged into another customer resolves to the customer that kept it. An id that begins with `zs_try:` is reserved for dashboard stand-in people and returns `customer_not_found`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A unique key for this request, 1 to 128 characters. Repeat it only when retrying the same call: the stored result is returned, and a different body under the same key is refused.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "product_id",
+                  "days",
+                  "reason"
+                ],
+                "properties": {
+                  "product_id": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "The product's reference ID. Matched without regard to letter case."
+                  },
+                  "days": {
+                    "type": "integer",
+                    "nullable": true,
+                    "minimum": 1,
+                    "maximum": 3650,
+                    "description": "How many days of access, 1 to 3650, or null for access with no end. The key is required: leaving it out is refused, so a missing value is never read as permanent."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "support",
+                      "comp",
+                      "apology",
+                      "promotion",
+                      "referral",
+                      "other"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "Optional text for your own records. Required when `reason` is `other`."
+                  }
+                }
+              },
+              "example": {
+                "product_id": "com.yourapp.premium.monthly",
+                "days": 30,
+                "reason": "apology",
+                "note": "Checkout failed twice on 14 Oct"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The grant was made.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "grant": {
+                      "$ref": "#/components/schemas/AccessGrant"
+                    }
+                  },
+                  "required": [
+                    "grant"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request` (the body is not a JSON object, `product_id` is missing or too long, `reason` is not one of the listed values, `note` is too long or missing when `reason` is `other`, or `days` is not sent), `invalid_days` (`days` is not a whole number from 1 to 3650 or null), `idempotency_key_required` (the header is missing) or `idempotency_key_too_long`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_days",
+                    "message": "days must be a whole number from 1 to 3650, or null for no end.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a secret key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`customer_not_found` (no customer has this id) or `unknown_product` (no active product has this reference id in this environment).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "unknown_product",
+                    "message": "No active product has this reference id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use GET or POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`consumable_product` (a consumable cannot be granted), `already_permanent` (the customer already has granted access with no end on this product), `idempotency_key_reused` (the key was used with a different request) or `request_in_progress` (a request with this key is still running; retry shortly, `retryable` is true).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "already_permanent",
+                    "message": "This customer already has permanent granted access on this product.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals/access-grants/{grant_id}/revoke/": {
+      "post": {
+        "operationId": "revokeAccessGrant",
+        "summary": "Revoke Access Grant",
+        "tags": [
+          "Access grants"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "Ends a grant now. Authenticated with your **secret key** (`zs_sk_*`); the grant must belong to the same project and environment as the key.\n\nRevoking a grant that is running ends access to that grant at once. Revoking one that is queued, or one in the middle of a run of back-to-back grants, closes the gap: every later grant on the product moves earlier by the unused days, so the customer does not wait out a hole. Revoking a grant that is already revoked changes nothing and returns it. A grant that already ended cannot give days back.\n\nA revoke sends `access_grant.revoked`. A paid purchase of the same product is never changed.\n\n**Idempotency.** Send an `Idempotency-Key`, as for creating a grant.",
+        "parameters": [
+          {
+            "name": "grant_id",
+            "in": "path",
+            "required": true,
+            "description": "The grant's id, from the create or list response.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A unique key for this request, 1 to 128 characters. Repeat it only when retrying the same call: the stored result is returned, and a different body under the same key is refused.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "Optional text for your own records."
+                  }
+                }
+              },
+              "example": {
+                "reason": "Granted by mistake"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The revoked grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "grant": {
+                      "$ref": "#/components/schemas/AccessGrant"
+                    }
+                  },
+                  "required": [
+                    "grant"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request` (the body is not a JSON object or `reason` is too long), `idempotency_key_required` or `idempotency_key_too_long`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_request",
+                    "message": "reason must be text of at most 255 characters.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a secret key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`grant_not_found` (no grant has this id in this project and environment) or `customer_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "grant_not_found",
+                    "message": "No grant has this id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`idempotency_key_reused` or `request_in_progress`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "idempotency_key_reused",
+                    "message": "This Idempotency-Key was already used with a different request.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5351,6 +5828,239 @@
           "moved": {
             "transactions": 2,
             "entitlements": 1
+          }
+        }
+      },
+      "AccessEntry": {
+        "type": "object",
+        "description": "A product the person can use now.",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "description": "The product's reference ID."
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When access to this product ends, the latest end across its components. Null when any component has no end."
+          },
+          "components": {
+            "type": "array",
+            "description": "Every way the person holds the product right now.",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AccessPaidComponent"
+                },
+                {
+                  "$ref": "#/components/schemas/AccessGrantComponent"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind"
+              }
+            }
+          }
+        },
+        "required": [
+          "product_id",
+          "ends_at",
+          "components"
+        ]
+      },
+      "AccessPaidComponent": {
+        "type": "object",
+        "description": "A paid purchase. `expires_at` is the real end of access, including any renewal grace the server allows, so a cancelled subscription inside its paid period still shows here.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "paid"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "web_checkout",
+              "store_kit",
+              "play_store"
+            ],
+            "description": "The rail the purchase is on."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When access from this purchase ends. Null for a purchase with no end."
+          },
+          "will_renew": {
+            "type": "boolean"
+          },
+          "in_offer_period": {
+            "type": "boolean",
+            "description": "Whether the current period is a trial or an introductory offer."
+          }
+        },
+        "required": [
+          "kind",
+          "source",
+          "expires_at",
+          "will_renew",
+          "in_offer_period"
+        ]
+      },
+      "AccessGrantComponent": {
+        "type": "object",
+        "description": "A granted period. Several grants on one product that run back to back show as one component whose `ends_at` is the end of the whole run.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "grant"
+            ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/AccessGrantOrigin"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the granted access ends. Null when it has no end."
+          },
+          "reward_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Set when the grant came from a reward. Null for a grant a person or your server made."
+          }
+        },
+        "required": [
+          "kind",
+          "origin",
+          "ends_at",
+          "reward_id"
+        ]
+      },
+      "AccessGrantOrigin": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "api",
+          "referral_reward"
+        ],
+        "description": "`manual` is a grant a team member made in the dashboard, `api` one your server made with the endpoint on this page, and `referral_reward` one ZeroSettle made for a reward."
+      },
+      "AccessGrant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "product_id": {
+            "type": "string",
+            "description": "The product's reference ID."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/AccessGrantOrigin"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "support",
+              "comp",
+              "apology",
+              "promotion",
+              "referral",
+              "other"
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the access starts. Later than the time you made the grant when it is queued behind another grant on the same product."
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the access ends. Null when it has no end."
+          },
+          "created_by": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "person",
+                  "api"
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "revoke_reason": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "active",
+              "ended",
+              "revoked"
+            ],
+            "description": "`scheduled` has not started, `active` is running now, `ended` ran its course, `revoked` was cancelled early."
+          }
+        },
+        "required": [
+          "id",
+          "product_id",
+          "origin",
+          "reason",
+          "note",
+          "starts_at",
+          "ends_at",
+          "created_by",
+          "created_at",
+          "revoked_at",
+          "revoke_reason",
+          "state"
+        ]
+      },
+      "AccessGrantError": {
+        "type": "object",
+        "description": "The error shape of the access grant endpoints.",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean",
+                "description": "True when the same request can be sent again later and may succeed."
+              }
+            }
           }
         }
       }

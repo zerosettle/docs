@@ -18,6 +18,19 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 ## October 2026
 
 <Update label="Platform" description="Unreleased">
+### Access grants: give a customer free access from your server
+
+You can now give a customer free access to a product for a number of days, or with no end, from your server or the dashboard. Grants stack when you give more, and revoking one closes the gap it leaves. A grant never changes a paid purchase of the same product and is not counted as revenue.
+
+**New endpoints** (additive, secret key; the two POSTs need an `Idempotency-Key`):
+- `GET /v1/referrals/people/{user_id}/access-grants/` lists a customer's grants.
+- `POST /v1/referrals/people/{user_id}/access-grants/` makes one. [Create Access Grant](/api-reference/endpoint/create-access-grant).
+- `POST /v1/referrals/access-grants/{grant_id}/revoke/` ends one. [Revoke Access Grant](/api-reference/endpoint/revoke-access-grant).
+
+**New on `GET /v1/iap/entitlements/`** (additive): an `access` list with one object per product the person can use now, joining paid purchases and granted periods. Clients that cannot read it (Android, iOS before 1.8.0, and the Flutter and React Native wrappers, which send the new `X-ZS-SDK-Host` header) get a stand-in `web_checkout` entry in `entitlements` for a grant-only product. The `source` values do not change. See [Get Entitlements](/api-reference/endpoint/get-entitlements#access).
+
+**New webhook events:** `access_grant.started`, `access_grant.extended`, `access_grant.ending_soon`, `access_grant.ended` and `access_grant.revoked`. See [Event Webhooks](/iap/event-webhooks#access-grant-events).
+
 ### Guest to account: move a guest's purchases onto their account
 
 Your server can now tell ZeroSettle that a guest id and an account id are the same person, and ZeroSettle moves the purchases, purchased credits, analytics and experiment rows across. It is one way, refuses (and moves nothing) when both sides hold a live entitlement to the same non-consumable product, and never cancels anything in Stripe or a store. The old id keeps resolving to the account. See [Guest to Account](/iap/guest-to-account).

@@ -10,3 +10,51 @@ Only entitlements that still grant access are returned (`active`, `cancelled`, `
 Look users up by `user_id`. An `email` lookup matches only legacy email-only checkouts, so a user your app identified with a `user_id` is not found by email.
 
 `source` is `play_store` only for Android clients (`X-ZS-SDK-Platform: android`). Other clients receive `web_checkout` for Google Play entitlements.
+
+## Access
+
+The response also carries `access`, a list with one object per product the person can use right now. It joins every way they hold the product, so read `access` to decide what to unlock. `entitlements` keeps its meaning: paid purchases only.
+
+```json
+{
+  "entitlements": [],
+  "access": [
+    {
+      "product_id": "com.yourapp.premium.monthly",
+      "ends_at": "2026-12-01T10:00:00+00:00",
+      "components": [
+        {
+          "kind": "grant",
+          "origin": "api",
+          "ends_at": "2026-12-01T10:00:00+00:00",
+          "reward_id": null
+        }
+      ]
+    }
+  ],
+  "pending_actions": []
+}
+```
+
+- `ends_at` on the product is the latest end among its components, and `null` when any component has no end.
+- A `paid` component carries `source`, `expires_at`, `will_renew` and `in_offer_period`. `expires_at` is the real end of access, so a subscription that is cancelled but still inside the period it paid for shows a paid component.
+- A `grant` component is access given for free: `origin` is `manual` (a team member in the dashboard), `api` (your server, see [Create Access Grant](/api-reference/endpoint/create-access-grant)) or `referral_reward`. Grants that run back to back show as one component that ends when the last one ends.
+- Consumable purchases are never listed in `access`. They stay in `entitlements`.
+- Dates are whole seconds.
+
+## Granted access in `entitlements`
+
+A granted period never shows up in `entitlements` under its own name. Clients that cannot read `access` would otherwise miss it, so for those clients only, a product the person holds only through a grant gets one stand-in entry:
+
+- `source` is `web_checkout`, `id` is `grant_<grant id>`, `expires_at` is the end of the granted access (or `null` when it has no end), and `will_renew` is `false`.
+- It is added for Android clients, and for iOS clients that are older than 1.8.0, send no SDK version, or send `X-ZS-SDK-Host: flutter` or `react_native`. The Flutter and React Native wrappers send that header so they get the entry even when the iOS SDK underneath is 1.8.0.
+- On iOS and the wrappers it is added only when the person has no paid entitlement at all. Otherwise an older SDK would read the stand-in as a web subscription next to an App Store purchase and tell the person to cancel the App Store one. In that case an older SDK does not see the grant until you update it. Android has no such check.
+- ZeroSettleKit 1.8.0 and later read `access` and are never sent a stand-in entry, apart from the wrapper case above.
+- A person with a paid row for the same product never gets a stand-in for it.
+- ZeroSettle can turn stand-in entries off for a project if one of them confuses an older app. `access` is not affected.
+
+Read from your own server, use `access`. It is the one list that does not depend on which SDK asked.
+
+## Headers
+
+`X-ZS-SDK-Version`, `X-ZS-SDK-Platform` (`android`) and `X-ZS-SDK-Host` (`flutter` or `react_native`) are sent by the SDKs. You do not need to set them from a server; without them the call is treated like an older iOS client.

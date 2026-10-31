@@ -1,0 +1,50 @@
+---
+title: 'Create Access Grant'
+openapi: 'POST /referrals/people/{user_id}/access-grants/'
+---
+
+Gives one customer free access to one product, from your server. Use it for a support apology, a comp, a promotion or a thank-you.
+
+## Request
+
+Send your secret key and an `Idempotency-Key` header. The body takes four fields:
+
+| Field | Notes |
+|---|---|
+| `product_id` | The product's reference id. Consumables and archived products are refused |
+| `days` | Required. A whole number from 1 to 3650, or `null` for access with no end. Leaving the key out is refused, so a missing value is never read as permanent |
+| `reason` | One of `support`, `comp`, `apology`, `promotion`, `referral` or `other` |
+| `note` | Optional text for your own records, up to 1000 characters. Required when `reason` is `other` |
+
+## How grants stack
+
+A grant on a product the customer already has granted access to starts when the last grant ends, so two 30-day grants give 60 days. A grant with no end cannot be stacked on: a second grant on the same product is refused with `already_permanent`. Revoke the first one if you want to replace it.
+
+A grant never changes a paid purchase of the same product. The customer's access is whichever lasts longest, and `access` on [Get Entitlements](/api-reference/endpoint/get-entitlements) shows both.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "already_permanent", "message": "This customer already has permanent granted access on this product.", "retryable": false } }
+```
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `invalid_request` | The body is not a JSON object, `product_id` or `reason` is missing or wrong, `note` is too long or missing when `reason` is `other`, or `days` was not sent |
+| 400 | `invalid_days` | `days` is not a whole number from 1 to 3650 or `null` |
+| 400 | `idempotency_key_required` | The `Idempotency-Key` header is missing |
+| 400 | `idempotency_key_too_long` | The key is longer than 128 characters |
+| 401 | `secret_key_required` | No key, a publishable key, or a key that is not valid |
+| 404 | `customer_not_found` | No customer has this id in this environment |
+| 404 | `unknown_product` | No active product has this reference id |
+| 405 | `method_not_allowed` | Use GET or POST |
+| 409 | `consumable_product` | A consumable cannot be granted |
+| 409 | `already_permanent` | The customer already has access with no end on this product |
+| 409 | `idempotency_key_reused` | The key was used with a different request |
+| 409 | `request_in_progress` | A request with this key is still running. Retry shortly; `retryable` is `true` |
+
+## Webhooks
+
+A new grant sends `access_grant.started`, or `access_grant.extended` when the customer already had granted access to the product. See [Event Webhooks](/iap/event-webhooks#access-grant-events).

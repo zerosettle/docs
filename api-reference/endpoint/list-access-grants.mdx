@@ -1,0 +1,10 @@
+---
+title: 'List Access Grants'
+openapi: 'GET /referrals/people/{user_id}/access-grants/'
+---
+
+Call this from your server with your secret key. It returns every grant for one customer, newest first, including grants that are scheduled, ended or revoked. Read `state` on each grant to tell them apart.
+
+The secret key decides the environment. A `zs_sk_test_*` key reads Sandbox grants and a `zs_sk_live_*` key reads Live ones.
+
+If the id was merged into another customer, the grants of the customer that kept it are returned. Grants never appear in the `entitlements` list of [Get Entitlements](/api-reference/endpoint/get-entitlements). To see what a person can use now, read its `access` list.

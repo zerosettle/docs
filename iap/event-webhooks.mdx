@@ -81,6 +81,18 @@ sync, trigger emails, or notify your team, without polling our API.
     |---|---|
     | `identity.reconciled` | One customer id was merged into another: by your server, a link token, a support merge in the dashboard or Restore Purchases. It fires on every merge, including one that moved nothing. See [Identity reconciled](#identity-reconciled) |
   </Accordion>
+
+  <Accordion title="Granted access">
+    | Event | When it fires |
+    |---|---|
+    | `access_grant.started` | A customer was given free access to a product they had no granted access to |
+    | `access_grant.extended` | A customer who already had granted access to the product was given more, queued behind it |
+    | `access_grant.ending_soon` | Granted access ends within 3 days. Sent once, for the last grant of a run |
+    | `access_grant.ended` | Granted access ran out. Not sent when another grant carries on from it, or when a revoke already ended it |
+    | `access_grant.revoked` | A grant was revoked, from the dashboard or with the [revoke endpoint](/api-reference/endpoint/revoke-access-grant) |
+
+    See [Access grant events](#access-grant-events).
+  </Accordion>
 </AccordionGroup>
 
 <Note>
@@ -326,6 +338,48 @@ if event["type"] == "identity.reconciled":
 ```
 
 </CodeGroup>
+
+### Access grant events
+
+The `access_grant.*` events tell you when free access starts, is queued, is about to run out, ends or is cancelled. They share the usual envelope (`id`, `type`, `created`, `environment`, `project_id`, `data`):
+
+```json
+{
+  "id": "evt_access_grant_912_started",
+  "type": "access_grant.started",
+  "created": "2026-10-31T09:14:02.118223+00:00",
+  "environment": "live",
+  "project_id": 85,
+  "data": {
+    "external_user_id": "user_8472",
+    "product_id": "com.yourapp.premium.monthly",
+    "grant_id": 912,
+    "origin": "api",
+    "reason": "apology",
+    "starts_at": "2026-10-31T09:14:02.101114+00:00",
+    "ends_at": "2026-11-30T09:14:02.101114+00:00",
+    "access_ends_at": "2026-11-30T09:14:02.101114+00:00",
+    "reward_id": null
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `id` | `evt_access_grant_<grant_id>_<event name>`, stable per grant and event. Use it to deduplicate |
+| `data.external_user_id` | The customer's id in your app |
+| `data.product_id` | Your canonical product reference id |
+| `data.grant_id` | The grant's id, the same one the [grant endpoints](/api-reference/endpoint/create-access-grant) return as `id` |
+| `data.origin` | `manual`, `api` or `referral_reward` |
+| `data.reason` | `support`, `comp`, `apology`, `promotion`, `referral` or `other` |
+| `data.starts_at` | When this grant's access starts. Later than the event for a grant queued behind another |
+| `data.ends_at` | When this grant's own access ends. `null` when it has no end |
+| `data.access_ends_at` | When the customer's granted access to the product ends, counting every grant that runs back to back. `null` **only** when the access has no end. Otherwise it is the time access ends, or for `access_grant.revoked` and `access_grant.ended`, the time it stopped |
+| `data.reward_id` | Set when the grant came from a reward, otherwise `null` |
+
+`ending_soon` and `ended` are sent by a job that runs every 15 minutes, so they can arrive a little after the time they describe. Access itself ends on time and does not wait for the event. They are delivered at least once, so deduplicate on `id`.
+
+These events say nothing about paid purchases. A customer whose granted access ended can still have access through a subscription, so check [`access`](/api-reference/endpoint/get-entitlements#access) before you lock anything.
 
 ### Field reference
 

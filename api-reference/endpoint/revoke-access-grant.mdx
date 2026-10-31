@@ -1,0 +1,33 @@
+---
+title: 'Revoke Access Grant'
+openapi: 'POST /referrals/access-grants/{grant_id}/revoke/'
+---
+
+Ends a grant now. Send your secret key and an `Idempotency-Key` header. The body is optional: `reason` is a note for your own records, up to 255 characters.
+
+## What happens to the customer
+
+- A grant that is running stops giving access at once.
+- A grant that has not started is cancelled before it ever gives access.
+- When grants run back to back, revoking one closes the gap. Every later grant on the product moves earlier by the days that were left unused, once, so the customer does not wait out a hole.
+- A grant with no end that was waiting behind another grant moves up the same way.
+- Revoking a grant that is already revoked changes nothing and returns it.
+- A paid purchase of the same product is never changed.
+
+## Errors
+
+Errors use the same shape as [Create Access Grant](/api-reference/endpoint/create-access-grant#errors).
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `invalid_request` | The body is not a JSON object, or `reason` is longer than 255 characters |
+| 400 | `idempotency_key_required` | The `Idempotency-Key` header is missing |
+| 400 | `idempotency_key_too_long` | The key is longer than 128 characters |
+| 401 | `secret_key_required` | No key, a publishable key, or a key that is not valid |
+| 404 | `grant_not_found` | No grant has this id in this project and environment |
+| 404 | `customer_not_found` | The customer was deleted |
+| 405 | `method_not_allowed` | Use POST |
+| 409 | `idempotency_key_reused` | The key was used with a different request |
+| 409 | `request_in_progress` | A request with this key is still running. Retry shortly |
+
+A revoke sends `access_grant.revoked`. See [Event Webhooks](/iap/event-webhooks#access-grant-events).
