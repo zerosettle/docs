@@ -51,6 +51,7 @@ sync, trigger emails, or notify your team, without polling our API.
     | `subscription.billing_issue` | A renewal payment failed. See [Billing problems](#billing-problems) |
     | `subscription.recovered` | Recovered from a billing issue and is active again |
     | `subscription.product_changed` | The subscriber switched product (upgrade, downgrade, or migration) |
+    | `subscription.extended` | A subscriber's access was extended without a charge: a free period from the cancel flow, or an App Store renewal-date extension. Carries the new `expires_at`. See [Extensions](#extensions) |
   </Accordion>
 
   <Accordion title="Trials">
@@ -107,6 +108,17 @@ of a delivery still repeat the same event, so keep deduplicating (see [Deduplica
 renewal follows a failed payment, you also receive `subscription.recovered` (status
 `active`). It normally arrives first, but treat both as "grant access" and do not depend
 on the order.
+
+### Extensions
+
+`subscription.extended` means a subscriber's access was pushed out without a charge. Two things cause it:
+
+- **A cancel-flow free period.** The subscriber accepted a free period, so the next charge moves out by that period. `expires_at` is the new end.
+- **An App Store renewal-date extension.** Apple extended the subscription's renewal date. When Apple extends many subscribers at once, you receive one `subscription.extended` for each affected subscriber.
+
+The payload is the standard subscription envelope. `expires_at` is the new end of access, `is_trial` is `false`, and `will_renew` is `true` unless the subscriber cancels.
+
+We send the event only when `expires_at` actually moves. If an extension arrives for a date we already hold, or the same extension is reported twice, nothing is sent. Treat it as "grant access until `expires_at`", the same as a renewal.
 
 ### Billing problems
 
@@ -484,6 +496,7 @@ app.post('/webhooks/zerosettle', express.raw({ type: 'application/json' }), (req
     case 'subscription.purchased':
     case 'subscription.renewed':
     case 'subscription.recovered':
+    case 'subscription.extended':
       grantAccess(event.data.external_user_id, event.data.product_id);
       break;
 

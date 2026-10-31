@@ -18,6 +18,14 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 ## October 2026
 
 <Update label="Platform" description="Unreleased">
+### New webhook: `subscription.extended`
+
+You now receive `subscription.extended` when a subscriber's access is extended without a charge. It fires for a cancel-flow free period (the next charge moves out by the free period) and for an App Store renewal-date extension. Apple's bulk extensions now send one webhook for each affected subscriber. The payload is the standard subscription envelope: `expires_at` is the new end of access, `is_trial` is `false`, and `will_renew` is `true` unless the subscriber cancels. The event is sent only when `expires_at` actually moves, so repeats send nothing. If you subscribe to `*`, add a case for it. See [Event Webhooks](/iap/event-webhooks#extensions).
+
+**Changed: `POST /v1/iap/cancel-flow/accept-offer/`.** It can now return `502` with "Could not apply the free period right now. Please try again later." when the subscription's period end cannot be read. Nothing changes for the customer in that case, so try again later.
+</Update>
+
+<Update label="Platform" description="Unreleased">
 ### Guest to account: move a guest's purchases onto their account
 
 Your server can now tell ZeroSettle that a guest id and an account id are the same person, and ZeroSettle moves the purchases, purchased credits, analytics and experiment rows across. It is one way, refuses (and moves nothing) when both sides hold a live entitlement to the same non-consumable product, and never cancels anything in Stripe or a store. The old id keeps resolving to the account. See [Guest to Account](/iap/guest-to-account).

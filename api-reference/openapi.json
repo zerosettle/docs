@@ -2141,7 +2141,7 @@
             }
           },
           "502": {
-            "description": "Stripe returned an error.",
+            "description": "Stripe returned an error, `Could not verify the offer status. Try again.`, or `Could not apply the free period right now. Please try again later.` The last one is returned when the subscription period end cannot be read. Nothing changes for the customer, so it is safe to try again later.",
             "content": {
               "application/json": {
                 "schema": {
