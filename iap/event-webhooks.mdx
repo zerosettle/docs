@@ -116,9 +116,9 @@ on the order.
 - **A cancel-flow free period.** The subscriber accepted a free period, so the next charge moves out by that period. `expires_at` is the new end.
 - **An App Store renewal-date extension.** Apple extended the subscription's renewal date. When Apple extends many subscribers at once, you receive one `subscription.extended` for each affected subscriber.
 
-The payload is the standard subscription envelope. `expires_at` is the new end of access, `is_trial` is `false`, and `will_renew` is `true` unless the subscriber cancels.
+The payload is the standard subscription envelope. `expires_at` is the new end of access. `is_trial` is `false` unless the subscriber is still in a trial (a trial that takes a free period stays a trial, with the trial end moved). `will_renew` reflects the subscription's current auto-renew setting, so an App Store extension on a subscription with auto-renew off keeps it `false`.
 
-We send the event only when `expires_at` actually moves. If an extension arrives for a date we already hold, or the same extension is reported twice, nothing is sent. Treat it as "grant access until `expires_at`", the same as a renewal.
+We send the event only when the subscription visibly changes, normally when `expires_at` moves. If an extension arrives for a date we already hold, or the same extension is reported twice, nothing is sent. Treat it as "grant access until `expires_at`", the same as a renewal.
 
 ### Billing problems
 
