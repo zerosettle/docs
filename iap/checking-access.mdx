@@ -41,9 +41,13 @@ Each component says why the person has access:
 | Component | Fields |
 |-----------|--------|
 | `.paid` | `source` (`.storeKit`, `.webCheckout`, `.playStore`), `expiresAt`, `willRenew`, `inOfferPeriod` |
-| `.granted` | `origin` (`.manual`, `.api`), `endsAt`, `rewardId` |
+| `.granted` | `origin` (`.manual`, `.api`, `.referralReward`, `.unknown`), `endsAt`, `rewardId` |
 
 A subscription that is cancelled but still inside the period it paid for shows a paid component until that period ends.
+
+## Read the current answer
+
+`ZeroSettle.currentAccess` returns every access the store holds right now, from any thread. Use it to seed your own state before you iterate `accessUpdates`. A consumer that starts iterating after `configure()` also receives the saved answer first, when there is one.
 
 ## React to changes
 
@@ -72,6 +76,7 @@ The SDK saves its last answer on the device and reads it when you call `configur
 - While your sign-in session restores, call `identify(.deferred)`, or nothing. When it resolves, call `identify(.user(id:))`.
 - Do not call `identify(.anonymous)` first. That mints a new anonymous id, which is another person to the SDK. The signed-in person's saved answer is cleared on every launch, the first frame flickers off, and offline only a local App Store purchase remains.
 - Call `logout()` before a different person signs in on the same device. It clears the saved answer.
+- Before `identify` runs, `access(for:)` answers for the last person who used the device (the saved answer). It is replaced once `identify` settles for that person and cleared when a different person identifies.
 - While a sign-in link runs (`identify(.user)` folding a guest into an account, or `reconcile(linkToken:)`), access keeps showing the answer it had until the link settles. That is up to about 10 seconds on a network that hangs, and at once offline. In that time the previous person's answer can show, which is why `logout()` comes first.
 
 See [User Identity](/iap/user-identity) for the full identity flow.
@@ -86,9 +91,11 @@ The SDK does not take access away on the device when a refund happens. A refund 
 
 A sign-out, a switch to another person or an anonymous sign-in link forgets the refusals. On a fresh install, and after any of those, until ZeroSettle answers for that purchase (seconds online, as long as it takes offline), a purchase another account holds on the same Apple ID gives access. The `entitlements` list keeps its older ownership filter.
 
+Two more cases keep the previous answer a little longer than 1.7 would, each until that person's first successful read and for as long as the device stays offline. One is an app that sets the person only through `restoreEntitlements(userId:)` after `identify(.anonymous)`: the guest's server-held access shows under the account. The other is a saved anonymous answer whose key is gone, because the app was stopped between the link settling and the answer being saved, or wiped its own UserDefaults without `logout()`: whoever signs in next may see it.
+
 ## Other things that do not change
 
-- The cancel flow and Switch & Save read `entitlements` and never see granted access.
+- The cancel flow and Switch & Save read `entitlements`, so on native iOS they never see granted access. Inside Flutter and React Native the stand-in entry in `entitlements` does reach them. That is accepted for now.
 - Inside Flutter and React Native, 1.8.0 sends an `X-ZS-SDK-Host` header, and ZeroSettle keeps adding a stand-in entry to `entitlements` for granted access in those apps until a wrapper release bridges `access`. See [Get Entitlements](/api-reference/endpoint/get-entitlements#granted-access-in-entitlements).
 - `Entitlement.Source` gains `.playStore` and `.unknown(String)`. A `switch` over it with no `default` needs the new cases.
 
