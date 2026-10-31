@@ -5868,17 +5868,17 @@
             "type": "array",
             "description": "Every way the person holds the product right now.",
             "items": {
-              "oneOf": [
+              "anyOf": [
                 {
                   "$ref": "#/components/schemas/AccessPaidComponent"
                 },
                 {
                   "$ref": "#/components/schemas/AccessGrantComponent"
+                },
+                {
+                  "$ref": "#/components/schemas/AccessOtherComponent"
                 }
-              ],
-              "discriminator": {
-                "propertyName": "kind"
-              }
+              ]
             }
           }
         },
@@ -5898,12 +5898,7 @@
           },
           "source": {
             "type": "string",
-            "enum": [
-              "web_checkout",
-              "store_kit",
-              "play_store"
-            ],
-            "description": "The rail the purchase is on."
+            "description": "Open set. Current values: web_checkout, store_kit, play_store. The rail the purchase is on. Treat an unknown value as other."
           },
           "expires_at": {
             "type": "string",
@@ -5963,6 +5958,26 @@
           "ends_at",
           "reward_id"
         ]
+      },
+      "AccessOtherComponent": {
+        "type": "object",
+        "description": "A component of a kind this page does not list yet. It is access until `ends_at`, and null means no end. Treat its `kind` as `other`.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "The component's kind."
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When access from this component ends. Null when it has no end."
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": true
       },
       "AccessGrantOrigin": {
         "type": "string",
