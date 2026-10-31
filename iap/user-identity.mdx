@@ -12,7 +12,7 @@ ZeroSettle establishes user identity **once per session** with `identify(...)`, 
 
 ## The `Identity` Type
 
-`identify()` takes an `Identity` value. If your app has accounts, the recommended flow is `identify(.anonymous)` at launch and `identify(.user(id:))` when the person signs in. From iOS 1.7.0, Android 1.4.0 and Flutter 1.9.0, ZeroSettle folds the anonymous id into the account for you, see [Option 3](#option-3-anonymous-users). On an older SDK, pick one mode per person and do not switch between them.
+`identify()` takes an `Identity` value. If your app has accounts, the recommended flow is `identify(.anonymous)` at launch for a person who is not signed in, and `identify(.user(id:))` when they sign in. If a signed-in session may be restoring at launch, wait for it instead, see [Checking access on iOS 1.8.0](#signed-in-sessions-and-ios-180). From iOS 1.7.0, Android 1.4.0 and Flutter 1.9.0, ZeroSettle folds the anonymous id into the account for you, see [Option 3](#option-3-anonymous-users). On an older SDK, pick one mode per person and do not switch between them.
 
 | Mode | When to use |
 |------|-------------|
@@ -344,6 +344,20 @@ final transaction = await ZeroSettle.instance.purchase(
 **How it works**: `Identity.anonymous` persists a stable id in on-device storage. The same identity is reused across app launches until you call `logout()` or the user clears app data. From iOS 1.7.0, Android 1.4.0 and Flutter 1.9.0, a new install's anonymous id looks like `zs_anon_<uuid>`. An install that already has an anonymous UUID keeps it, and that id does not get the automatic merge below.
 
 **Restoration**: `restoreEntitlements()` works for anonymous users. Entitlements are tied to the persisted id.
+
+### Signed-in sessions and iOS 1.8.0
+
+<Note>
+  This is ZeroSettleKit 1.8.0 guidance (coming soon). Earlier versions behave as described elsewhere on this page.
+</Note>
+
+From 1.8.0, iOS saves its last [access](/iap/checking-access) answer on the device so the first frame is right. That answer belongs to one person, so the identity you set at launch matters:
+
+- While your sign-in session restores, call `identify(.deferred)`, or nothing. Once it resolves, call `identify(.user(id:))`.
+- Never call `identify(.anonymous)` first while a signed-in session restores. It mints a new anonymous id, which is another person to the SDK, so the signed-in person's saved answer is cleared on every launch, the first frame flickers off, and offline only a local App Store purchase remains.
+- Call `logout()` before a different person signs in on the same device. It is how the SDK knows the device changed hands, and it clears the saved answer.
+
+`identify(.anonymous)` at launch is still right for an app where nobody is signed in yet.
 
 ### Anonymous first, then sign in
 
