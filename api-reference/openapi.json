@@ -5894,10 +5894,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": [
-              "paid"
-            ],
-            "description": "Open set. Today `paid` or `grant`; a new kind can be added, so treat an unknown one as `other` and as access until its `ends_at`."
+            "description": "Open set. Current values: paid, grant. A new kind can be added; treat an unknown one as `other`, and as access until its `ends_at`. This component is `paid`."
           },
           "source": {
             "type": "string",
@@ -5943,10 +5940,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": [
-              "grant"
-            ],
-            "description": "Open set. Today `paid` or `grant`; a new kind can be added, so treat an unknown one as `other` and as access until its `ends_at`."
+            "description": "Open set. Current values: paid, grant. A new kind can be added; treat an unknown one as `other`, and as access until its `ends_at`. This component is `grant`."
           },
           "origin": {
             "$ref": "#/components/schemas/AccessGrantOrigin"
@@ -5972,12 +5966,7 @@
       },
       "AccessGrantOrigin": {
         "type": "string",
-        "enum": [
-          "manual",
-          "api",
-          "referral_reward"
-        ],
-        "description": "`manual` is a grant a team member made in the dashboard, `api` one your server made with the endpoint on this page, and `referral_reward` one ZeroSettle made for a reward. This is an open set: new values can be added, so treat an unknown one as `other`."
+        "description": "Open set. Current values: `manual` (a grant a team member made in the dashboard), `api` (one your server made with the endpoint on this page) and `referral_reward` (one ZeroSettle made for a reward). Treat unknown values as other."
       },
       "AccessGrant": {
         "type": "object",
@@ -5994,15 +5983,7 @@
           },
           "reason": {
             "type": "string",
-            "enum": [
-              "support",
-              "comp",
-              "apology",
-              "promotion",
-              "referral",
-              "other"
-            ],
-            "description": "Open set: new values can be added, so treat an unknown one as `other`."
+            "description": "Open set. Current values: support, comp, apology, promotion, referral, other. Treat unknown values as other."
           },
           "note": {
             "type": "string"
