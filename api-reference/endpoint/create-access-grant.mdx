@@ -1,16 +1,17 @@
 ---
 title: 'Create Access Grant'
-openapi: 'POST /referrals/people/{user_id}/access-grants/'
+openapi: 'POST /access-grants/'
 ---
 
 Gives one customer free access to one product, from your server. Use it for a support apology, a comp, a promotion or a thank-you.
 
 ## Request
 
-Send your secret key and an `Idempotency-Key` header. The body takes four fields:
+Send your secret key and an `Idempotency-Key` header. The body takes five fields:
 
 | Field | Notes |
 |---|---|
+| `user_id` | Required. The customer's id in your app, the one you pass to `identify`. Leaving it out is a 400 |
 | `product_id` | The product's reference id. Consumables and archived products are refused |
 | `days` | Required. A whole number from 1 to 3650, or `null` for access with no end. Leaving the key out is refused, so a missing value is never read as permanent |
 | `reason` | One of `support`, `comp`, `apology`, `promotion`, `referral` or `other` |
@@ -32,7 +33,7 @@ Every error uses one shape:
 
 | Status | Code | Meaning |
 |---|---|---|
-| 400 | `invalid_request` | The body is not a JSON object, `product_id` or `reason` is missing or wrong, `note` is too long or missing when `reason` is `other`, or `days` was not sent |
+| 400 | `invalid_request` | The body is not a JSON object, `user_id`, `product_id` or `reason` is missing or wrong, `note` is too long or missing when `reason` is `other`, or `days` was not sent |
 | 400 | `invalid_days` | `days` is not a whole number from 1 to 3650 or `null` |
 | 400 | `idempotency_key_required` | The `Idempotency-Key` header is missing |
 | 400 | `idempotency_key_too_long` | The key is longer than 128 characters |

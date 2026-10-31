@@ -370,8 +370,8 @@ The `access_grant.*` events tell you when free access starts, is queued, is abou
 | `data.external_user_id` | The customer's id in your app |
 | `data.product_id` | Your canonical product reference id |
 | `data.grant_id` | The grant's id, the same one the [grant endpoints](/api-reference/endpoint/create-access-grant) return as `id` |
-| `data.origin` | `manual`, `api` or `referral_reward` |
-| `data.reason` | `support`, `comp`, `apology`, `promotion`, `referral` or `other` |
+| `data.origin` | `manual`, `api` or `referral_reward`. New values can be added, so treat an unknown one as `other` |
+| `data.reason` | `support`, `comp`, `apology`, `promotion`, `referral` or `other`. New values can be added, so treat an unknown one as `other` |
 | `data.starts_at` | When this grant's access starts. Later than the event for a grant queued behind another |
 | `data.ends_at` | When this grant's own access ends. `null` when it has no end |
 | `data.access_ends_at` | When the customer's granted access to the product ends, counting every grant that runs back to back. `null` means the access is permanent. Otherwise it is when access ends, or for `access_grant.revoked` and `access_grant.ended`, when it stopped |

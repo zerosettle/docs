@@ -1,10 +1,18 @@
 ---
 title: 'List Access Grants'
-openapi: 'GET /referrals/people/{user_id}/access-grants/'
+openapi: 'GET /access-grants/'
 ---
 
-Call this from your server with your secret key. It returns every grant for one customer, newest first, including grants that are scheduled, ended or revoked. Read `state` on each grant to tell them apart.
+Call this from your server with your secret key and pass the customer's id as the `user_id` query parameter, for example `GET /v1/access-grants/?user_id=user_123`. Leaving it out returns a 400. It returns every grant for one customer, newest first, including grants that are scheduled, ended or revoked. Read `state` on each grant to tell them apart.
 
 The secret key decides the environment. A `zs_sk_test_*` key reads Sandbox grants and a `zs_sk_live_*` key reads Live ones.
 
 If the id was merged into another customer, the grants of the customer that kept it are returned. Grants never appear in the `entitlements` list of [Get Entitlements](/api-reference/endpoint/get-entitlements). To see what a person can use now, read its `access` list.
+
+## Paging
+
+The response carries `next_cursor`. It is always `null` today, which means the list is complete. When it is set, more grants exist, so only treat a list as complete when `next_cursor` is `null`.
+
+## Values can grow
+
+`origin` and `reason` on each grant are open sets. New values can be added, so treat one you do not know as `other`.

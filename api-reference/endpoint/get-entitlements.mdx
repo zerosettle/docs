@@ -37,8 +37,10 @@ The response also carries `access`, a list with one object per product the perso
 ```
 
 - `ends_at` on the product is the latest end among its components, and `null` when any component has no end.
-- A `paid` component carries `source`, `expires_at`, `will_renew` and `in_offer_period`. `expires_at` is the real end of access, so a subscription that is cancelled but still inside the period it paid for shows a paid component.
+- Every component is access until its `ends_at`. A null `ends_at` means no end.
+- A `paid` component carries `source`, `expires_at`, `ends_at` (the same moment as `expires_at`), `will_renew` and `in_offer_period`. `expires_at` is the real end of access, so a subscription that is cancelled but still inside the period it paid for shows a paid component.
 - A `grant` component is access given for free: `origin` is `manual` (a team member in the dashboard), `api` (your server, see [Create Access Grant](/api-reference/endpoint/create-access-grant)) or `referral_reward`. Grants that run back to back show as one component that ends when the last one ends.
+- `kind` on a component, and `origin` on a grant, are open sets. New values can be added, so treat one you do not know as `other`, and as access until its `ends_at`.
 - Consumable purchases are never listed in `access`. They stay in `entitlements`.
 - Dates are whole seconds.
 

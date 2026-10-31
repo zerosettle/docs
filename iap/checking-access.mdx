@@ -40,8 +40,10 @@ Each component says why the person has access:
 
 | Component | Fields |
 |-----------|--------|
-| `.paid` | `source` (`.storeKit`, `.webCheckout`, `.playStore`), `expiresAt`, `willRenew`, `inOfferPeriod` |
+| `.paid` | `source` (`.storeKit`, `.webCheckout`, `.playStore`), `expiresAt`, `endsAt`, `willRenew`, `inOfferPeriod` |
 | `.granted` | `origin` (`.manual`, `.api`, `.referralReward`, `.unknown`), `endsAt`, `rewardId` |
+
+Every component is access until its `endsAt`, and nil means no end. The lists of kinds and origins can grow. A component kind this SDK does not know arrives as `.other(kind:endsAt:)`, and counts as access until its `endsAt`. On the server, treat an unknown `kind` or `origin` as `other` the same way.
 
 A subscription that is cancelled but still inside the period it paid for shows a paid component until that period ends.
 

@@ -3334,7 +3334,7 @@
         }
       }
     },
-    "/referrals/people/{user_id}/access-grants/": {
+    "/access-grants/": {
       "get": {
         "operationId": "listAccessGrants",
         "summary": "List Access Grants",
@@ -3350,7 +3350,7 @@
         "parameters": [
           {
             "name": "user_id",
-            "in": "path",
+            "in": "query",
             "required": true,
             "description": "The customer's id in your app, the one you pass to `identify`. An id that was merged into another customer resolves to the customer that kept it. An id that begins with `zs_try:` is reserved for dashboard stand-in people and returns `customer_not_found`.",
             "schema": {
@@ -3371,11 +3371,33 @@
                       "items": {
                         "$ref": "#/components/schemas/AccessGrant"
                       }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Always null today, which means this is every grant. When it is set, more pages exist; pass it back to read the next one. Treat a list as complete only when it is null."
                     }
                   },
                   "required": [
                     "grants"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: `user_id` is missing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessGrantError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_request",
+                    "message": "user_id is required.",
+                    "retryable": false
+                  }
                 }
               }
             }
@@ -3447,15 +3469,6 @@
         "description": "Gives a customer free access to one product for a number of days, or with no end. Authenticated with your **secret key** (`zs_sk_*`); the key decides whether the grant is Live or Sandbox. Never call it from an app.\n\nA grant on a product the customer already has a granted period on starts when the last one ends, so grants stack rather than overlap. A grant with no end cannot be stacked on, and nothing can be added behind it. A consumable cannot be granted, and neither can an archived product. A grant does not touch a paid purchase of the same product, and it is not counted as revenue.\n\nA grant sends `access_grant.started`, or `access_grant.extended` when the customer already had granted access to the product. See [Event Webhooks](/iap/event-webhooks#access-grant-events).\n\n**Idempotency.** Send an `Idempotency-Key`. A replay with the same key and body returns the stored result. A key reused with a different request is refused with `409 idempotency_key_reused`.",
         "parameters": [
           {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "description": "The customer's id in your app, the one you pass to `identify`. An id that was merged into another customer resolves to the customer that kept it. An id that begins with `zs_try:` is reserved for dashboard stand-in people and returns `customer_not_found`.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
@@ -3474,11 +3487,16 @@
               "schema": {
                 "type": "object",
                 "required": [
+                  "user_id",
                   "product_id",
                   "days",
                   "reason"
                 ],
                 "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The customer's id in your app, the one you pass to `identify`. An id that was merged into another customer resolves to the customer that kept it. An id that begins with `zs_try:` is reserved for dashboard stand-in people and returns `customer_not_found`."
+                  },
                   "product_id": {
                     "type": "string",
                     "maxLength": 255,
@@ -3510,6 +3528,7 @@
                 }
               },
               "example": {
+                "user_id": "user_123",
                 "product_id": "com.yourapp.premium.monthly",
                 "days": 30,
                 "reason": "apology",
@@ -3538,7 +3557,7 @@
             }
           },
           "400": {
-            "description": "`invalid_request` (the body is not a JSON object, `product_id` is missing or too long, `reason` is not one of the listed values, `note` is too long or missing when `reason` is `other`, or `days` is not sent), `invalid_days` (`days` is not a whole number from 1 to 3650 or null), `idempotency_key_required` (the header is missing) or `idempotency_key_too_long`.",
+            "description": "`invalid_request` (the body is not a JSON object, `user_id` is missing, `product_id` is missing or too long, `reason` is not one of the listed values, `note` is too long or missing when `reason` is `other`, or `days` is not sent), `invalid_days` (`days` is not a whole number from 1 to 3650 or null), `idempotency_key_required` (the header is missing) or `idempotency_key_too_long`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3625,7 +3644,7 @@
         }
       }
     },
-    "/referrals/access-grants/{grant_id}/revoke/": {
+    "/access-grants/{grant_id}/revoke/": {
       "post": {
         "operationId": "revokeAccessGrant",
         "summary": "Revoke Access Grant",
@@ -5877,7 +5896,8 @@
             "type": "string",
             "enum": [
               "paid"
-            ]
+            ],
+            "description": "Open set. Today `paid` or `grant`; a new kind can be added, so treat an unknown one as `other` and as access until its `ends_at`."
           },
           "source": {
             "type": "string",
@@ -5900,6 +5920,12 @@
           "in_offer_period": {
             "type": "boolean",
             "description": "Whether the current period is a trial or an introductory offer."
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "The same moment as `expires_at`. Every component carries `ends_at`: it is access until then, and null means no end."
           }
         },
         "required": [
@@ -5907,7 +5933,8 @@
           "source",
           "expires_at",
           "will_renew",
-          "in_offer_period"
+          "in_offer_period",
+          "ends_at"
         ]
       },
       "AccessGrantComponent": {
@@ -5918,7 +5945,8 @@
             "type": "string",
             "enum": [
               "grant"
-            ]
+            ],
+            "description": "Open set. Today `paid` or `grant`; a new kind can be added, so treat an unknown one as `other` and as access until its `ends_at`."
           },
           "origin": {
             "$ref": "#/components/schemas/AccessGrantOrigin"
@@ -5949,7 +5977,7 @@
           "api",
           "referral_reward"
         ],
-        "description": "`manual` is a grant a team member made in the dashboard, `api` one your server made with the endpoint on this page, and `referral_reward` one ZeroSettle made for a reward."
+        "description": "`manual` is a grant a team member made in the dashboard, `api` one your server made with the endpoint on this page, and `referral_reward` one ZeroSettle made for a reward. This is an open set: new values can be added, so treat an unknown one as `other`."
       },
       "AccessGrant": {
         "type": "object",
@@ -5973,7 +6001,8 @@
               "promotion",
               "referral",
               "other"
-            ]
+            ],
+            "description": "Open set: new values can be added, so treat an unknown one as `other`."
           },
           "note": {
             "type": "string"
