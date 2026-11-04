@@ -110,6 +110,28 @@ A reward starts as `earned` and is then `delivered`: the access is granted, the 
 
 A reward for a person who already pays can wait. It then has `waiting_reason: subscriber_delivery_pending` and will be given later. Suggested words for your app: "Your free month is saved. We'll let you know when it's ready."
 
+### Rewards for people who already pay
+
+A person who already pays does not need granted access. They get the reward's days a different way, depending on where they pay:
+
+- **Web subscription (Stripe).** The next charge moves later by the reward's days. The person keeps full access and is not charged during that time.
+- **Google Play.** Google defers the next billing date by the reward's days. Play deferral needs the service account to have permission to manage orders and subscriptions in Play Console. Without it Google refuses the call, the reward retries, then fails with `play_key_rejected`.
+- **App Store.** The person claims a free promotional offer. See [Claim App Store Offer](/api-reference/endpoint/referrals-claim-apple-offer). Apps pass the returned `app_account_token` as `.appAccountToken` with the legacy signature. Use a dedicated Free promotional offer id for referrals: every redemption of that id is recorded as a referral promotion. App Store offers are claimable one at a time, so a second reward waits until the first is claimed and its free period has ended, or its claim window has passed. A claimed offer whose free period never arrives (the person redeemed it, then turned off auto-renew before the renewal) keeps holding later App Store rewards for that person until support revokes it.
+
+A reward waits when the person is on a trial, has a billing problem, has turned auto-renew off, or has a renewal due in the next two hours. It is given once that clears. The `delivery` of a reward given this way is `web_charge_deferred`, `play_charge_deferred` or `apple_offer`.
+
+A free period from a reward is recorded as a promotion. The person stays in MRR and paying counts, and it is never counted as a trial, a payment or revenue. A subscriber reward that would move a charge more than 730 days out is refused.
+
+**Good to know**
+
+- A web reward is not taken back if the subscription is set to cancel on a date, or its collection is paused: the free period stays.
+- If a web reward is revoked before its free period starts, the next charge moves back to the original date. A cancel offer the person accepts in the same few seconds can be lost.
+- If a later reward overwrote the marker on the same Stripe subscription, the earlier reward's days are kept when it is revoked.
+- A deleted Stripe subscription cannot be moved back, so a revoke there is recorded as skipped.
+- If the answer to moving a charge back is lost, the reward reads skipped though the charge was restored.
+- Play replaced twice before the free period ends drops the older segments.
+- A signature already issued stays redeemable at Apple for up to 24 hours after a revoke. The reward stays `revoked`.
+
 Granted access from a reward appears in the `access` list of [Get Entitlements](/api-reference/endpoint/get-entitlements#access) with the origin `referral_reward`, and in the access grant webhooks with a `reward_id`. A credits reward sends `currency.granted` with `source` set to `referral_reward`, plus the `reward_id` and the `expires_at` of the credits.
 
 Read a person's rewards, progress and referrals with [Get Referral Status](/api-reference/endpoint/referrals-get-me), or from your server with [Get Person Referrals](/api-reference/endpoint/referrals-server-get-person).
@@ -160,6 +182,7 @@ A guest's id starts with `zs_anon_`. The routes your app calls never return one:
     - [Report Milestone](/api-reference/endpoint/referrals-report-milestone)
     - [Get Referral Status](/api-reference/endpoint/referrals-get-me)
     - [Record Share Event](/api-reference/endpoint/referrals-record-event)
+    - [Claim App Store Offer](/api-reference/endpoint/referrals-claim-apple-offer)
   </Card>
   <Card title="Your server (secret key)" icon="server">
     - [Report Milestone From Server](/api-reference/endpoint/referrals-server-report-milestone)

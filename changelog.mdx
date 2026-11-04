@@ -32,6 +32,15 @@ A customer can now share an invite code or link. When a new person uses it and r
 - `GET /v1/iap/referrals/me/?user_id=<id>`: [Get Referral Status](/api-reference/endpoint/referrals-get-me).
 - `POST /v1/iap/referrals/events/`: [Record Share Event](/api-reference/endpoint/referrals-record-event).
 
+**Referral rewards for people who already pay.** A reward no longer waits for a person with a subscription. Behind a switch ZeroSettle turns on, it now reaches them like this:
+- A web subscription's next charge moves later by the reward's days. No access grant is made and no `subscription.extended` is sent. `referral_reward.delivered` is sent, with `delivery` of `web_charge_deferred`.
+- A Google Play subscription's next billing date is deferred by the reward's days (`delivery` of `play_charge_deferred`). Play needs permission to manage orders and subscriptions for the service account.
+- An App Store subscriber claims a free promotional offer: the new `POST /v1/iap/referrals/rewards/{reward_id}/apple-offer/`, [Claim App Store Offer](/api-reference/endpoint/referrals-claim-apple-offer). It returns a `ClaimResponse` with both signing forms and an `app_account_token`, or the reward as access when the subscription has ended. Errors: `not_claimable`, `already_claimed`, `claim_expired`, `offer_unavailable` and `not_found`. The free month arrives as Apple's own renewal, so `subscription.renewed` is sent, and `referral_reward.claimed` says why. New webhook `referral_reward.claim_expired`.
+- `Reward.delivery` gains `web_charge_deferred`, `play_charge_deferred` and `apple_offer`.
+- A free period from a reward is a promotion. The person stays in MRR and paying counts, and it is never a trial, a payment or revenue.
+
+**Change for Google Play webhooks.** A Google Play deferral (`SUBSCRIPTION_DEFERRED`), including one you make yourself, now sends `subscription.extended` instead of `subscription.renewed` when Google's notification is seen first. If your endpoint subscribes to an explicit list of events, add `subscription.extended`. Endpoints subscribed to `*` need nothing.
+
 **New server endpoints** (additive, secret key; the POSTs need an `Idempotency-Key`):
 - `POST /v1/referrals/milestones/`: [Report Milestone From Server](/api-reference/endpoint/referrals-server-report-milestone).
 - `GET /v1/referrals/people/{user_id}/`: [Get Person Referrals](/api-reference/endpoint/referrals-server-get-person).

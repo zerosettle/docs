@@ -5194,6 +5194,237 @@
         }
       }
     },
+    "/iap/referrals/rewards/{reward_id}/apple-offer/": {
+      "post": {
+        "operationId": "claimReferralAppleOffer",
+        "summary": "Claim App Store Offer",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Signs the App Store offer for a reward whose `delivery` is `apple_offer` and whose `status` is `claimable`. Call it when the person taps to claim, then pass the result to StoreKit.\n\nBoth signing forms are always returned. Use `compact_jws` on iOS 26 and later. On iOS 18 and earlier use `signature`, and pass `app_account_token` as `.appAccountToken` in the same purchase.\n\nEvery call signs a fresh offer, so do not send an `Idempotency-Key` and do not replay an earlier body. A signature stays valid at Apple for 24 hours.\n\nIf the person's subscription ended since the reward was offered, the reward is given as access and the answer has `delivery` of `grant`. Each person can make 30 calls an hour.",
+        "parameters": [
+          {
+            "name": "reward_id",
+            "in": "path",
+            "required": true,
+            "description": "The reward id, such as `rwd_101`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The person's id in your app. It must be the person who holds the reward."
+                  }
+                }
+              },
+              "example": {
+                "user_id": "user_ben"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The signed offer, or the reward as access.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResponse"
+                },
+                "examples": {
+                  "apple_offer": {
+                    "value": {
+                      "delivery": "apple_offer",
+                      "product_id": "io.example.plus.monthly",
+                      "offer_id": "referral_free_month",
+                      "app_account_token": "7f0f3c5e-2b0a-5c4e-9a53-0d6f1d1b2a10",
+                      "compact_jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6IjRTSzNHQTVZVTIiLCJ0eXAiOiJKV1QifQ.eyJhdWQiOiJwcm9tb3Rpb25hbC1vZmZlciJ9.c2lnbmF0dXJl",
+                      "signature": {
+                        "key_id": "4SK3GA5YU2",
+                        "nonce": "c1f0a6a2-5d7a-4a0e-8d6b-4a3b9a7c2f11",
+                        "timestamp": 1793800000000,
+                        "signature": "MEUCIQDexample"
+                      }
+                    }
+                  },
+                  "grant": {
+                    "value": {
+                      "delivery": "grant",
+                      "reward": {
+                        "id": "rwd_101",
+                        "role": "referrer",
+                        "kind": "access",
+                        "delivery": "grant",
+                        "status": "delivered",
+                        "text": "30 days of Plus",
+                        "product_id": "io.example.plus.monthly",
+                        "currency_key": null,
+                        "amount": null,
+                        "days": 30,
+                        "round": 1,
+                        "earned_at": "2026-11-03T12:00:00Z",
+                        "starts_at": "2026-11-05T12:00:00Z",
+                        "ends_at": "2026-12-05T12:00:00Z",
+                        "remind_at": "2026-12-02T12:00:00Z",
+                        "claim_by": null,
+                        "claimed_at": "2026-11-05T12:00:00Z",
+                        "offer_starts_at": null,
+                        "waiting_reason": null,
+                        "failure": null,
+                        "capped_reason": null,
+                        "revoked_at": null,
+                        "revoke_reason": null
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`, `invalid_user_id` or `invalid_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "user_id_required",
+                    "message": "A user_id is required.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: no such reward for this person.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "not_found",
+                    "message": "That reward was not found.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The reward can't be claimed: `not_claimable` (not an App Store offer, not waiting, or no longer eligible), `already_claimed` or `claim_expired` (the claim window passed). `retryable` is `false`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "examples": {
+                  "not_claimable": {
+                    "value": {
+                      "error": {
+                        "code": "not_claimable",
+                        "message": "This reward can't be claimed right now.",
+                        "retryable": false
+                      }
+                    }
+                  },
+                  "already_claimed": {
+                    "value": {
+                      "error": {
+                        "code": "already_claimed",
+                        "message": "This reward was already claimed.",
+                        "retryable": false
+                      }
+                    }
+                  },
+                  "claim_expired": {
+                    "value": {
+                      "error": {
+                        "code": "claim_expired",
+                        "message": "The time to claim this reward has passed.",
+                        "retryable": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "rate_limited",
+                    "message": "Too many requests. Try again shortly.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`offer_unavailable`: the offer can't be signed right now. The reward is unchanged. Try again later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "offer_unavailable",
+                    "message": "The offer is unavailable right now. Try again later.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/referrals/milestones/": {
       "post": {
         "operationId": "reportReferralMilestoneFromServer",
@@ -8607,7 +8838,7 @@
             "type": "string",
             "format": "date-time",
             "nullable": true,
-            "description": "For a reward the person has to claim, the last moment to do it."
+            "description": "For a reward the person has to claim (an App Store offer), the last moment to do it. After it passes the reward becomes `claim_expired`."
           },
           "claimed_at": {
             "type": "string",
@@ -8628,7 +8859,7 @@
           "delivery": {
             "type": "string",
             "nullable": true,
-            "description": "How it reached the person: `grant`, `unlock` or `credits` today. `null` until it is delivered. Other values are reserved. Treat any value you do not know as not delivered yet."
+            "description": "How it reached the person: `grant`, `unlock`, `credits`, `web_charge_deferred`, `play_charge_deferred` or `apple_offer`. `null` until it is delivered. `web_charge_deferred` and `play_charge_deferred` mean the person's next charge moved later by the reward's days. `apple_offer` means the person redeems an App Store offer. New values can be added. Treat any value you do not know as not delivered yet."
           },
           "earned_at": {
             "type": "string",
@@ -8662,7 +8893,7 @@
             "type": "string",
             "format": "date-time",
             "nullable": true,
-            "description": "Reserved for rewards that start with a store offer."
+            "description": "For an `apple_offer` reward the person has not used yet, when the free period is expected to start: the date the current App Store period ends. `null` otherwise, and `null` once the reward is `claim_expired`."
           },
           "product_id": {
             "type": "string",
@@ -8712,7 +8943,7 @@
           "waiting_reason": {
             "type": "string",
             "nullable": true,
-            "description": "`subscriber_delivery_pending` when the person already pays and the reward is saved until it can be given. Otherwise `null`. New values can be added."
+            "description": "`subscriber_delivery_pending` when the person already pays and the reward is saved until it can be given. Otherwise `null`. New values can be added. A reward can wait for a trial to end, a billing problem to clear, auto-renew to be on again, or a renewal within the next two hours."
           }
         },
         "required": [
@@ -9511,6 +9742,117 @@
         "required": [
           "error"
         ]
+      },
+      "AppleOfferSignature": {
+        "type": "object",
+        "description": "The legacy signature, for iOS 18 and earlier. Pass the four values to `Product.PurchaseOption.promotionalOffer(offerID:keyID:nonce:signature:timestamp:)`, and the claim's `app_account_token` as `.appAccountToken`.",
+        "required": [
+          "key_id",
+          "nonce",
+          "timestamp",
+          "signature"
+        ],
+        "properties": {
+          "key_id": {
+            "type": "string",
+            "description": "The key id of the signing key."
+          },
+          "nonce": {
+            "type": "string",
+            "description": "A lowercase UUID, used once."
+          },
+          "timestamp": {
+            "type": "integer",
+            "description": "Unix time in milliseconds. The signature stays valid for 24 hours."
+          },
+          "signature": {
+            "type": "string",
+            "description": "The base64 signature."
+          }
+        }
+      },
+      "AppleOfferClaim": {
+        "type": "object",
+        "description": "An App Store reward, signed. Both forms are always sent, so your app can use whichever its iOS version supports.",
+        "required": [
+          "delivery",
+          "product_id",
+          "offer_id",
+          "app_account_token",
+          "compact_jws",
+          "signature"
+        ],
+        "properties": {
+          "delivery": {
+            "type": "string",
+            "enum": [
+              "apple_offer"
+            ]
+          },
+          "product_id": {
+            "type": "string",
+            "description": "The App Store product the offer is on."
+          },
+          "offer_id": {
+            "type": "string",
+            "description": "The promotional offer id."
+          },
+          "app_account_token": {
+            "type": "string",
+            "description": "A lowercase UUID. Pass it as `.appAccountToken` when you purchase with the legacy signature. The compact form carries it already."
+          },
+          "compact_jws": {
+            "type": "string",
+            "nullable": true,
+            "description": "The signed offer for iOS 26 and later."
+          },
+          "signature": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AppleOfferSignature"
+              }
+            ],
+            "description": "The legacy signature, for iOS 18 and earlier."
+          }
+        }
+      },
+      "GrantClaim": {
+        "type": "object",
+        "description": "The person's subscription had ended, so the reward was given as access instead. There is nothing to sign.",
+        "required": [
+          "delivery",
+          "reward"
+        ],
+        "properties": {
+          "delivery": {
+            "type": "string",
+            "enum": [
+              "grant"
+            ]
+          },
+          "reward": {
+            "$ref": "#/components/schemas/Reward"
+          }
+        }
+      },
+      "ClaimResponse": {
+        "description": "Either a signed App Store offer or a reward given as access. Read `delivery`. New values can be added, so treat one you do not know as not claimed.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AppleOfferClaim"
+          },
+          {
+            "$ref": "#/components/schemas/GrantClaim"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "delivery",
+          "mapping": {
+            "apple_offer": "#/components/schemas/AppleOfferClaim",
+            "grant": "#/components/schemas/GrantClaim"
+          }
+        }
       }
     },
     "responses": {

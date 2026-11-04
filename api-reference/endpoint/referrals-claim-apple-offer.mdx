@@ -1,0 +1,60 @@
+---
+title: 'Claim App Store Offer'
+openapi: 'POST /iap/referrals/rewards/{reward_id}/apple-offer/'
+---
+
+Signs the App Store offer for a reward the person has to claim. Call it when the person taps to claim, then pass the result to StoreKit.
+
+A person who already pays through the App Store gets a free month as a promotional offer. The reward is `claimable` until they redeem it or `claim_by` passes. Read `delivery`, `status`, `claim_by` and `offer_starts_at` from [Get Referral Status](/api-reference/endpoint/referrals-get-me).
+
+## Request
+
+| Field | Notes |
+|---|---|
+| `user_id` | Required. The person who holds the reward |
+
+Do not send an `Idempotency-Key`. Every call signs a new offer with a new nonce, and Apple refuses a nonce it has seen. Each person can make 30 calls an hour.
+
+## What you get back
+
+A `ClaimResponse` whose `delivery` says what to do.
+
+**`apple_offer`.** Both signing forms arrive every time, so use the one your iOS version supports.
+
+| Field | Notes |
+|---|---|
+| `product_id`, `offer_id` | The product and the promotional offer to redeem |
+| `app_account_token` | A lowercase UUID for the person |
+| `compact_jws` | The signed offer for iOS 26 and later |
+| `signature` | The legacy signature for iOS 18 and earlier: `key_id`, `nonce`, `timestamp` and `signature` |
+
+With the legacy form, pass `app_account_token` as `.appAccountToken` in the same purchase. Apple checks it against the signature. The compact form carries it already.
+
+**`grant`.** The person's subscription ended since the reward was offered, so the reward was given as access instead. `reward` is the delivered reward. There is nothing to sign.
+
+## After the person redeems
+
+Apple applies the free month as its own renewal, at the end of the current period. ZeroSettle sees it, marks the reward `claimed` and fills in `starts_at` and `ends_at` once the free period begins. Your server gets `referral_reward.claimed`, and `subscription.renewed` for the $0 renewal, as for any Apple renewal. The free period is recorded as a promotion. It is never counted as a trial, a payment or revenue.
+
+## Things to know
+
+- Use a dedicated Free promotional offer id for referrals, and list it in the campaign's App Store offers. Every redemption of that id is recorded as a referral promotion. A paid offer you map there is never treated as one.
+- A signature stays valid at Apple for 24 hours. If the reward is revoked after you signed, the person can still redeem within that time. The reward stays `revoked`.
+- App Store offers are claimable one at a time. A second reward waits until the first is claimed and its free period has ended, or its claim window has passed.
+- A reward may also wait before it is claimable: while the person is on a trial or has a billing problem, while auto-renew is off, or when a renewal is due in the next two hours. See `waiting_reason`.
+- Redemption needs the business's In-App Purchase key in the dashboard. Without it, or when the feature is not switched on, the call answers `offer_unavailable` and the reward is unchanged.
+
+## Refusals and errors
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required`, `invalid_user_id`, `invalid_request` | The request is not valid |
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+| 404 | `not_found` | No such reward for this person |
+| 409 | `not_claimable` | Not an App Store offer, not waiting for a claim, or no longer eligible. If the person's subscription changed, the reward goes back to waiting and will be offered again later |
+| 409 | `already_claimed` | The person already claimed it |
+| 409 | `claim_expired` | The claim window passed |
+| 429 | `rate_limited` | Wait for `Retry-After` seconds |
+| 503 | `offer_unavailable` | Try again later; `retryable` is `true` |
+
+A 409 has `retryable: false`. Show the person a plain line and carry on. See the [Referrals guide](/iap/referrals) and, for iOS, [Referrals on iOS](/iap/referrals-ios).

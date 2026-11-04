@@ -208,6 +208,7 @@
               "api-reference/endpoint/referrals-report-milestone",
               "api-reference/endpoint/referrals-get-me",
               "api-reference/endpoint/referrals-record-event",
+              "api-reference/endpoint/referrals-claim-apple-offer",
               "api-reference/endpoint/referrals-server-report-milestone",
               "api-reference/endpoint/referrals-server-get-person",
               "api-reference/endpoint/referrals-server-get-code",

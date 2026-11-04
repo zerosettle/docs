@@ -104,8 +104,9 @@ sync, trigger emails, or notify your team, without polling our API.
     | `referral.expired` | The new person's time ran out before they reached every milestone |
     | `referral_reward.earned` | A person earned a referral reward |
     | `referral_reward.delivered` | The reward was given: access granted, a product unlocked or credits added |
-    | `referral_reward.claimable` | A reward is ready for the person to claim |
-    | `referral_reward.claimed` | The person claimed it |
+    | `referral_reward.claimable` | A reward is ready for the person to claim: an App Store free month they redeem |
+    | `referral_reward.claimed` | The person redeemed the App Store offer |
+    | `referral_reward.claim_expired` | The claim window passed and the offer was not redeemed |
     | `referral_reward.ending_soon` | Reward access ends within the campaign's ending-soon days. Sent once |
     | `referral_reward.ended` | Reward access ran out |
     | `referral_reward.revoked` | A reward was taken back |
@@ -526,6 +527,13 @@ The `referral.*`, `referral_reward.*` and `referral_code.reset` events share the
 | `data.user_id` | The person who got the reward, in your app. `null` for a person with no user id |
 | `data.customer_id` | ZeroSettle's number for that person. Always set |
 | `data.referral_ids` | The referrals that earned it |
+
+**Rewards for people who already pay.** The reward moves the next charge instead of granting access:
+
+- `referral_reward.delivered` is sent when the next web or Google Play charge has moved. `data.reward.delivery` is `web_charge_deferred` or `play_charge_deferred`. It sends no access grant event.
+- A referral free period on a web subscription sends no `subscription.extended`. The `zs_free_period` marker stays on the subscription, so a later `trial_end` change you make on it is read as part of the referral free period and sends none either.
+- On Google Play, a deferral sends `subscription.extended` instead of `subscription.renewed`, because the billing date moved and nothing was bought. This applies to a deferral you make yourself too. An endpoint subscribed to an explicit list of events needs `subscription.extended` added to keep receiving it. When the app's SDK sync sees the new date before Google's notification does, the change is still sent as `subscription.renewed`, as before. A grace period is unchanged.
+- On the App Store, `referral_reward.claimable` is sent when the offer is ready and `referral_reward.claimed` when the person redeems it (or `referral_reward.claim_expired` if they do not in time). The free month arrives as Apple's own renewal, so `subscription.renewed` is sent as for any Apple renewal, and Apple also sends you the DID_RENEW notification. `referral_reward.claimed` says why the renewal is free.
 
 `referral_reward.ending_soon` and `referral_reward.ended` come from the same 15-minute job as the access grant events. Granted access from a reward also sends the matching [access grant event](#access-grant-events) with a `reward_id`.
 
