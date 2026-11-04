@@ -1,0 +1,29 @@
+---
+title: 'Get Person Referrals'
+openapi: 'GET /referrals/people/{user_id}/'
+---
+
+A person's referral status as your server sees it. The body is the same as [Get Referral Status](/api-reference/endpoint/referrals-get-me), with every party's real user id.
+
+## Request
+
+Send your secret key and the person's `user_id` in the path. An id that was merged into another person resolves to the person who kept it.
+
+<Warning>
+  A guest's `zs_anon_` id is returned here. It works as a secret for linking that guest to an account, so keep it on your server and never pass one to another person's app.
+</Warning>
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "not_found", "message": "No referral or reward has this id.", "retryable": false } }
+```
+
+| Status | Code | Meaning |
+|---|---|---|
+| 401 | `secret_key_required` | No key, a publishable key, or a key that is not valid |
+| 404 | `customer_not_found` | No customer has this id in this environment |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

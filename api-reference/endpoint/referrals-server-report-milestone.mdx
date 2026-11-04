@@ -1,0 +1,41 @@
+---
+title: 'Report Milestone From Server'
+openapi: 'POST /referrals/milestones/'
+---
+
+Tells ZeroSettle that a referred person reached a milestone, from your server. Use it for milestones only your servers can vouch for, such as a verified account, and for every milestone when the campaign is set to server-reported milestones only.
+
+## Request
+
+Send your secret key and an `Idempotency-Key` header. Never call this from an app.
+
+| Field | Notes |
+|---|---|
+| `user_id` | Required. The referred person's id |
+| `key` | Required. The milestone's key |
+| `occurred_at` | When it happened, with a time zone. Defaults to now |
+| `attributes` | Short text values kept with the milestone, each up to 200 characters |
+
+The key decides whether the milestone counts in Live or Sandbox.
+
+## What you get back
+
+The same body as [Report Milestone](/api-reference/endpoint/referrals-report-milestone): `recorded`, a `reason` when it was not counted, and the `referral`.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "not_found", "message": "No referral or reward has this id.", "retryable": false } }
+```
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required`, `invalid_user_id`, `invalid_attributes`, `invalid_milestone_key`, `invalid_occurred_at`, `invalid_request`, `idempotency_key_required` | The request is not valid |
+| 401 | `secret_key_required` | No key, a publishable key, or a key that is not valid |
+| 404 | `customer_not_found` | No customer has this id |
+| 409 | `milestone_payment_only`, `unknown_milestone` | The campaign does not take this milestone from you |
+| 409 | `idempotency_key_reused`, `request_in_progress` | See [Create Access Grant](/api-reference/endpoint/create-access-grant#errors) |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

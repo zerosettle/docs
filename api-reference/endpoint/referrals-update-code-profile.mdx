@@ -1,0 +1,39 @@
+---
+title: 'Set Invite Profile'
+openapi: 'POST /iap/referrals/code/profile/'
+---
+
+Sets the name and picture a new person sees when they preview this person's code. A friend's name makes an invite feel personal.
+
+## Request
+
+| Field | Notes |
+|---|---|
+| `user_id` | Required |
+| `display_name` | Up to 40 characters, with no control characters. `null` or an empty string clears it |
+| `avatar_url` | An `https://` address of up to 500 characters. `null` or an empty string clears it |
+
+A field you leave out stays as it is. Each person can change their profile 20 times an hour.
+
+## Needs a code
+
+The person must have a code. When no campaign is running and they have none, the call is refused with `no_code`.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+Treat `retryable` as the rule for whether to try again. Codes can be added, so handle one you do not know by its status.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required`, `invalid_display_name`, `invalid_avatar_url` | A field is missing or not valid |
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+| 409 | `no_code` | The person has no code and no campaign is running |
+| 429 | `rate_limited` | Wait for `Retry-After` seconds |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

@@ -77,6 +77,10 @@
     {
       "name": "Access grants",
       "description": "Give a customer free access to a product for a set time, or without an end, from your server"
+    },
+    {
+      "name": "Referrals",
+      "description": "Let customers invite new customers, and reward both. Your app reads and writes with the publishable key. Your server uses the secret key."
     }
   ],
   "paths": {
@@ -3805,6 +3809,2503 @@
           }
         }
       }
+    },
+    "/iap/referrals/code/": {
+      "get": {
+        "operationId": "getReferralCode",
+        "summary": "Get Invite Code",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Returns the person's invite code and link. When a campaign is accepting invites and the person has no code yet, one is made. When no campaign is running, a person who already has a code gets it back and anyone else gets a body with every field `null`.\n\nThe code shows as `K7M2-QX9P`. The same code works without the hyphen and in any letter case.",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "description": "The person's id in your app, the one you pass to `identify`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The person's code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SdkCode"
+                },
+                "example": {
+                  "avatar_url": "https://cdn.pawprints.example/ana.png",
+                  "campaign": {
+                    "key": "friends",
+                    "referee_reward_text": "A free week of Plus",
+                    "referrer_reward_text": "30 days of Plus",
+                    "threshold": 3
+                  },
+                  "code": "K7M2-QX9P",
+                  "display_name": "Ana",
+                  "status": "active",
+                  "url": "https://pawprints.example/j/K7M2QX9P"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "user_id_required",
+                    "message": "user_id is required.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`try_again`: the person's account was merged while the code was made. Retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "try_again",
+                    "message": "Something changed while this was processed. Try again.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use GET.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/referrals/code/reset/": {
+      "post": {
+        "operationId": "resetReferralCode",
+        "summary": "Reset Invite Code",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Replaces the person's active code with a new one. The old code stops working at once and is refused with `code_reset`. A reset never makes a first code: a person with no active code gets a body with every field `null`. Each person can reset 5 times an hour.\n\nA reset sends `referral_code.reset` to your webhook endpoints.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Optional. A unique key, 1 to 128 characters, for retrying the same call safely.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The person's id in your app, the one you pass to `identify`."
+                  }
+                }
+              },
+              "example": {
+                "user_id": "user_ana"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SdkCode"
+                },
+                "example": {
+                  "avatar_url": "https://cdn.pawprints.example/ana.png",
+                  "campaign": {
+                    "key": "friends",
+                    "referee_reward_text": "A free week of Plus",
+                    "referrer_reward_text": "30 days of Plus",
+                    "threshold": 3
+                  },
+                  "code": "K7M2-QX9P",
+                  "display_name": "Ana",
+                  "status": "active",
+                  "url": "https://pawprints.example/j/K7M2QX9P"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "user_id_required",
+                    "message": "user_id is required.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: more than 5 resets in an hour. `Retry-After` says how long to wait.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "rate_limited",
+                    "message": "Too many requests. Try again shortly.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`try_again`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "try_again",
+                    "message": "Something changed while this was processed. Try again.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/referrals/code/profile/": {
+      "post": {
+        "operationId": "setReferralProfile",
+        "summary": "Set Invite Profile",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Sets the name and picture a new person sees when they preview this person's code. Send only the fields you want to change: a field you leave out stays as it is, and `null` or an empty string clears it. Each person can change their profile 20 times an hour.\n\nThe person needs a code first. When no campaign is running and they have none, the call is refused with `no_code`.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Optional. A unique key, 1 to 128 characters, for retrying the same call safely.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The person's id in your app, the one you pass to `identify`."
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 40,
+                    "description": "Up to 40 characters, with no control characters."
+                  },
+                  "avatar_url": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 500,
+                    "description": "An `https://` address, up to 500 characters."
+                  }
+                }
+              },
+              "example": {
+                "user_id": "user_ana",
+                "display_name": "Ana",
+                "avatar_url": "https://cdn.example.com/ana.png"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The code with its profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SdkCode"
+                },
+                "example": {
+                  "avatar_url": "https://cdn.pawprints.example/ana.png",
+                  "campaign": {
+                    "key": "friends",
+                    "referee_reward_text": "A free week of Plus",
+                    "referrer_reward_text": "30 days of Plus",
+                    "threshold": 3
+                  },
+                  "code": "K7M2-QX9P",
+                  "display_name": "Ana",
+                  "status": "active",
+                  "url": "https://pawprints.example/j/K7M2QX9P"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`, `invalid_display_name` or `invalid_avatar_url`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_display_name",
+                    "message": "The display name is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`no_code`: the person has no code and no campaign is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "no_code",
+                    "message": "This person has no invite code yet.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "rate_limited",
+                    "message": "Too many requests. Try again shortly.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/referrals/codes/{code}/": {
+      "get": {
+        "operationId": "previewReferralCode",
+        "summary": "Preview Invite Code",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Says whether a code can be accepted and what the new person would get, so your app can show it before they commit. It takes no `user_id`, never creates a person, and returns no ids.\n\nA code that cannot be accepted is still a 200 with `valid: false` and a `refusal`.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "description": "The code, with or without the hyphen, in any letter case.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodePreview"
+                },
+                "examples": {
+                  "valid": {
+                    "value": {
+                      "campaign": {
+                        "referee_reward_text": "A free week of Plus",
+                        "terms_url": "https://pawprints.example/terms"
+                      },
+                      "inviter": {
+                        "avatar_url": "https://cdn.pawprints.example/ana.png",
+                        "display_name": "Ana"
+                      },
+                      "refusal": null,
+                      "valid": true
+                    }
+                  },
+                  "replaced": {
+                    "value": {
+                      "campaign": null,
+                      "inviter": null,
+                      "refusal": "code_reset",
+                      "valid": false
+                    }
+                  },
+                  "unknown": {
+                    "value": {
+                      "campaign": null,
+                      "inviter": null,
+                      "refusal": "invalid_code",
+                      "valid": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use GET.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/referrals/accept/": {
+      "post": {
+        "operationId": "acceptReferral",
+        "summary": "Accept Invite",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Records that a new person used an invite code. Call it once, when the person first opens your app from an invite, with the code the link carried.\n\nIt is safe to repeat: a person who accepts the same code again gets the same referral back with `created: false`. A person can only ever be referred once. Each person can try 20 times an hour.\n\nSome campaigns ask for a device check. Send the token you get from DeviceCheck in `device_check_token`.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Optional. A unique key, 1 to 128 characters, for retrying the same call safely.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "code"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The person's id in your app, the one you pass to `identify`."
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "The invite code, as typed or as carried by the link."
+                  },
+                  "device_check_token": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "A base64 DeviceCheck token from the device, when the campaign uses the device check."
+                  },
+                  "attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Up to 10 short text values you want kept with the referral, each up to 200 characters. Your server can match the new person to its own records with them."
+                  }
+                }
+              },
+              "example": {
+                "user_id": "user_ben",
+                "code": "K7M2-QX9P",
+                "attributes": {
+                  "dog_name": "Biscuit"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The referral.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptResponse"
+                },
+                "examples": {
+                  "created": {
+                    "value": {
+                      "created": true,
+                      "referral": {
+                        "accepted_at": "2026-11-03T12:00:00Z",
+                        "code": "K7M2-QX9P",
+                        "id": "ref_201",
+                        "inviter": {
+                          "avatar_url": "https://cdn.pawprints.example/ana.png",
+                          "display_name": "Ana"
+                        },
+                        "qualified_at": null,
+                        "qualify_by": "2026-11-17T12:00:00Z",
+                        "referee_reward_text": "A free week of Plus",
+                        "state": "accepted"
+                      }
+                    }
+                  },
+                  "repeat": {
+                    "value": {
+                      "created": false,
+                      "referral": {
+                        "accepted_at": "2026-11-03T12:00:00Z",
+                        "code": "K7M2-QX9P",
+                        "id": "ref_201",
+                        "inviter": {
+                          "avatar_url": "https://cdn.pawprints.example/ana.png",
+                          "display_name": "Ana"
+                        },
+                        "qualified_at": null,
+                        "qualify_by": "2026-11-17T12:00:00Z",
+                        "referee_reward_text": "A free week of Plus",
+                        "state": "accepted"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`, `invalid_user_id`, `invalid_request` (no `code`), `invalid_attributes` or `invalid_device_check_token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_attributes",
+                    "message": "attributes must be a map of short text values.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`invalid_code`, `code_reset`, `campaign_ended`, `self_referral`, `already_referred`, `not_new_user`, `referrer_ineligible`, `device_already_counted` or `device_check_required`. See the list on the [Referrals guide](/iap/referrals#refusals).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "self_referral",
+                    "message": "You cannot use your own invite code.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "rate_limited",
+                    "message": "Too many requests. Try again shortly.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`device_check_unavailable` or `try_again`. Both can be retried.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "device_check_unavailable",
+                    "message": "The device check is unavailable. Try again.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/referrals/milestones/": {
+      "post": {
+        "operationId": "reportReferralMilestone",
+        "summary": "Report Milestone",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Tells ZeroSettle that a referred person reached one of the campaign's app milestones, such as finishing a first walk. A person who was not referred, or whose referral is closed, gets a 200 with `recorded: false` and a `reason`.\n\nAnyone who knows a user id and your publishable key can call this route, so a campaign that rewards real value should use a milestone your server reports, or a payment. See the [Referrals guide](/iap/referrals#milestones).\n\nEach person can report 60 times an hour.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Optional. A unique key, 1 to 128 characters, for retrying the same call safely.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "key"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The person's id in your app, the one you pass to `identify`."
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "The milestone's key, as set in the campaign."
+                  },
+                  "occurred_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true,
+                    "description": "When it happened, with a time zone. Defaults to now. A time more than 5 minutes ahead is refused."
+                  }
+                }
+              },
+              "example": {
+                "user_id": "user_ben",
+                "key": "first_walk"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether it was counted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneResponse"
+                },
+                "examples": {
+                  "recorded": {
+                    "value": {
+                      "reason": null,
+                      "recorded": true,
+                      "referral": {
+                        "id": "ref_201",
+                        "qualified_at": "2026-11-05T12:00:00Z",
+                        "state": "qualified"
+                      }
+                    }
+                  },
+                  "not_referred": {
+                    "value": {
+                      "reason": "not_referred",
+                      "recorded": false,
+                      "referral": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`, `invalid_user_id`, `invalid_milestone_key` or `invalid_occurred_at`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_milestone_key",
+                    "message": "The milestone key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`milestone_server_only`, `milestone_payment_only` or `unknown_milestone`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "milestone_server_only",
+                    "message": "This milestone is reported by your server.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "rate_limited",
+                    "message": "Too many requests. Try again shortly.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/referrals/me/": {
+      "get": {
+        "operationId": "getReferralStatus",
+        "summary": "Get Referral Status",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Everything an app needs to show a person where they stand: their code and link, progress on the ladder, the people they invited, the referral that brought them in, and every reward.\n\nA guest's `zs_anon_` id is never returned here. When an invited person is a guest, `referee_user_id` is `null` and `referee_attributes` is how you tell who they are.",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "description": "The person's id in your app, the one you pass to `identify`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The person's status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                },
+                "examples": {
+                  "referrer": {
+                    "value": {
+                      "campaign": {
+                        "key": "friends",
+                        "referee_reward_text": "A free week of Plus",
+                        "referrer_reward_text": "30 days of Plus",
+                        "threshold": 3
+                      },
+                      "code": "K7M2-QX9P",
+                      "eligibility": {
+                        "reason": null,
+                        "status": "eligible"
+                      },
+                      "progress": {
+                        "current": 1,
+                        "needed": 3,
+                        "round": 2
+                      },
+                      "referrals": [
+                        {
+                          "accepted_at": "2026-11-01T12:00:00Z",
+                          "id": "ref_191",
+                          "qualified_at": "2026-11-02T12:00:00Z",
+                          "qualify_by": "2026-11-15T12:00:00Z",
+                          "referee_attributes": {},
+                          "referee_user_id": "user_dee",
+                          "reward_id": "rwd_101",
+                          "round": 1,
+                          "slot_state": "counted",
+                          "state": "qualified"
+                        },
+                        {
+                          "accepted_at": "2026-11-01T12:00:00Z",
+                          "id": "ref_192",
+                          "qualified_at": "2026-11-03T08:00:00Z",
+                          "qualify_by": "2026-11-15T12:00:00Z",
+                          "referee_attributes": {},
+                          "referee_user_id": "user_eli",
+                          "reward_id": "rwd_101",
+                          "round": 1,
+                          "slot_state": "counted",
+                          "state": "qualified"
+                        },
+                        {
+                          "accepted_at": "2026-11-01T12:00:00Z",
+                          "id": "ref_201",
+                          "qualified_at": "2026-11-03T09:00:00Z",
+                          "qualify_by": "2026-11-15T12:00:00Z",
+                          "referee_attributes": {
+                            "dog_name": "Biscuit"
+                          },
+                          "referee_user_id": "user_ben",
+                          "reward_id": "rwd_101",
+                          "round": 1,
+                          "slot_state": "counted",
+                          "state": "qualified"
+                        },
+                        {
+                          "accepted_at": "2026-11-04T12:00:00Z",
+                          "id": "ref_202",
+                          "qualified_at": "2026-11-06T12:00:00Z",
+                          "qualify_by": "2026-11-18T12:00:00Z",
+                          "referee_attributes": {
+                            "account_id": "acc_44"
+                          },
+                          "referee_user_id": null,
+                          "reward_id": null,
+                          "round": 2,
+                          "slot_state": "filled",
+                          "state": "qualified"
+                        },
+                        {
+                          "accepted_at": "2026-11-07T12:00:00Z",
+                          "id": "ref_203",
+                          "qualified_at": null,
+                          "qualify_by": "2026-11-21T12:00:00Z",
+                          "referee_attributes": {},
+                          "referee_user_id": "user_cy",
+                          "reward_id": null,
+                          "round": 2,
+                          "slot_state": "pending",
+                          "state": "accepted"
+                        }
+                      ],
+                      "referred_by": null,
+                      "rewards": [
+                        {
+                          "amount": null,
+                          "capped_reason": null,
+                          "claim_by": null,
+                          "claimed_at": null,
+                          "currency_key": null,
+                          "days": 30,
+                          "delivery": "grant",
+                          "earned_at": "2026-11-03T12:00:00Z",
+                          "ends_at": "2026-12-03T12:00:00Z",
+                          "failure": null,
+                          "id": "rwd_101",
+                          "kind": "access",
+                          "offer_starts_at": null,
+                          "product_id": "plus_monthly",
+                          "remind_at": "2026-11-30T12:00:00Z",
+                          "revoke_reason": null,
+                          "revoked_at": null,
+                          "role": "referrer",
+                          "round": 1,
+                          "starts_at": "2026-11-03T12:00:00Z",
+                          "status": "delivered",
+                          "text": "30 days of Plus",
+                          "waiting_reason": null
+                        }
+                      ],
+                      "url": "https://pawprints.example/j/K7M2QX9P"
+                    }
+                  },
+                  "invited": {
+                    "value": {
+                      "campaign": {
+                        "key": "friends",
+                        "referee_reward_text": "A free week of Plus",
+                        "referrer_reward_text": "30 days of Plus",
+                        "threshold": 3
+                      },
+                      "code": "R4T8-WN3D",
+                      "eligibility": {
+                        "reason": null,
+                        "status": "eligible"
+                      },
+                      "progress": {
+                        "current": 0,
+                        "needed": 3,
+                        "round": 1
+                      },
+                      "referrals": [],
+                      "referred_by": {
+                        "accepted_at": "2026-11-03T12:00:00Z",
+                        "code": "K7M2-QX9P",
+                        "id": "ref_201",
+                        "inviter": {
+                          "avatar_url": "https://cdn.pawprints.example/ana.png",
+                          "display_name": "Ana"
+                        },
+                        "qualified_at": null,
+                        "qualify_by": "2026-11-17T12:00:00Z",
+                        "referee_reward_text": "A free week of Plus",
+                        "state": "accepted"
+                      },
+                      "rewards": [
+                        {
+                          "amount": null,
+                          "capped_reason": null,
+                          "claim_by": null,
+                          "claimed_at": null,
+                          "currency_key": null,
+                          "days": 7,
+                          "delivery": null,
+                          "earned_at": "2026-11-03T12:00:00Z",
+                          "ends_at": null,
+                          "failure": null,
+                          "id": "rwd_107",
+                          "kind": "access",
+                          "offer_starts_at": null,
+                          "product_id": "plus_monthly",
+                          "remind_at": null,
+                          "revoke_reason": null,
+                          "revoked_at": null,
+                          "role": "referee",
+                          "round": null,
+                          "starts_at": null,
+                          "status": "earned",
+                          "text": "A free week of Plus",
+                          "waiting_reason": null
+                        }
+                      ],
+                      "url": "https://pawprints.example/j/R4T8WN3D"
+                    }
+                  },
+                  "no_campaign": {
+                    "value": {
+                      "campaign": null,
+                      "code": null,
+                      "eligibility": {
+                        "reason": "no_campaign",
+                        "status": "ineligible"
+                      },
+                      "progress": null,
+                      "referrals": [],
+                      "referred_by": null,
+                      "rewards": [],
+                      "url": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "user_id_required",
+                    "message": "user_id is required.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use GET.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/iap/referrals/events/": {
+      "post": {
+        "operationId": "recordReferralEvent",
+        "summary": "Record Share Event",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Records that a person shared their invite, or that your app captured an invite code. These counts feed the funnel in Analyze. Each person can send 60 events an hour.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "type"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The person's id in your app, the one you pass to `identify`."
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "shared",
+                      "captured"
+                    ],
+                    "description": "`shared` when the person shared their link, `captured` when your app read a code from a link."
+                  },
+                  "channel": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "nullable": true,
+                    "description": "Where it was shared, such as `messages`. Up to 40 characters."
+                  },
+                  "code": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "The code involved, when you have it."
+                  }
+                }
+              },
+              "example": {
+                "user_id": "user_ana",
+                "type": "shared",
+                "channel": "messages"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsResponse"
+                },
+                "example": {
+                  "recorded": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`, `invalid_user_id` or `invalid_event`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_event",
+                    "message": "The event is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_publishable_key`: the key is missing or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_publishable_key",
+                    "message": "The publishable key is missing or not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "rate_limited",
+                    "message": "Too many requests. Try again shortly.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals/milestones/": {
+      "post": {
+        "operationId": "reportReferralMilestoneFromServer",
+        "summary": "Report Milestone From Server",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "Tells ZeroSettle that a referred person reached a milestone, from your server. Use it for milestones your servers can vouch for, and for every milestone when the campaign is set to server-reported milestones only. Authenticated with your **secret key** (`zs_sk_*`). Never call it from an app.\n\nThe key decides whether the milestone counts in Live or Sandbox.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A unique key for this request, 1 to 128 characters. Repeat it only when retrying the same call: the stored result is returned, and a different body under the same key is refused.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "key"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "description": "The person's id in your app, the one you pass to `identify`."
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "The milestone's key, as set in the campaign."
+                  },
+                  "occurred_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true,
+                    "description": "When it happened, with a time zone. Defaults to now."
+                  },
+                  "attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Short text values kept with the milestone, each up to 200 characters."
+                  }
+                }
+              },
+              "example": {
+                "user_id": "user_ben",
+                "key": "first_walk"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether it was counted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneResponse"
+                },
+                "examples": {
+                  "recorded": {
+                    "value": {
+                      "reason": null,
+                      "recorded": true,
+                      "referral": {
+                        "id": "ref_201",
+                        "qualified_at": "2026-11-05T12:00:00Z",
+                        "state": "qualified"
+                      }
+                    }
+                  },
+                  "not_referred": {
+                    "value": {
+                      "reason": "not_referred",
+                      "recorded": false,
+                      "referral": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`user_id_required`, `invalid_user_id`, `invalid_attributes`, `invalid_milestone_key`, `invalid_occurred_at`, `idempotency_key_required` or `invalid_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_milestone_key",
+                    "message": "The milestone key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`customer_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "customer_not_found",
+                    "message": "No customer has this id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`milestone_payment_only`, `unknown_milestone`, `idempotency_key_reused` or `request_in_progress`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "unknown_milestone",
+                    "message": "The campaign has no such milestone.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals/people/{user_id}/": {
+      "get": {
+        "operationId": "getReferralPerson",
+        "summary": "Get Person Referrals",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "A person's referral status as your server sees it: the same shape as [Get Referral Status](/api-reference/endpoint/referrals-get-me), with every party's real user id. A guest's `zs_anon_` id is returned here, so never pass one from your server to another person's app.\n\nAuthenticated with your **secret key** (`zs_sk_*`).",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "description": "The person's id in your app. An id merged into another person resolves to the person who kept it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The person's status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                },
+                "example": {
+                  "campaign": {
+                    "key": "friends",
+                    "referee_reward_text": "A free week of Plus",
+                    "referrer_reward_text": "30 days of Plus",
+                    "threshold": 3
+                  },
+                  "code": "K7M2-QX9P",
+                  "eligibility": {
+                    "reason": null,
+                    "status": "eligible"
+                  },
+                  "progress": {
+                    "current": 1,
+                    "needed": 3,
+                    "round": 2
+                  },
+                  "referrals": [
+                    {
+                      "accepted_at": "2026-11-01T12:00:00Z",
+                      "id": "ref_191",
+                      "qualified_at": "2026-11-02T12:00:00Z",
+                      "qualify_by": "2026-11-15T12:00:00Z",
+                      "referee_attributes": {},
+                      "referee_user_id": "user_dee",
+                      "reward_id": "rwd_101",
+                      "round": 1,
+                      "slot_state": "counted",
+                      "state": "qualified"
+                    },
+                    {
+                      "accepted_at": "2026-11-01T12:00:00Z",
+                      "id": "ref_192",
+                      "qualified_at": "2026-11-03T08:00:00Z",
+                      "qualify_by": "2026-11-15T12:00:00Z",
+                      "referee_attributes": {},
+                      "referee_user_id": "user_eli",
+                      "reward_id": "rwd_101",
+                      "round": 1,
+                      "slot_state": "counted",
+                      "state": "qualified"
+                    },
+                    {
+                      "accepted_at": "2026-11-01T12:00:00Z",
+                      "id": "ref_201",
+                      "qualified_at": "2026-11-03T09:00:00Z",
+                      "qualify_by": "2026-11-15T12:00:00Z",
+                      "referee_attributes": {
+                        "dog_name": "Biscuit"
+                      },
+                      "referee_user_id": "user_ben",
+                      "reward_id": "rwd_101",
+                      "round": 1,
+                      "slot_state": "counted",
+                      "state": "qualified"
+                    },
+                    {
+                      "accepted_at": "2026-11-04T12:00:00Z",
+                      "id": "ref_202",
+                      "qualified_at": "2026-11-06T12:00:00Z",
+                      "qualify_by": "2026-11-18T12:00:00Z",
+                      "referee_attributes": {
+                        "account_id": "acc_44"
+                      },
+                      "referee_user_id": null,
+                      "reward_id": null,
+                      "round": 2,
+                      "slot_state": "filled",
+                      "state": "qualified"
+                    },
+                    {
+                      "accepted_at": "2026-11-07T12:00:00Z",
+                      "id": "ref_203",
+                      "qualified_at": null,
+                      "qualify_by": "2026-11-21T12:00:00Z",
+                      "referee_attributes": {},
+                      "referee_user_id": "user_cy",
+                      "reward_id": null,
+                      "round": 2,
+                      "slot_state": "pending",
+                      "state": "accepted"
+                    }
+                  ],
+                  "referred_by": null,
+                  "rewards": [
+                    {
+                      "amount": null,
+                      "capped_reason": null,
+                      "claim_by": null,
+                      "claimed_at": null,
+                      "currency_key": null,
+                      "days": 30,
+                      "delivery": "grant",
+                      "earned_at": "2026-11-03T12:00:00Z",
+                      "ends_at": "2026-12-03T12:00:00Z",
+                      "failure": null,
+                      "id": "rwd_101",
+                      "kind": "access",
+                      "offer_starts_at": null,
+                      "product_id": "plus_monthly",
+                      "remind_at": "2026-11-30T12:00:00Z",
+                      "revoke_reason": null,
+                      "revoked_at": null,
+                      "role": "referrer",
+                      "round": 1,
+                      "starts_at": "2026-11-03T12:00:00Z",
+                      "status": "delivered",
+                      "text": "30 days of Plus",
+                      "waiting_reason": null
+                    }
+                  ],
+                  "url": "https://pawprints.example/j/K7M2QX9P"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`customer_not_found`: no customer has this id in this environment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "customer_not_found",
+                    "message": "No customer has this id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use GET.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals/people/{user_id}/code/": {
+      "get": {
+        "operationId": "getReferralPersonCode",
+        "summary": "Get Person Code",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "Returns a person's invite code. While a campaign is accepting invites, a person with no code gets one and a person your app has not told ZeroSettle about is created. When no campaign is running, the body has `user_id` set and every other field `null` for someone with no code.\n\nAuthenticated with your **secret key** (`zs_sk_*`).",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "description": "The person's id in your app. An id merged into another person resolves to the person who kept it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerCode"
+                },
+                "examples": {
+                  "code": {
+                    "value": {
+                      "avatar_url": "https://cdn.pawprints.example/ana.png",
+                      "code": "K7M2-QX9P",
+                      "created_at": "2026-11-01T12:00:00Z",
+                      "display_name": "Ana",
+                      "origin": "issued",
+                      "status": "active",
+                      "url": "https://pawprints.example/j/K7M2QX9P",
+                      "user_id": "user_ana"
+                    }
+                  },
+                  "none": {
+                    "value": {
+                      "avatar_url": null,
+                      "code": null,
+                      "created_at": null,
+                      "display_name": null,
+                      "origin": null,
+                      "status": null,
+                      "url": null,
+                      "user_id": "user_ana"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: the id is longer than the limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_request",
+                    "message": "The request is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`customer_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "customer_not_found",
+                    "message": "No customer has this id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`try_again`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "try_again",
+                    "message": "Something changed while this was processed. Try again.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use GET or PUT.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setReferralPersonCode",
+        "summary": "Set Person Code",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "Gives a person a code of your choosing, such as their username, in place of the one ZeroSettle made. The person is created if ZeroSettle has not seen them. The code must be 4 to 32 letters, digits or hyphens, and unique in the project and environment.\n\nAuthenticated with your **secret key** (`zs_sk_*`).",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "description": "The person's id in your app. An id merged into another person resolves to the person who kept it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "4 to 32 letters, digits or hyphens."
+                  }
+                }
+              },
+              "example": {
+                "code": "ANA-WALKS"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerCode"
+                },
+                "example": {
+                  "avatar_url": "https://cdn.pawprints.example/ana.png",
+                  "code": "K7M2-QX9P",
+                  "created_at": "2026-11-01T12:00:00Z",
+                  "display_name": "Ana",
+                  "origin": "issued",
+                  "status": "active",
+                  "url": "https://pawprints.example/j/K7M2QX9P",
+                  "user_id": "user_ana"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request` or `invalid_code_format`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_code_format",
+                    "message": "The invite code must be 4 to 32 letters, digits or hyphens.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`customer_not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "customer_not_found",
+                    "message": "No customer has this id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`code_taken`: another person has this code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "code_taken",
+                    "message": "That invite code is already taken.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`try_again`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "try_again",
+                    "message": "Something changed while this was processed. Try again.",
+                    "retryable": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use GET or PUT.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals/referrals/{referral_id}/revoke/": {
+      "post": {
+        "operationId": "revokeReferral",
+        "summary": "Revoke Referral",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "Cancels a referral. A referral that has not paid out stops counting. A referral that already earned a reward takes the reward back: the granted access ends, or the credits left are removed. Revoking a referral that is already revoked changes nothing and returns it.\n\nA revoke sends `referral.revoked`, and `referral_reward.revoked` for each reward taken back.\n\nAuthenticated with your **secret key** (`zs_sk_*`).",
+        "parameters": [
+          {
+            "name": "referral_id",
+            "in": "path",
+            "required": true,
+            "description": "The referral id, such as `ref_201`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A unique key for this request, 1 to 128 characters. Repeat it only when retrying the same call: the stored result is returned, and a different body under the same key is refused.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "fraud",
+                      "self_referral",
+                      "same_payer",
+                      "device_reused",
+                      "refunded",
+                      "merged_existing_user",
+                      "other"
+                    ],
+                    "description": "Why. `other` needs a `note`."
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Your note, kept with the record. Required when `reason` is `other`."
+                  }
+                }
+              },
+              "example": {
+                "reason": "fraud",
+                "note": "Same device as the referrer."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The referral, now revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralRevokeResponse"
+                },
+                "example": {
+                  "referral": {
+                    "accepted_at": "2026-11-03T12:00:00Z",
+                    "campaign_key": "friends",
+                    "campaign_version": 1,
+                    "client": {
+                      "platform": "ios",
+                      "sdk_version": "1.9.0"
+                    },
+                    "code": "K7M2-QX9P",
+                    "counts_for_referrer": false,
+                    "device_counted": true,
+                    "held_reason": null,
+                    "id": "ref_205",
+                    "milestones": [
+                      {
+                        "key": "first_walk",
+                        "occurred_at": "2026-11-04T12:00:00Z",
+                        "reported_via": "app"
+                      }
+                    ],
+                    "qualified_at": null,
+                    "qualify_by": "2026-11-17T12:00:00Z",
+                    "referee_attributes": {
+                      "dog_name": "Biscuit"
+                    },
+                    "referee_customer_id": 1002,
+                    "referee_user_id": "user_ben",
+                    "referrer_customer_id": 1001,
+                    "referrer_user_id": "user_ana",
+                    "revoke_note": "Refunded outside the app",
+                    "revoke_reason": "other",
+                    "revoked_at": "2026-11-10T12:00:00Z",
+                    "reward_ids": [],
+                    "state": "revoked"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`, `note_required` or `idempotency_key_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "note_required",
+                    "message": "A note is required when the reason is other.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: no referral has this id in this project and environment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "not_found",
+                    "message": "No referral or reward has this id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`idempotency_key_reused` or `request_in_progress`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "idempotency_key_reused",
+                    "message": "This idempotency key was used with a different request.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals/rewards/{reward_id}/revoke/": {
+      "post": {
+        "operationId": "revokeReferralReward",
+        "summary": "Revoke Reward",
+        "tags": [
+          "Referrals"
+        ],
+        "security": [
+          {
+            "SecretKeyAuth": []
+          }
+        ],
+        "description": "Takes one reward back. The granted access ends, or the credits left are removed. Revoking a reward that is already revoked changes nothing and returns it. The referral itself is not changed.\n\nA revoke sends `referral_reward.revoked`.\n\nAuthenticated with your **secret key** (`zs_sk_*`).",
+        "parameters": [
+          {
+            "name": "reward_id",
+            "in": "path",
+            "required": true,
+            "description": "The reward id, such as `rwd_101`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "A unique key for this request, 1 to 128 characters. Repeat it only when retrying the same call: the stored result is returned, and a different body under the same key is refused.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "fraud",
+                      "self_referral",
+                      "same_payer",
+                      "device_reused",
+                      "refunded",
+                      "merged_existing_user",
+                      "other"
+                    ],
+                    "description": "Why. `other` needs a `note`."
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Your note, kept with the record. Required when `reason` is `other`."
+                  }
+                }
+              },
+              "example": {
+                "reason": "fraud",
+                "note": "Same device as the referrer."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reward, now revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RewardRevokeResponse"
+                },
+                "example": {
+                  "reward": {
+                    "amount": null,
+                    "capped_reason": null,
+                    "claim_by": null,
+                    "claimed_at": null,
+                    "currency_key": null,
+                    "days": 30,
+                    "delivery": "grant",
+                    "earned_at": "2026-11-03T12:00:00Z",
+                    "ends_at": "2026-12-03T12:00:00Z",
+                    "failure": null,
+                    "id": "rwd_108",
+                    "kind": "access",
+                    "offer_starts_at": null,
+                    "product_id": "plus_monthly",
+                    "remind_at": "2026-11-30T12:00:00Z",
+                    "revoke_reason": "fraud",
+                    "revoked_at": "2026-11-10T12:00:00Z",
+                    "role": "referrer",
+                    "round": 1,
+                    "starts_at": "2026-11-03T12:00:00Z",
+                    "status": "revoked",
+                    "text": "30 days of Plus",
+                    "waiting_reason": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`, `note_required` or `idempotency_key_required`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "note_required",
+                    "message": "A note is required when the reason is other.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`secret_key_required`: no key, a publishable key, or a key that is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "secret_key_required",
+                    "message": "That secret key is not valid.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "not_found",
+                    "message": "No referral or reward has this id.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`idempotency_key_reused` or `request_in_progress`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "idempotency_key_reused",
+                    "message": "This idempotency key was used with a different request.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "`method_not_allowed`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralError"
+                },
+                "example": {
+                  "error": {
+                    "code": "method_not_allowed",
+                    "message": "Use POST.",
+                    "retryable": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6088,6 +8589,928 @@
             }
           }
         }
+      },
+      "Reward": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The number of units, for `credits`."
+          },
+          "capped_reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why a `capped` reward was not given: `person_limit`, `campaign_budget` or `already_unlocked`. New values can be added."
+          },
+          "claim_by": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "For a reward the person has to claim, the last moment to do it."
+          },
+          "claimed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the person claimed it."
+          },
+          "currency_key": {
+            "type": "string",
+            "nullable": true,
+            "description": "The currency, for `credits`."
+          },
+          "days": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The number of days, for `access`."
+          },
+          "delivery": {
+            "type": "string",
+            "nullable": true,
+            "description": "How it reached the person: `grant`, `unlock` or `credits` today. `null` until it is delivered. Other values are reserved. Treat any value you do not know as not delivered yet."
+          },
+          "earned_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the reward was earned."
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "For a delivered `access` reward, when the access ends. `null` for an unlock."
+          },
+          "failure": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RewardFailure"
+              }
+            ],
+            "description": "Set only while `status` is `failed`. `next_attempt_at` is `null` when retries have stopped."
+          },
+          "id": {
+            "type": "string",
+            "description": "The reward id, such as `rwd_101`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "What the reward gives: `access` (free days on a product), `unlock` (a product unlocked for good) or `credits` (units of a currency). New values can be added."
+          },
+          "offer_starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Reserved for rewards that start with a store offer."
+          },
+          "product_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The product the reward is on, for `access` and `unlock`."
+          },
+          "remind_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When you may remind the person that the access is ending. It is the end minus the campaign's ending-soon days."
+          },
+          "revoke_reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why it was revoked."
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the reward was revoked."
+          },
+          "role": {
+            "type": "string",
+            "description": "Who the reward is for: `referrer` or `referee`. New values can be added."
+          },
+          "round": {
+            "type": "integer",
+            "nullable": true,
+            "description": "For a referrer reward, which round of the ladder it came from."
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "For a delivered `access` reward, when the access starts. Read from the access grant, so it moves if an earlier grant is revoked."
+          },
+          "status": {
+            "type": "string",
+            "description": "Where the reward is: `earned`, `delivered`, `claimable`, `claimed`, `claim_expired`, `capped`, `failed` or `revoked`. New values can be added."
+          },
+          "text": {
+            "type": "string",
+            "description": "The reward in words, such as `30 days of Plus`, written when it was earned. Safe to show."
+          },
+          "waiting_reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "`subscriber_delivery_pending` when the person already pays and the reward is saved until it can be given. Otherwise `null`. New values can be added."
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "kind",
+          "delivery",
+          "status",
+          "text",
+          "product_id",
+          "currency_key",
+          "amount",
+          "days",
+          "round",
+          "earned_at",
+          "starts_at",
+          "ends_at",
+          "remind_at",
+          "claim_by",
+          "offer_starts_at",
+          "claimed_at",
+          "waiting_reason",
+          "capped_reason",
+          "revoked_at",
+          "revoke_reason",
+          "failure"
+        ],
+        "description": "One referral reward, for the person who invited or the person who was invited. Every value set here is open: new values can be added, so treat one you do not know as unknown."
+      },
+      "RewardFailure": {
+        "type": "object",
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "next_attempt_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "code",
+          "attempts",
+          "next_attempt_at"
+        ]
+      },
+      "CampaignSummary": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The campaign's key."
+          },
+          "referee_reward_text": {
+            "type": "string",
+            "nullable": true,
+            "description": "The new person's reward in words, or `null` when the campaign gives them none."
+          },
+          "referrer_reward_text": {
+            "type": "string",
+            "description": "The referrer's reward in words."
+          },
+          "threshold": {
+            "type": "integer",
+            "description": "How many referrals the current round needs."
+          }
+        },
+        "required": [
+          "key",
+          "threshold",
+          "referrer_reward_text",
+          "referee_reward_text"
+        ]
+      },
+      "Inviter": {
+        "type": "object",
+        "properties": {
+          "avatar_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "The picture the inviter chose to show, or `null`."
+          },
+          "display_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The name the inviter chose to show, or `null`."
+          }
+        },
+        "required": [
+          "display_name",
+          "avatar_url"
+        ]
+      },
+      "SdkCode": {
+        "type": "object",
+        "properties": {
+          "avatar_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "The picture set with the profile route, or `null`."
+          },
+          "campaign": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CampaignSummary"
+              }
+            ],
+            "description": "The campaign now accepting invites, or `null` when there is none."
+          },
+          "code": {
+            "type": "string",
+            "nullable": true,
+            "description": "The code in the form to show, such as `K7M2-QX9P`. `null` when the person has no code."
+          },
+          "display_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The name set with the profile route, or `null`."
+          },
+          "status": {
+            "type": "string",
+            "nullable": true,
+            "description": "`active` while the code works. New values can be added."
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "The invite link for the code. `null` when the person has no code."
+          }
+        },
+        "required": [
+          "code",
+          "url",
+          "status",
+          "display_name",
+          "avatar_url",
+          "campaign"
+        ],
+        "description": "A person's invite code. Every field is `null` when the person has no code."
+      },
+      "CodePreview": {
+        "type": "object",
+        "properties": {
+          "campaign": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CodePreviewCampaign"
+              }
+            ],
+            "description": "What the new person would get. `null` when the code is not valid."
+          },
+          "inviter": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Inviter"
+              }
+            ],
+            "description": "The inviter's name and picture, when they set a profile. `null` otherwise. No ids are returned."
+          },
+          "refusal": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why a code cannot be accepted: `invalid_code`, `code_reset` or `campaign_ended`. `null` when it is valid. New values can be added."
+          },
+          "valid": {
+            "type": "boolean",
+            "description": "True when the code can be accepted now."
+          }
+        },
+        "required": [
+          "valid",
+          "refusal",
+          "campaign",
+          "inviter"
+        ],
+        "description": "What a code is worth, shown before the new person accepts it."
+      },
+      "CodePreviewCampaign": {
+        "type": "object",
+        "properties": {
+          "referee_reward_text": {
+            "type": "string",
+            "nullable": true,
+            "description": "What the new person gets, in words, or `null` for none."
+          },
+          "terms_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "Your terms page for the campaign, or `null`."
+          }
+        },
+        "required": [
+          "referee_reward_text",
+          "terms_url"
+        ]
+      },
+      "ReferredBy": {
+        "type": "object",
+        "properties": {
+          "accepted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the code was accepted."
+          },
+          "code": {
+            "type": "string",
+            "description": "The code that was used."
+          },
+          "id": {
+            "type": "string",
+            "description": "The referral id, such as `ref_201`."
+          },
+          "inviter": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Inviter"
+              }
+            ]
+          },
+          "qualified_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When they finished them. `null` until then."
+          },
+          "qualify_by": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The last moment the person can finish the campaign's milestones."
+          },
+          "referee_reward_text": {
+            "type": "string",
+            "nullable": true,
+            "description": "Their reward in words, or `null` for none."
+          },
+          "state": {
+            "type": "string",
+            "description": "`accepted`, `qualified`, `expired` or `revoked`. A referral held for your review shows as `accepted`. New values can be added."
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "state",
+          "accepted_at",
+          "qualify_by",
+          "qualified_at",
+          "inviter",
+          "referee_reward_text"
+        ],
+        "description": "The new person's own referral."
+      },
+      "AcceptResponse": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "boolean",
+            "description": "False when this person had already accepted the same code and nothing changed."
+          },
+          "referral": {
+            "$ref": "#/components/schemas/ReferredBy"
+          }
+        },
+        "required": [
+          "referral",
+          "created"
+        ]
+      },
+      "MilestoneResponse": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "When `recorded` is false: `not_referred`, `referral_closed`, `duplicate` or `before_acceptance`. New values can be added."
+          },
+          "recorded": {
+            "type": "boolean",
+            "description": "True when the milestone was counted."
+          },
+          "referral": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MilestoneReferral"
+              }
+            ],
+            "description": "The person's referral, when they have one."
+          }
+        },
+        "required": [
+          "recorded",
+          "reason",
+          "referral"
+        ]
+      },
+      "MilestoneReferral": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The referral id."
+          },
+          "qualified_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the referral qualified, or `null`."
+          },
+          "state": {
+            "type": "string",
+            "description": "`accepted`, `qualified`, `expired` or `revoked`. New values can be added."
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "qualified_at"
+        ]
+      },
+      "ReferrerReferral": {
+        "type": "object",
+        "properties": {
+          "accepted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the code was accepted."
+          },
+          "id": {
+            "type": "string",
+            "description": "The referral id."
+          },
+          "qualified_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When it qualified, or `null`."
+          },
+          "qualify_by": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The last moment to finish the milestones."
+          },
+          "referee_attributes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The short text values your app sent when the code was accepted."
+          },
+          "referee_user_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The new person's user id. `null` on the app route when their id is an SDK guest id, which an app never sees. The server route returns the real id."
+          },
+          "reward_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The reward this referral helped earn, or `null`."
+          },
+          "round": {
+            "type": "integer",
+            "description": "The round of the ladder this referral counts toward."
+          },
+          "slot_state": {
+            "type": "string",
+            "description": "`pending`, `filled` or `counted`. New values can be added."
+          },
+          "state": {
+            "type": "string",
+            "description": "`accepted` or `qualified`. Revoked and expired referrals are left out. New values can be added."
+          }
+        },
+        "required": [
+          "id",
+          "round",
+          "referee_user_id",
+          "referee_attributes",
+          "state",
+          "slot_state",
+          "accepted_at",
+          "qualify_by",
+          "qualified_at",
+          "reward_id"
+        ]
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "campaign": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CampaignSummary"
+              }
+            ],
+            "description": "The campaign now accepting invites, or `null`."
+          },
+          "code": {
+            "type": "string",
+            "nullable": true,
+            "description": "The person's code, or `null`."
+          },
+          "eligibility": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "type": "string",
+                "nullable": true
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "reason"
+            ],
+            "description": "Whether the person can invite now. `status` is `eligible` or `ineligible`. `reason` is `null` when eligible, and one of `no_campaign`, `campaign_ended`, `campaign_not_started`, `referrer_ineligible`, `subscriber_delivery_pending` or `capped` when not. New values can be added."
+          },
+          "progress": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Progress"
+              }
+            ],
+            "description": "Where the person is on the ladder. `null` when no campaign is accepting invites or the ladder has ended."
+          },
+          "referrals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReferrerReferral"
+            },
+            "description": "The person's counting referrals, newest first."
+          },
+          "referred_by": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReferredBy"
+              }
+            ],
+            "description": "The referral that brought this person in, or `null`."
+          },
+          "rewards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reward"
+            },
+            "description": "Every reward the person has earned, as referrer or as new person, newest first. Up to 200."
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "The person's invite link, or `null`."
+          }
+        },
+        "required": [
+          "code",
+          "url",
+          "campaign",
+          "eligibility",
+          "progress",
+          "referrals",
+          "referred_by",
+          "rewards"
+        ],
+        "description": "A person's referral status. The app route and the server route share this shape. The server route returns every party's real user id."
+      },
+      "Progress": {
+        "type": "object",
+        "properties": {
+          "current": {
+            "type": "integer",
+            "description": "Referrals counted in this round."
+          },
+          "needed": {
+            "type": "integer",
+            "description": "Referrals this round needs."
+          },
+          "round": {
+            "type": "integer",
+            "description": "The current round, starting at 1."
+          }
+        },
+        "required": [
+          "round",
+          "current",
+          "needed"
+        ]
+      },
+      "EventsResponse": {
+        "type": "object",
+        "properties": {
+          "recorded": {
+            "type": "boolean",
+            "description": "True when the event was stored."
+          }
+        },
+        "required": [
+          "recorded"
+        ]
+      },
+      "ServerCode": {
+        "type": "object",
+        "properties": {
+          "avatar_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "The picture set with the profile route, or `null`."
+          },
+          "code": {
+            "type": "string",
+            "nullable": true,
+            "description": "The code to show, or `null` when the person has none."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the code was made."
+          },
+          "display_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "The name set with the profile route, or `null`."
+          },
+          "origin": {
+            "type": "string",
+            "nullable": true,
+            "description": "`issued` for a code ZeroSettle made, `developer` for one you set. New values can be added."
+          },
+          "status": {
+            "type": "string",
+            "nullable": true,
+            "description": "`active` while the code works. New values can be added."
+          },
+          "url": {
+            "type": "string",
+            "nullable": true,
+            "description": "The invite link, or `null`."
+          },
+          "user_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The person's user id."
+          }
+        },
+        "required": [
+          "user_id",
+          "code",
+          "url",
+          "status",
+          "origin",
+          "display_name",
+          "avatar_url",
+          "created_at"
+        ],
+        "description": "A person's invite code as your server sees it."
+      },
+      "ServerReferral": {
+        "type": "object",
+        "properties": {
+          "accepted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the code was accepted."
+          },
+          "campaign_key": {
+            "type": "string",
+            "description": "The campaign's key."
+          },
+          "campaign_version": {
+            "type": "integer",
+            "description": "The version of the campaign's rules that applied when the code was accepted."
+          },
+          "client": {
+            "description": "The platform and SDK version the code was accepted from, when known.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ServerClient"
+              }
+            ]
+          },
+          "code": {
+            "type": "string",
+            "description": "The code that was used."
+          },
+          "counts_for_referrer": {
+            "type": "boolean",
+            "description": "False when the referral does not count toward the referrer's reward, for example while it is held."
+          },
+          "device_counted": {
+            "type": "boolean",
+            "description": "True when the new person's device is recorded against this campaign."
+          },
+          "held_reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "Why a referral is held. `burst` today: one code was used unusually often in an hour. `null` otherwise. New values can be added."
+          },
+          "id": {
+            "type": "string",
+            "description": "The referral id, such as `ref_201`."
+          },
+          "milestones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServerMilestone"
+            },
+            "description": "The milestones reported so far. `reported_via` is `app`, `server` or `payment`."
+          },
+          "qualified_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When it qualified, or `null`."
+          },
+          "qualify_by": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The last moment to finish the milestones."
+          },
+          "referee_attributes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The short text values your app sent when the code was accepted."
+          },
+          "referee_customer_id": {
+            "type": "integer",
+            "description": "ZeroSettle's number for the new person. See [customer ids](/iap/referrals#customer-ids)."
+          },
+          "referee_user_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The new person's user id, or `null` for a person with no user id. A guest id (`zs_anon_...`) is returned as it is."
+          },
+          "referrer_customer_id": {
+            "type": "integer",
+            "description": "ZeroSettle's number for the referrer. See [customer ids](/iap/referrals#customer-ids)."
+          },
+          "referrer_user_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The referrer's user id, or `null` for a person with no user id."
+          },
+          "revoke_note": {
+            "type": "string",
+            "description": "The note given with the revoke, or an empty string."
+          },
+          "revoke_reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "`fraud`, `self_referral`, `same_payer`, `device_reused`, `refunded`, `merged_existing_user` or `other`. `null` unless revoked. New values can be added."
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When it was revoked, or `null`."
+          },
+          "reward_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The rewards this referral helped earn."
+          },
+          "state": {
+            "type": "string",
+            "description": "`accepted`, `held`, `qualified`, `expired` or `revoked`. New values can be added."
+          }
+        },
+        "required": [
+          "id",
+          "campaign_key",
+          "campaign_version",
+          "code",
+          "referrer_user_id",
+          "referrer_customer_id",
+          "referee_user_id",
+          "referee_customer_id",
+          "referee_attributes",
+          "state",
+          "held_reason",
+          "counts_for_referrer",
+          "accepted_at",
+          "qualify_by",
+          "qualified_at",
+          "revoked_at",
+          "revoke_reason",
+          "revoke_note",
+          "device_counted",
+          "client",
+          "milestones",
+          "reward_ids"
+        ],
+        "description": "A referral as your server sees it. Carries real user ids, guest ids included, and ZeroSettle's number for each party."
+      },
+      "ServerMilestone": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reported_via": {
+            "type": "string",
+            "description": "`app`, `server` or `payment`. New values can be added."
+          }
+        },
+        "required": [
+          "key",
+          "occurred_at",
+          "reported_via"
+        ]
+      },
+      "ServerClient": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "nullable": true
+          },
+          "sdk_version": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "platform",
+          "sdk_version"
+        ]
+      },
+      "ReferralRevokeResponse": {
+        "type": "object",
+        "properties": {
+          "referral": {
+            "$ref": "#/components/schemas/ServerReferral"
+          }
+        },
+        "required": [
+          "referral"
+        ]
+      },
+      "RewardRevokeResponse": {
+        "type": "object",
+        "properties": {
+          "reward": {
+            "$ref": "#/components/schemas/Reward"
+          }
+        },
+        "required": [
+          "reward"
+        ]
+      },
+      "ReferralError": {
+        "type": "object",
+        "description": "The error shape of the referral endpoints.",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean",
+                "description": "True when the same request can be sent again later and may succeed."
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
       }
     },
     "responses": {

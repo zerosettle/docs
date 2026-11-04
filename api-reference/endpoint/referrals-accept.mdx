@@ -1,0 +1,61 @@
+---
+title: 'Accept Invite'
+openapi: 'POST /iap/referrals/accept/'
+---
+
+Records that a new person used an invite code. Call it once, the first time the person opens your app from an invite.
+
+## Request
+
+| Field | Notes |
+|---|---|
+| `user_id` | Required. The new person's id |
+| `code` | Required. The code the link carried |
+| `device_check_token` | A base64 DeviceCheck token, when the campaign uses the device check |
+| `attributes` | Up to 10 short text values, each up to 200 characters. Your server can match the person to its own records with them |
+
+Send an `Idempotency-Key` if you like. It is not needed: accepting is safe to repeat by its nature.
+
+## What you get back
+
+`referral` is the person's own referral, with its `state`, `qualify_by` and the reward they will get. `created` is `false` when this person had already accepted the same code and nothing changed.
+
+A person can only be referred once. Each person can try 20 times an hour.
+
+## Refusals
+
+A refusal is a 409 with `retryable: false`. Show the person a plain line and carry on.
+
+| Code | Meaning |
+|---|---|
+| `invalid_code` | No such code |
+| `code_reset` | The inviter replaced it |
+| `campaign_ended` | The campaign is no longer running |
+| `self_referral` | The code is the person's own |
+| `already_referred` | The person has already used a code |
+| `not_new_user` | Invites are for new users only, and this person is not new |
+| `referrer_ineligible` | The inviter cannot invite right now |
+| `device_already_counted` | This device has already been counted |
+| `device_check_required` | The campaign needs a device check and none was sent |
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+Treat `retryable` as the rule for whether to try again. Codes can be added, so handle one you do not know by its status.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required`, `invalid_user_id`, `invalid_request`, `invalid_attributes`, `invalid_device_check_token` | The request is not valid |
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+| 409 | the refusals above | |
+| 429 | `rate_limited` | Wait for `Retry-After` seconds |
+| 503 | `device_check_unavailable`, `try_again` | Retry; `retryable` is `true` |
+
+Accepting sends the `referral.accepted` webhook. See [Event Webhooks](/iap/event-webhooks#referral-events).
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

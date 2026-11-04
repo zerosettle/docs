@@ -1,0 +1,37 @@
+---
+title: 'Preview Invite Code'
+openapi: 'GET /iap/referrals/codes/{code}/'
+---
+
+Says whether a code can be accepted and what the new person would get. Show it before they commit, with the inviter's name and picture when they set a profile.
+
+## Request
+
+Send your publishable key and the code in the path. There is no `user_id`: your app may preview a code before it knows who the person is. This call never creates a person and returns no ids.
+
+## What you get back
+
+A code that cannot be accepted is still a 200.
+
+| Field | Notes |
+|---|---|
+| `valid` | `true` when the code can be accepted now |
+| `refusal` | Why not: `invalid_code`, `code_reset` or `campaign_ended`. `null` when valid |
+| `campaign` | `referee_reward_text` (what the new person gets) and `terms_url`. `null` when not valid |
+| `inviter` | `display_name` and `avatar_url`. `null` when the inviter set no profile |
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+Treat `retryable` as the rule for whether to try again. Codes can be added, so handle one you do not know by its status.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

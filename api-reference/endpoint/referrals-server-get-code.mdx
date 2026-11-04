@@ -1,0 +1,33 @@
+---
+title: 'Get Person Code'
+openapi: 'GET /referrals/people/{user_id}/code/'
+---
+
+Returns a person's invite code, from your server. Use it to show a code in your own web account page or to put it in an email.
+
+## Request
+
+Send your secret key and the person's `user_id` in the path.
+
+## What you get back
+
+`user_id`, `code`, `url`, `origin` and the profile. `origin` is `issued` for a code ZeroSettle made and `developer` for one you set with [Set Person Code](/api-reference/endpoint/referrals-server-set-code).
+
+While a campaign is accepting invites, a person with no code gets one, and a person ZeroSettle has not seen is created. When none is running, `user_id` is set and every other field is `null` for a person with no code.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "not_found", "message": "No referral or reward has this id.", "retryable": false } }
+```
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `invalid_request` | The id is too long |
+| 401 | `secret_key_required` | No key, a publishable key, or a key that is not valid |
+| 404 | `customer_not_found` | The id is reserved for dashboard stand-ins |
+| 503 | `try_again` | Retry; `retryable` is `true` |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

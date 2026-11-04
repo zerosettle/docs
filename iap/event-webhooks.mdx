@@ -93,6 +93,26 @@ sync, trigger emails, or notify your team, without polling our API.
 
     See [Access grant events](#access-grant-events).
   </Accordion>
+
+  <Accordion title="Referrals">
+    | Event | When it fires |
+    |---|---|
+    | `referral.accepted` | A new person used an invite code |
+    | `referral.qualified` | The new person reached every milestone the campaign asks for |
+    | `referral.held` | The referral is waiting for your review, because one code was used unusually often |
+    | `referral.revoked` | A referral was revoked, by you, by the dashboard or by an abuse check |
+    | `referral.expired` | The new person's time ran out before they reached every milestone |
+    | `referral_reward.earned` | A person earned a referral reward |
+    | `referral_reward.delivered` | The reward was given: access granted, a product unlocked or credits added |
+    | `referral_reward.claimable` | A reward is ready for the person to claim |
+    | `referral_reward.claimed` | The person claimed it |
+    | `referral_reward.ending_soon` | Reward access ends within the campaign's ending-soon days. Sent once |
+    | `referral_reward.ended` | Reward access ran out |
+    | `referral_reward.revoked` | A reward was taken back |
+    | `referral_code.reset` | An active invite code was replaced |
+
+    See [Referral events](#referral-events).
+  </Accordion>
 </AccordionGroup>
 
 <Note>
@@ -380,6 +400,167 @@ The `access_grant.*` events tell you when free access starts, is queued, is abou
 `ending_soon` and `ended` are sent by a job that runs every 15 minutes, so they can arrive a little after the time they describe. Access itself ends on time and does not wait for the event. `access_grant.ended` is sent only when access to the product actually stopped, not when another grant continues it or a new grant started. Revoking a grant that has already ended sends no webhook. Events are delivered at least once, so deduplicate on `id`.
 
 These events say nothing about paid purchases. A customer whose granted access ended can still have access through a subscription, so check [`access`](/api-reference/endpoint/get-entitlements#access) before you lock anything.
+
+### Referral events
+
+The `referral.*`, `referral_reward.*` and `referral_code.reset` events share the usual envelope (`id`, `type`, `created`, `environment`, `project_id`, `data`). They go to your signed endpoints and carry real user ids, including guest ids that start `zs_anon_`.
+
+<Note>
+  `claimable` and `claimed` are in the list now, but ZeroSettle does not send them yet.
+</Note>
+
+**`referral.*`**: `data.referral` is the same object the [server routes](/api-reference/endpoint/referrals-server-revoke-referral) return.
+
+```json
+{
+  "created": "2026-11-05T12:00:00Z",
+  "data": {
+    "referral": {
+      "accepted_at": "2026-11-03T12:00:00Z",
+      "campaign_key": "friends",
+      "campaign_version": 1,
+      "client": {
+        "platform": "ios",
+        "sdk_version": "1.9.0"
+      },
+      "code": "K7M2-QX9P",
+      "counts_for_referrer": true,
+      "device_counted": true,
+      "held_reason": null,
+      "id": "ref_201",
+      "milestones": [
+        {
+          "key": "first_walk",
+          "occurred_at": "2026-11-04T12:00:00Z",
+          "reported_via": "app"
+        }
+      ],
+      "qualified_at": "2026-11-05T12:00:00Z",
+      "qualify_by": "2026-11-17T12:00:00Z",
+      "referee_attributes": {
+        "dog_name": "Biscuit"
+      },
+      "referee_customer_id": 1002,
+      "referee_user_id": "user_ben",
+      "referrer_customer_id": 1001,
+      "referrer_user_id": "user_ana",
+      "revoke_note": "",
+      "revoke_reason": null,
+      "revoked_at": null,
+      "reward_ids": [
+        "rwd_107"
+      ],
+      "state": "qualified"
+    }
+  },
+  "environment": "live",
+  "id": "evt_referral_201_qualified",
+  "project_id": 42,
+  "type": "referral.qualified"
+}
+```
+
+| Field | Notes |
+|---|---|
+| `id` | `evt_referral_<referral id number>_<verb>`, such as `evt_referral_201_qualified`. Stable per referral and event. Use it to deduplicate |
+| `data.referral.id` | The referral id, such as `ref_201` |
+| `data.referral.referrer_user_id`, `referee_user_id` | The two people's ids in your app. `null` for a person with no user id |
+| `data.referral.referrer_customer_id`, `referee_customer_id` | ZeroSettle's number for each person. Always set. See [customer ids](#referral-customer-ids) |
+| `data.referral.state` | `accepted`, `held`, `qualified`, `expired` or `revoked`. New values can be added |
+| `data.referral.revoke_reason` | `fraud`, `self_referral`, `same_payer`, `device_reused`, `refunded`, `merged_existing_user` or `other`. `null` unless revoked. New values can be added |
+| `data.referral.milestones` | What has been reported so far, each with `reported_via` of `app`, `server` or `payment` |
+| `data.referral.reward_ids` | The rewards this referral helped earn |
+
+`referral.expired` is sent by a job that runs every 15 minutes, so it can arrive a little after the time the referral's window passed.
+
+**`referral_reward.*`**: `data.reward` is the reward object, and the event also names the person who got it.
+
+```json
+{
+  "created": "2026-11-05T12:00:00Z",
+  "data": {
+    "customer_id": 1001,
+    "referral_ids": [
+      "ref_201",
+      "ref_202",
+      "ref_203"
+    ],
+    "reward": {
+      "amount": null,
+      "capped_reason": null,
+      "claim_by": null,
+      "claimed_at": null,
+      "currency_key": null,
+      "days": 30,
+      "delivery": "grant",
+      "earned_at": "2026-11-03T12:00:00Z",
+      "ends_at": "2026-12-03T12:00:00Z",
+      "failure": null,
+      "id": "rwd_101",
+      "kind": "access",
+      "offer_starts_at": null,
+      "product_id": "plus_monthly",
+      "remind_at": "2026-11-30T12:00:00Z",
+      "revoke_reason": null,
+      "revoked_at": null,
+      "role": "referrer",
+      "round": 1,
+      "starts_at": "2026-11-03T12:00:00Z",
+      "status": "delivered",
+      "text": "30 days of Plus",
+      "waiting_reason": null
+    },
+    "user_id": "user_ana"
+  },
+  "environment": "live",
+  "id": "evt_referral_reward_101_delivered",
+  "project_id": 42,
+  "type": "referral_reward.delivered"
+}
+```
+
+| Field | Notes |
+|---|---|
+| `id` | `evt_referral_reward_<reward id number>_<verb>`. Stable per reward and event |
+| `data.reward` | The reward. `status`, `delivery`, `kind` and `role` can gain values, so treat an unknown one as unknown |
+| `data.user_id` | The person who got the reward, in your app. `null` for a person with no user id |
+| `data.customer_id` | ZeroSettle's number for that person. Always set |
+| `data.referral_ids` | The referrals that earned it |
+
+`referral_reward.ending_soon` and `referral_reward.ended` come from the same 15-minute job as the access grant events. Granted access from a reward also sends the matching [access grant event](#access-grant-events) with a `reward_id`.
+
+**`referral_code.reset`**: sent whenever an active code was replaced, with or without a running campaign. A reset with no active code sends nothing, so `old_code` is always set.
+
+```json
+{
+  "created": "2026-11-06T12:00:00Z",
+  "data": {
+    "customer_id": 1001,
+    "new_code": "H3V6-ZB2C",
+    "old_code": "K7M2-QX9P",
+    "url": "https://pawprints.example/j/H3V6ZB2C",
+    "user_id": "user_ana"
+  },
+  "environment": "live",
+  "id": "evt_referral_code_77_reset",
+  "project_id": 42,
+  "type": "referral_code.reset"
+}
+```
+
+| Field | Notes |
+|---|---|
+| `id` | `evt_referral_code_<new code number>_reset` |
+| `data.user_id` | The person's id in your app. `null` for a person with no user id |
+| `data.customer_id` | ZeroSettle's number for the person. Always set |
+| `data.old_code`, `data.new_code` | The codes, in the form to show |
+| `data.url` | The new code's invite link, or `null` |
+
+**Credits rewards.** A credits reward also sends the usual `currency.granted` event. Its `data` gains `reward_id` (set when the credits came from a reward, otherwise `null`) and `expires_at` (when the credits expire, or `null`), and its `source` can be `referral_reward`.
+
+#### Referral customer ids
+
+`customer_id` is ZeroSettle's internal number for the person, the one in your dashboard's customer URL. It is not the Data API's customer `id`, which is your user id, and no server route takes it. Use it to match a person who has no user id.
 
 ### Field reference
 

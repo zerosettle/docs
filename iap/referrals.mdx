@@ -1,0 +1,186 @@
+---
+title: 'Referrals'
+description: 'Let customers invite new customers, and reward both with free access, an unlock or credits'
+icon: 'gift'
+---
+
+A referral campaign lets a customer share an invite code or link. When a new person uses it and does what you ask of them, the customer who invited them earns a reward, and the new person can earn one too. ZeroSettle keeps the codes, counts the referrals, checks for abuse, gives the rewards and tells your server what happened.
+
+ZeroSettle has no screens for this inside your app. You build the invite screen yourself and call the [referral endpoints](#endpoints). The dashboard and the hosted invite page are the only screens ZeroSettle provides.
+
+<Info>
+  Referrals are on the Pro plan. A campaign does nothing until you start it, and rewards are never counted as revenue, MRR, paying customers or trials.
+</Info>
+
+## How a referral works
+
+<Steps>
+  <Step title="A customer gets a code">
+    Your app calls [Get Invite Code](/api-reference/endpoint/referrals-get-code). The code looks like `K7M2-QX9P`, and the call also returns the link to share.
+  </Step>
+  <Step title="A new person accepts it">
+    The link opens your app, or the web page, with the code. Your app calls [Accept Invite](/api-reference/endpoint/referrals-accept) the first time the new person opens it.
+  </Step>
+  <Step title="The new person does what you asked">
+    The campaign lists the milestones a new person must reach within a number of days, such as finishing a first walk or paying. Each one is reported by your app, your server or a payment.
+  </Step>
+  <Step title="Rewards are given">
+    When every milestone is reached the referral qualifies. The inviter's progress moves up, and the reward goes out once they reach the number the campaign asks for.
+  </Step>
+</Steps>
+
+## Set up a campaign
+
+Open Referrals in the dashboard. A campaign has these parts:
+
+| Part | What you choose |
+|---|---|
+| Who can invite | Anyone, free users only, paying users only, or people who own certain products |
+| New users only | How many hours after a person is first seen they still count as new. 168 by default |
+| Milestones | One to five, each with a key and who reports it: `app`, `server` or `payment`. A new person has a number of days to finish them, 14 by default |
+| Inviter reward | How many referrals earn a reward, and the reward. It can repeat, or step up through tiers |
+| New person reward | A reward given when they accept, or when they qualify. Optional |
+| Limits | A cap on rewards per person per year, a budget for the campaign, and a hold when one code is used unusually often in an hour |
+| Device check | Off, used when sent, or required |
+| Landing | The hosted invite page's headline and your terms link, or your own link |
+
+A reward is one of three kinds:
+
+- **Access**: free days on a product, given as a [granted access](/api-reference/endpoint/create-access-grant) period. Days stack behind any the person already has.
+- **Unlock**: a product unlocked for good.
+- **Credits**: units of a currency, optionally expiring after some days.
+
+### The policy pack
+
+When your rules are complete, ZeroSettle writes the text you need to run the campaign honestly: terms for the campaign, a note for App Review, a privacy line and a plain note about the risks. Copy them into your terms page and your App Store submission.
+
+## Links
+
+A hosted link looks like `https://<invite_slug>.join.zerosettle.io/<code>`. Your invite slug is set once in the dashboard, before the first code is made. The page shows the new person what they will get and sends them to your app.
+
+To open your app straight from the link, add `applinks:<invite_slug>.join.zerosettle.io` to your app's Associated Domains. ZeroSettle serves the matching `apple-app-site-association` file for each project. Setup shows whether Apple has picked it up.
+
+Until the invite domain is live, links use `https://api.zerosettle.io/j/<invite_slug>/<code>`. That address opens a web page only. It does not open your app, because it cannot carry universal links. The [Get Invite Code](/api-reference/endpoint/referrals-get-code) response gives you the right link for your project, so use its `url` as it is.
+
+If you would rather use your own link, turn the hosted page off and set `own_url_template` to an `https` address that contains `{code}`. ZeroSettle fills `{code}` with the code without its hyphen and returns that address as the `url`. Your app or site then handles the link, with its own landing page and its own universal links. Sandbox links to the hosted page end in `?sandbox=1`.
+
+## Capture and accept
+
+Read the code from the link when your app opens, and call [Accept Invite](/api-reference/endpoint/referrals-accept) once, with the new person's id. To show what they will get first, call [Preview Invite Code](/api-reference/endpoint/referrals-preview-code). It needs no id and returns the reward in words, plus the inviter's name and picture if they set a profile.
+
+Accepting is safe to repeat. A person can only be referred once. A person who accepted an invite as a guest and then signs in keeps the referral when their new account is new as of the acceptance: it had no purchase before it, and it was first seen inside the new-user window. Otherwise the referral is lost.
+
+### Refusals
+
+A code can be refused for a plain reason. A refusal is a 409 with `retryable: false`.
+
+| Code | Meaning |
+|---|---|
+| `invalid_code` | No such code |
+| `code_reset` | The inviter replaced it |
+| `campaign_ended` | The campaign is no longer running |
+| `self_referral` | The code is the person's own |
+| `already_referred` | The person has already used a code |
+| `not_new_user` | Invites are for new users only |
+| `referrer_ineligible` | The inviter cannot invite right now |
+| `device_already_counted` | This device has already been counted |
+| `device_check_required` | The campaign needs a device check and none was sent |
+
+Treat the list as open. Show a short, kind line and move on.
+
+## Milestones
+
+Each milestone in the campaign has a source.
+
+| Source | Who reports it |
+|---|---|
+| `app` | Your app, with [Report Milestone](/api-reference/endpoint/referrals-report-milestone) |
+| `server` | Your server, with [Report Milestone From Server](/api-reference/endpoint/referrals-server-report-milestone) |
+| `payment` | ZeroSettle, from payments: `trial_started`, `first_payment` or `paid_past_refund_window` |
+
+A campaign can also be set to `server_only`, where every milestone must come from your server.
+
+Anyone who knows a user id and your publishable key can report an app milestone. That is why the campaign's setup warns you when a reward has nothing but app milestones behind it. For anything worth real money, ask for a server milestone or a payment.
+
+`paid_past_refund_window` waits for the refund window to pass, 7 days by default, before it counts.
+
+## Rewards
+
+A reward starts as `earned` and is then `delivered`: the access is granted, the product unlocked or the credits added. A reward can also be `capped` when a limit stopped it, `failed` while ZeroSettle retries, or `revoked`.
+
+A reward for a person who already pays can wait. It then has `waiting_reason: subscriber_delivery_pending` and will be given later. Suggested words for your app: "Your free month is saved. We'll let you know when it's ready."
+
+Granted access from a reward appears in the `access` list of [Get Entitlements](/api-reference/endpoint/get-entitlements#access) with the origin `referral_reward`, and in the access grant webhooks with a `reward_id`. A credits reward sends `currency.granted` with `source` set to `referral_reward`, plus the `reward_id` and the `expires_at` of the credits.
+
+Read a person's rewards, progress and referrals with [Get Referral Status](/api-reference/endpoint/referrals-get-me), or from your server with [Get Person Referrals](/api-reference/endpoint/referrals-server-get-person).
+
+## Device check
+
+A campaign can use Apple's DeviceCheck to stop one phone being counted again and again. Upload a DeviceCheck key in the dashboard, then send the token from the device as `device_check_token` when you accept. With the setting `required`, an accept without a valid token is refused with `device_check_required`. With `when_provided`, a token is checked when you send one.
+
+A person's device can be forgotten from their profile in the dashboard, which lets them be counted again.
+
+## Abuse checks
+
+ZeroSettle holds or revokes referrals it does not trust. A referral can be held when one code is used unusually often in an hour. It then shows `state: held` to you and `accepted` to the person, and waits for your review in the dashboard. A referral can be revoked for fraud, for a self-referral, for two people paying with the same card, for a repeated device, or because it was refunded.
+
+- A full refund or a chargeback of the payment behind a referral revokes it, with its rewards.
+- A chargeback on a referral that already qualified through `paid_past_refund_window` leaves it qualified. It shows in Analyze as disputed.
+- A dispute inquiry does nothing.
+
+You can revoke a referral or a reward yourself with [Revoke Referral](/api-reference/endpoint/referrals-server-revoke-referral) and [Revoke Reward](/api-reference/endpoint/referrals-server-revoke-reward).
+
+## Codes
+
+A code is replaced with [Reset Invite Code](/api-reference/endpoint/referrals-reset-code), or by the dashboard. A reset always replaces an active code, even while the campaign is paused or ended. It never makes a first code. Your server can choose a code for a person with [Set Person Code](/api-reference/endpoint/referrals-server-set-code), such as their username.
+
+## Webhooks
+
+ZeroSettle sends referral events to your endpoints. `referral.expired` tells your server when a referral's window passed without the milestones. The full list, with the body of each, is in [Referral events](/iap/event-webhooks#referral-events).
+
+## Customer ids
+
+Every referral and reward event carries a user id and a customer id for each person. The user id can be `null` for a person who has no user id, such as one known only by email. The customer id is always there.
+
+`customer_id` is ZeroSettle's internal number for the person, the one in your dashboard's customer URL. It is not the Data API's customer `id`, which is your user id, and no server route takes it. Use it to match a person who has no user id.
+
+## Guest ids
+
+A guest's id starts with `zs_anon_`. The routes your app calls never return one: for a guest, `referee_user_id` is `null`, and `referee_attributes` is how your app can still tell who it is. The server routes and the webhooks return real ids, guest ids included, so never pass one from your server to another person's app.
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Your app (publishable key)" icon="mobile">
+    - [Get Invite Code](/api-reference/endpoint/referrals-get-code)
+    - [Reset Invite Code](/api-reference/endpoint/referrals-reset-code)
+    - [Set Invite Profile](/api-reference/endpoint/referrals-update-code-profile)
+    - [Preview Invite Code](/api-reference/endpoint/referrals-preview-code)
+    - [Accept Invite](/api-reference/endpoint/referrals-accept)
+    - [Report Milestone](/api-reference/endpoint/referrals-report-milestone)
+    - [Get Referral Status](/api-reference/endpoint/referrals-get-me)
+    - [Record Share Event](/api-reference/endpoint/referrals-record-event)
+  </Card>
+  <Card title="Your server (secret key)" icon="server">
+    - [Report Milestone From Server](/api-reference/endpoint/referrals-server-report-milestone)
+    - [Get Person Referrals](/api-reference/endpoint/referrals-server-get-person)
+    - [Get Person Code](/api-reference/endpoint/referrals-server-get-code)
+    - [Set Person Code](/api-reference/endpoint/referrals-server-set-code)
+    - [Revoke Referral](/api-reference/endpoint/referrals-server-revoke-referral)
+    - [Revoke Reward](/api-reference/endpoint/referrals-server-revoke-reward)
+  </Card>
+</CardGroup>
+
+## Errors
+
+Every error uses one shape, and `retryable` tells you whether to try again:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+A missing or unknown publishable key is `invalid_publishable_key` on every app route. Every value set in these responses is open, so handle one you do not know by its status and show nothing rather than guess.
+
+## Sandbox
+
+A sandbox key keeps referrals in Sandbox. Webhooks go only to the endpoints of the same environment.

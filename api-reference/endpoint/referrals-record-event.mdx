@@ -1,0 +1,35 @@
+---
+title: 'Record Share Event'
+openapi: 'POST /iap/referrals/events/'
+---
+
+Records that a person shared their invite, or that your app captured an invite code. The counts feed the funnel on the Analyze tab. Nothing about the referral changes.
+
+## Request
+
+| Field | Notes |
+|---|---|
+| `user_id` | Required |
+| `type` | Required. `shared` or `captured` |
+| `channel` | Where it was shared, such as `messages`. Up to 40 characters |
+| `code` | The code involved, when you have it |
+
+Each person can send 60 events an hour.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+Treat `retryable` as the rule for whether to try again. Codes can be added, so handle one you do not know by its status.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required`, `invalid_user_id`, `invalid_event` | The request is not valid |
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+| 429 | `rate_limited` | Wait for `Retry-After` seconds |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

@@ -1,0 +1,45 @@
+---
+title: 'Report Milestone'
+openapi: 'POST /iap/referrals/milestones/'
+---
+
+Tells ZeroSettle that a referred person reached one of the campaign's app milestones, such as finishing a first walk. When the person has reached every milestone the campaign asks for, the referral qualifies and rewards follow.
+
+## Request
+
+| Field | Notes |
+|---|---|
+| `user_id` | Required |
+| `key` | Required. The milestone's key, as set in the campaign |
+| `occurred_at` | When it happened, with a time zone. Defaults to now. A time more than 5 minutes ahead is refused |
+
+An `Idempotency-Key` header is optional. Each person can report 60 times an hour.
+
+## What you get back
+
+A person who was not referred, or whose referral is closed, gets a 200 with `recorded: false` and a `reason`: `not_referred`, `referral_closed`, `duplicate` or `before_acceptance`. Reasons can be added.
+
+## Who can call this
+
+Anyone who knows a user id and your publishable key can call this route. A campaign that pays out real value should use a milestone your server reports with [Report Milestone From Server](/api-reference/endpoint/referrals-server-report-milestone), or a payment milestone. The campaign's setup warns you when it has neither.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+Treat `retryable` as the rule for whether to try again. Codes can be added, so handle one you do not know by its status.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required`, `invalid_user_id`, `invalid_milestone_key`, `invalid_occurred_at` | The request is not valid |
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+| 409 | `milestone_server_only` | This milestone is reported by your server |
+| 409 | `milestone_payment_only` | This milestone is recorded from payments |
+| 409 | `unknown_milestone` | The campaign has no such milestone |
+| 429 | `rate_limited` | Wait for `Retry-After` seconds |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

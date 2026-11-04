@@ -15,6 +15,41 @@ Track the latest updates to ZeroSettleKit. This changelog covers the iOS Swift S
 
 ---
 
+## November 2026
+
+<Update label="Platform" description="Unreleased">
+### Referrals: let customers invite customers
+
+A customer can now share an invite code or link. When a new person uses it and reaches the milestones you set, the customer who invited them earns a reward, and the new person can earn one too. A reward is free access to a product, an unlock or credits. ZeroSettle keeps the codes, counts the referrals, holds or revokes the ones it does not trust and tells your server. Referrals are on the Pro plan, and nothing happens until you start a campaign. Rewards are never counted as revenue, MRR, paying customers or trials. See [Referrals](/iap/referrals).
+
+**New app endpoints** (additive, publishable key):
+- `GET /v1/iap/referrals/code/?user_id=<id>`: [Get Invite Code](/api-reference/endpoint/referrals-get-code).
+- `POST /v1/iap/referrals/code/reset/`: [Reset Invite Code](/api-reference/endpoint/referrals-reset-code).
+- `POST /v1/iap/referrals/code/profile/`: [Set Invite Profile](/api-reference/endpoint/referrals-update-code-profile).
+- `GET /v1/iap/referrals/codes/{code}/`: [Preview Invite Code](/api-reference/endpoint/referrals-preview-code).
+- `POST /v1/iap/referrals/accept/`: [Accept Invite](/api-reference/endpoint/referrals-accept).
+- `POST /v1/iap/referrals/milestones/`: [Report Milestone](/api-reference/endpoint/referrals-report-milestone).
+- `GET /v1/iap/referrals/me/?user_id=<id>`: [Get Referral Status](/api-reference/endpoint/referrals-get-me).
+- `POST /v1/iap/referrals/events/`: [Record Share Event](/api-reference/endpoint/referrals-record-event).
+
+**New server endpoints** (additive, secret key; the POSTs need an `Idempotency-Key`):
+- `POST /v1/referrals/milestones/`: [Report Milestone From Server](/api-reference/endpoint/referrals-server-report-milestone).
+- `GET /v1/referrals/people/{user_id}/`: [Get Person Referrals](/api-reference/endpoint/referrals-server-get-person).
+- `GET` and `PUT /v1/referrals/people/{user_id}/code/`: [Get Person Code](/api-reference/endpoint/referrals-server-get-code) and [Set Person Code](/api-reference/endpoint/referrals-server-set-code).
+- `POST /v1/referrals/referrals/{referral_id}/revoke/`: [Revoke Referral](/api-reference/endpoint/referrals-server-revoke-referral).
+- `POST /v1/referrals/rewards/{reward_id}/revoke/`: [Revoke Reward](/api-reference/endpoint/referrals-server-revoke-reward).
+
+Every error on these routes is `{ "error": { "code", "message", "retryable" } }`. Value sets in the responses can gain values, so treat one you do not know as unknown.
+
+**New webhook events:** `referral.accepted`, `referral.qualified`, `referral.held`, `referral.revoked`, `referral.expired`, `referral_reward.earned`, `referral_reward.delivered`, `referral_reward.claimable`, `referral_reward.claimed`, `referral_reward.ending_soon`, `referral_reward.ended`, `referral_reward.revoked` and `referral_code.reset`. See [Referral events](/iap/event-webhooks#referral-events). `claimable` and `claimed` are not sent yet.
+
+**Changed on `currency.granted`** (additive): `data` gains `reward_id` and `expires_at`, and `source` can be `referral_reward`.
+
+**Granted access from a reward:** the `origin` of a grant and of its `access` component can be `referral_reward`, and the access grant events carry the reward's `reward_id`.
+</Update>
+
+---
+
 ## October 2026
 
 <Update label="Platform" description="Unreleased">

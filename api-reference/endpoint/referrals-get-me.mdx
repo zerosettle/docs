@@ -1,0 +1,49 @@
+---
+title: 'Get Referral Status'
+openapi: 'GET /iap/referrals/me/'
+---
+
+Everything an app needs to show a person where they stand: their code and link, progress on the ladder, the people they invited, the referral that brought them in, and every reward.
+
+## Request
+
+Send your publishable key and the person's `user_id` as a query parameter.
+
+## What you get back
+
+| Field | Notes |
+|---|---|
+| `code`, `url` | The person's code and link, or `null` |
+| `campaign` | The campaign now accepting invites, with `threshold` (what the current round needs) and the rewards in words |
+| `eligibility` | `status` is `eligible` or `ineligible`, with a `reason` when not |
+| `progress` | `round`, `current` and `needed`. `null` when no campaign is accepting or the ladder has ended |
+| `referrals` | The people they invited that still count, with `state` and `slot_state` |
+| `referred_by` | The referral that brought this person in, or `null` |
+| `rewards` | Every reward they have earned, as inviter or as a new person, newest first |
+
+Every value set in the response can grow. Show what you know and ignore what you do not.
+
+## Guest ids
+
+An invited person who has not signed in has a guest id starting `zs_anon_`. It is never returned here: `referee_user_id` is `null`, and `referee_attributes` holds what your app sent at accept so you can still tell who it is. The [server route](/api-reference/endpoint/referrals-server-get-person) returns the real id.
+
+## Rewards waiting
+
+A reward for someone who already pays can wait. It then has `waiting_reason: subscriber_delivery_pending`, and `eligibility.reason` can read `subscriber_delivery_pending`. Suggested words for your app: "Your free month is saved. We'll let you know when it's ready."
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+Treat `retryable` as the rule for whether to try again. Codes can be added, so handle one you do not know by its status.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required` | `user_id` is missing |
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

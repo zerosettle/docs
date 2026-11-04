@@ -1,0 +1,37 @@
+---
+title: 'Reset Invite Code'
+openapi: 'POST /iap/referrals/code/reset/'
+---
+
+Replaces the person's active invite code with a new one. Use it when someone shared their code somewhere they did not mean to.
+
+## Request
+
+Send your publishable key and `user_id` in the body. An `Idempotency-Key` header is optional.
+
+## What happens
+
+The old code stops working at once. A new person who tries it is refused with `code_reset`. People already referred by it keep their referrals.
+
+A reset never makes a first code. A person with no active code gets a body where every field is `null`. Each person can reset 5 times an hour.
+
+A reset sends the `referral_code.reset` webhook, with the old and new code, to your endpoints. See [Event Webhooks](/iap/event-webhooks#referral-events).
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+Treat `retryable` as the rule for whether to try again. Codes can be added, so handle one you do not know by its status.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required`, `invalid_request` | `user_id` is missing, or the body is not a JSON object |
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+| 429 | `rate_limited` | More than 5 resets in an hour. Wait for `Retry-After` seconds |
+| 503 | `try_again` | Retry; `retryable` is `true` |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

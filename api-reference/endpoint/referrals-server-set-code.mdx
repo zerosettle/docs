@@ -1,0 +1,31 @@
+---
+title: 'Set Person Code'
+openapi: 'PUT /referrals/people/{user_id}/code/'
+---
+
+Gives a person a code of your choosing, such as their username, in place of the one ZeroSettle made.
+
+## Request
+
+Send your secret key and `{ "code": "ANA-WALKS" }`. The person is created if ZeroSettle has not seen them.
+
+A code is 4 to 32 letters, digits or hyphens, and unique in the project and environment. Letter case does not matter when people type it. The old code stops working.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "not_found", "message": "No referral or reward has this id.", "retryable": false } }
+```
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `invalid_request` | The body has no `code` text |
+| 400 | `invalid_code_format` | The code is not 4 to 32 letters, digits or hyphens |
+| 401 | `secret_key_required` | No key, a publishable key, or a key that is not valid |
+| 404 | `customer_not_found` | The id is reserved for dashboard stand-ins |
+| 409 | `code_taken` | Another person has this code |
+| 503 | `try_again` | Retry; `retryable` is `true` |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

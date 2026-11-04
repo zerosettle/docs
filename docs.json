@@ -110,7 +110,8 @@
                   "iap/customer-portal",
                   "iap/custom-cancel-flow"
                 ]
-              }
+              },
+              "iap/referrals"
             ]
           },
           {
@@ -193,6 +194,25 @@
               "api-reference/endpoint/list-access-grants",
               "api-reference/endpoint/create-access-grant",
               "api-reference/endpoint/revoke-access-grant"
+            ]
+          },
+          {
+            "group": "Referrals",
+            "pages": [
+              "api-reference/endpoint/referrals-get-code",
+              "api-reference/endpoint/referrals-reset-code",
+              "api-reference/endpoint/referrals-update-code-profile",
+              "api-reference/endpoint/referrals-preview-code",
+              "api-reference/endpoint/referrals-accept",
+              "api-reference/endpoint/referrals-report-milestone",
+              "api-reference/endpoint/referrals-get-me",
+              "api-reference/endpoint/referrals-record-event",
+              "api-reference/endpoint/referrals-server-report-milestone",
+              "api-reference/endpoint/referrals-server-get-person",
+              "api-reference/endpoint/referrals-server-get-code",
+              "api-reference/endpoint/referrals-server-set-code",
+              "api-reference/endpoint/referrals-server-revoke-referral",
+              "api-reference/endpoint/referrals-server-revoke-reward"
             ]
           },
           {

@@ -1,0 +1,38 @@
+---
+title: 'Revoke Reward'
+openapi: 'POST /referrals/rewards/{reward_id}/revoke/'
+---
+
+Takes one reward back, from your server. The referral that earned it is not changed.
+
+## Request
+
+Send your secret key and an `Idempotency-Key` header.
+
+| Field | Notes |
+|---|---|
+| `reason` | Required. `fraud`, `self_referral`, `same_payer`, `device_reused`, `refunded`, `merged_existing_user` or `other` |
+| `note` | Your note, kept with the record. Required when `reason` is `other` |
+
+## What happens
+
+The granted access ends, or the credits left are removed. A reward that is already revoked is returned unchanged. A revoke sends `referral_reward.revoked`.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "not_found", "message": "No referral or reward has this id.", "retryable": false } }
+```
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `invalid_request` | The body is not valid, or `reason` is not one of the values above |
+| 400 | `note_required` | `reason` is `other` and there is no note |
+| 400 | `idempotency_key_required` | The `Idempotency-Key` header is missing |
+| 401 | `secret_key_required` | No key, a publishable key, or a key that is not valid |
+| 404 | `not_found` | No reward has this id in this project and environment |
+| 409 | `idempotency_key_reused`, `request_in_progress` | See [Create Access Grant](/api-reference/endpoint/create-access-grant#errors) |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.

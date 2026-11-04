@@ -1,0 +1,39 @@
+---
+title: 'Get Invite Code'
+openapi: 'GET /iap/referrals/code/'
+---
+
+Returns the person's invite code and link. Call it when the person opens your invite screen.
+
+## Request
+
+Send your publishable key and the person's `user_id` as a query parameter.
+
+## What you get back
+
+| Field | Notes |
+|---|---|
+| `code` | The code to show, such as `K7M2-QX9P`. People can type it with or without the hyphen, in any letter case |
+| `url` | The invite link to share |
+| `campaign` | The campaign now accepting invites, with the reward in words. `null` when none is running |
+| `display_name`, `avatar_url` | The profile set with [Set Invite Profile](/api-reference/endpoint/referrals-update-code-profile), or `null` |
+
+When a campaign is accepting invites, a person with no code gets one. When none is running, a person who already has a code gets it back, and everyone else gets a body where every field is `null`.
+
+## Errors
+
+Every error uses one shape:
+
+```json
+{ "error": { "code": "invalid_publishable_key", "message": "The publishable key is missing or not valid.", "retryable": false } }
+```
+
+Treat `retryable` as the rule for whether to try again. Codes can be added, so handle one you do not know by its status.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `user_id_required` | `user_id` is missing |
+| 401 | `invalid_publishable_key` | The key is missing or not valid |
+| 503 | `try_again` | The person's account was merged while the code was made. Retry; `retryable` is `true` |
+
+See the [Referrals guide](/iap/referrals) for how campaigns, milestones and rewards fit together.
