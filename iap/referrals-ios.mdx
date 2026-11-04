@@ -1,0 +1,218 @@
+---
+title: 'Referrals on iOS'
+description: 'Capture invites, accept them, report milestones and read rewards with ZeroSettleKit'
+icon: 'gift'
+---
+
+<Info>
+  Referrals ship in ZeroSettleKit 1.9.0 for iOS, which is not released yet. Android and Flutter do not have referral calls yet. Set up the campaign first in the [referrals guide](/iap/referrals).
+</Info>
+
+ZeroSettleKit gives you the calls, and you build every screen. The SDK captures an invite, reads state and acts. It shows no screens of its own, so the invite card, the share button and the rewards list are yours to design.
+
+Everything lives on `ZeroSettle.shared.referrals`. The object is main actor isolated, so call it with `await` from anywhere off the main actor, even `handle(url:)`. An app that never touches `referrals` sends no referral requests.
+
+## Capture an invite
+
+`.zeroSettleHandler()` captures invite links by itself. It picks up:
+
+- any link on a host ending `.join.zerosettle.io`
+- `/j/<slug>/<code>` on your API host
+- any URL with a `zs_ref` value
+
+A checkout callback is still tried first. For an invite link on any other host, such as your own domain, call `handle(url:)` from your own link routing. Pass invite links only, because it also reads the last path segment and an ordinary link can give a wrong code.
+
+```swift Swift
+let referrals = ZeroSettle.shared.referrals
+
+// From your own link routing
+referrals.handle(url: inviteURL)
+
+// From text a person pasted
+referrals.capture(text: pastedText)
+```
+
+Both return `true` when they found a code and stored it.
+
+### The pending referral
+
+A captured code is the pending referral. It lasts 30 days, survives `logout()`, and clears when the person accepts, declines, or the server refuses that code. Capturing a different code replaces it.
+
+```swift Swift
+if let pending = referrals.pendingReferral {
+    // pending.code, pending.capturedAt, pending.sourceURL
+}
+
+// Follow changes. Read this once, from a task that lives for the whole launch.
+for await pending in referrals.pendingReferralUpdates { ... }
+
+// The person said no thanks
+referrals.declinePending()
+```
+
+## Show who invited them
+
+`preview(code:)` reads who sent a code and what the new person gets, without using the code. It needs the SDK configured but no signed-in person.
+
+```swift Swift
+let preview = try await referrals.preview(code: pending.code)
+
+if preview.isValid {
+    // preview.inviter?.displayName, preview.inviter?.avatarURL
+    // preview.refereeRewardText, preview.termsURL
+} else {
+    // preview.refusal, for example .invalidCode
+}
+```
+
+A value that is not shaped like a code returns an invalid preview and sends no request.
+
+## Accept
+
+`accept` joins the referral for the identified person. It works on an anonymous id, so a person can accept before they sign up, and the referral moves with them when they sign in.
+
+```swift Swift
+do {
+    let accepted = try await referrals.accept(
+        attributes: ["campaign": "spring"]
+    )
+    // accepted.created is false if they had already accepted this invite
+} catch let error as ReferralError {
+    // see Errors below
+}
+```
+
+With no argument it uses the pending referral. If your app collects the code itself, use `accept(code:)`. Both take two optional parameters:
+
+- `deviceCheckToken` is a DeviceCheck token. You only need it when the server asks for one, which comes back as the refusal `.deviceCheckRequired`.
+- `attributes` is a dictionary of strings that the server returns to the inviter with the referral.
+
+On success the pending referral clears and the rewards refresh before the call returns.
+
+## Report a milestone
+
+When the new person finishes something the campaign asks for, report its key.
+
+```swift Swift
+let result = try await referrals.reportMilestone("first_walk")
+// result.recorded, result.referralState
+```
+
+`recorded` tells you whether it counted. If it did not, `result.reason` says why. Rewards refresh before the call returns.
+
+## The inviter's side
+
+`myStatus()` reads the inviter's code, link, progress, referrals and rewards. When the person can invite and has no code yet, it issues one.
+
+```swift Swift
+let status = try await referrals.myStatus()
+// status.code, status.url
+// status.progress?.current and status.progress?.needed
+// status.referrals, status.rewards
+```
+
+Check `cachedEligibility` to decide whether to show the invite screen, without a request:
+
+```swift Swift
+switch referrals.cachedEligibility {
+case .eligible:
+    showInviteCard()
+case .ineligible(let reason):
+    hideInviteCard(reason)
+default:
+    // .unknown until a read succeeds, and again after the person changes
+    break
+}
+```
+
+Always include a `default` branch. Reasons and states can gain new values in later releases.
+
+### Code, profile and shares
+
+```swift Swift
+// A new code. The old one stops working.
+let fresh = try await referrals.resetCode()
+
+// The name and picture an invitee sees. This sets the whole profile:
+// nil clears that field, so pass the current value of any field you keep.
+try await referrals.setProfile(displayName: "Sam", avatarURL: avatarURL)
+
+// Tell ZeroSettle the person shared their link. Fire and forget.
+referrals.reportShared(channel: "messages")
+```
+
+`reportShared` does nothing without an identified person and only logs errors. The channel is cut to 40 characters.
+
+## Rewards
+
+`rewards` holds the rewards last read, with no request. `rewardUpdates` yields them whenever they change. Like `pendingReferralUpdates`, it has one consumer, so iterate it once from a task that lives for the whole launch.
+
+Show `ReferralReward.phase`, not `status`:
+
+| Phase | Meaning |
+|---|---|
+| `waiting` | Earned, not delivered yet |
+| `claimable` | The person can claim it now |
+| `scheduled` | Delivered, not started |
+| `active` | Running |
+| `ended` | Over |
+| `revoked` | Taken back |
+
+```swift Swift
+for reward in referrals.rewards {
+    switch reward.phase {
+    case .active:
+        showActive(reward.text, until: reward.endsAt)
+    case .claimable:
+        showClaimButton(reward)
+    default:
+        showStatus(reward.text)
+    }
+}
+```
+
+Gate features on `access(for:)`, never on `rewards`. See [Checking Access](/iap/checking-access).
+
+### Claim
+
+```swift Swift
+let result = try await referrals.claim(reward)
+```
+
+`claim(_:)` is in place for rewards delivered to subscribers, which a later release delivers. Until then no reward is claimable, and `claim(_:)` always throws `ReferralError.notClaimable`. Build your claim button so it only appears for the `claimable` phase and handles that error.
+
+## Errors
+
+Every call throws `ReferralError`:
+
+| Case | Meaning |
+|---|---|
+| `refused(Refusal)` | An answer a person can act on |
+| `tryAgain` | The server asked you to retry later |
+| `network(retryable:)` | The request did not complete |
+| `invalidRequest` | The request was wrong, for example an unknown reward |
+| `invalidResponse` | The reply could not be read |
+| `notConfigured` | The SDK is not configured yet |
+| `notIdentified` | There is no identified person |
+| `noPendingReferral` | You called `accept()` with nothing captured |
+| `notClaimable` | The reward cannot be claimed |
+
+`isRetryable` is true when the same call may succeed, so use it to drive a retry button.
+
+A `Refusal` is one of `invalidCode`, `codeReset`, `campaignEnded`, `selfReferral`, `alreadyReferred`, `notNewUser`, `referrerIneligible`, `deviceAlreadyCounted` or `deviceCheckRequired`, or `unknown(String)` for a value this version does not know. Switch with a `default` branch. A refusal other than `deviceCheckRequired` also clears the pending referral it was for.
+
+## Keeping it fresh
+
+There is no push. The SDK refreshes on foreground at most once a minute, after accept and milestones, and alongside access reads, and only while your app uses referrals. Cached rewards follow the same rules as cached access: another person, `logout()` or a snapshot for another user clears them, and `cachedEligibility` returns to `.unknown`.
+
+## Associated Domains
+
+For universal links to open your app from an invite, add the invite host to your app's Associated Domains:
+
+```text
+applinks:<slug>.join.zerosettle.io
+```
+
+Replace `<slug>` with your invite slug from the Referrals page in the dashboard. Universal links do not work on the `/j/` fallback link, so that link opens in the browser and your app gets the code another way, such as a pasted code passed to `capture(text:)`. Universal links also do not work in the iOS Simulator, so test on a device.
+
+For the campaign, rewards and webhooks, see the [referrals guide](/iap/referrals).

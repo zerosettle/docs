@@ -18,6 +18,21 @@ icon: 'apple'
 
 ---
 
+## November 2026
+
+<Update label="1.9.0 (unreleased)" description="Not released yet">
+### Referrals
+
+1.9.0 adds referrals as a headless API and is a drop-in upgrade from 1.8.0. Ship it only after the backend that serves `/v1/iap/referrals/` is live. See [Referrals on iOS](/iap/referrals-ios).
+
+- **Feature**: `ZeroSettle.shared.referrals` with `handle(url:)`, `capture(text:)`, `pendingReferral`, `preview(code:)`, `accept`, `reportMilestone`, `myStatus()`, `resetCode()`, `setProfile`, `reportShared`, `rewards`, `rewardUpdates` and `cachedEligibility`
+- **Feature**: `ReferralReward.phase` for showing a reward, and `ReferralError` with `isRetryable`
+- **Note**: `claim(_:)` throws `notClaimable` until subscriber delivery ships
+- **Note**: No screens ship. Your app builds every one
+</Update>
+
+---
+
 ## October 2026
 
 <Update label="1.7.0" description="2026-10-27">

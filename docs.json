@@ -111,7 +111,8 @@
                   "iap/custom-cancel-flow"
                 ]
               },
-              "iap/referrals"
+              "iap/referrals",
+              "iap/referrals-ios"
             ]
           },
           {
