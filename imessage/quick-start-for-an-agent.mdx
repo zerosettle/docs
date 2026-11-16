@@ -1,0 +1,36 @@
+---
+title: "Quick start for an agent"
+---
+
+The whole API in seven `curl`s, in the order an integration uses them; run
+them top to bottom against a paid line to see every piece work before you
+write real code. Each one is explained in the pages that follow; the
+[reference page](/imessage/errors-limits-and-compliance) has every error code and
+limit. New signups include [SMS fallback](/imessage/send-a-message#sms-fallback). The
+same text send below prefers iMessage and uses SMS for eligible plain text.
+
+```bash
+export BASE=https://portal.zerosettle.io TOKEN=pt_mcp_…
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/line          # 1. am I a line?
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"url":"https://YOUR-URL/webhook"}' $BASE/api/imessage/webhook          # 2. save the secret
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"+1…","state":"start"}' $BASE/api/imessage/typing                 # 3. "…" while you think
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"+1…","text":"hello"}' $BASE/api/imessage/send                    # 3a. send (clears the "…")
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"to\":\"+1…\",\"audio_b64\":\"$(base64 -i hi.m4a)\",\"audio_format\":\"m4a\"}" \
+  $BASE/api/imessage/send                                                  # 3b. voice message
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"to\":\"+1…\",\"image_b64\":\"$(base64 -i view.jpg)\",\"image_format\":\"jpg\",\"text\":\"look\"}" \
+  $BASE/api/imessage/send                                                  # 3c. photo + caption
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"+1…","poll":{"question":"Which day?","options":["Tue","Wed"]}}' \
+  $BASE/api/imessage/send                                                  # 3d. poll
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: video/mp4' \
+  --data-binary @clip.mp4 $BASE/api/imessage/videos                        # 3e. upload a video…
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/videos/vid_…      #     …until "ready"
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"+1…","video_id":"vid_…","text":"watch"}' $BASE/api/imessage/send  #     …then send it
+curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/imessage/messages?after_id=0"  # 4. read
+```

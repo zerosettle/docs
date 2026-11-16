@@ -1,0 +1,232 @@
+---
+title: "Retention offers"
+---
+
+Catch a user at the moment they leave, and put a real offer on their Lock
+Screen before they have found the next app. An iMessage from your brand, with
+your name and photo, converts where a push notification (which most lapsed
+users have turned off) never arrives. Done right, the first text lands about
+two seconds after their thumb leaves the screen — while the phone is still in
+their hand.
+
+## The moment
+
+Pick one trigger per offer and debounce it. Good ones:
+
+| Trigger | Where you see it | Typical message |
+|---|---|---|
+| App goes to the background on the paywall | `UIApplication.willResignActiveNotification` | "wait" → "we saved your spot 🥺" → "how about 30% off?" |
+| Cancel flow reached the last step | Your cancel flow | "Before you go: 2 months free if you stay." |
+| Trial ends tomorrow, no card | Your billing system | "Your trial ends tomorrow. Reply YES to keep your plan at $4.99." |
+| No session for 7 days | A nightly job | "We miss you. Your streak is still saved: 30% off to pick it back up." |
+
+The first one is the highest-converting and the hardest to get right, so the
+rest of this section is built around it. Two things make or break it:
+**speed** (the text has to arrive before they have unlocked the next app) and
+**precision** (it fires from the one screen you care about, once).
+
+## Consent first
+
+The user must have given you their number **for messages from you**: a phone
+field in onboarding with a line that says you'll text them, or a "Text me my
+offers" toggle. Store the timestamp. Without it, do not send: see
+[Compliance](/imessage/errors-limits-and-compliance#compliance-you-need-consent).
+
+## Wire it — the app
+
+The app's only job is to tell your backend "this user just left the paywall"
+as fast as possible. The ZeroSettle token stays on your server, which owns the
+number, the consent record, the cooldown, and the send. Four decisions on the
+device side decide whether the text arrives in 2 seconds or 10:
+
+1. **Listen to UIKit, not `scenePhase`.** `willResignActiveNotification` fires
+   synchronously the instant the app resigns active. SwiftUI's `scenePhase`
+   change lands a run loop later, and that delay goes straight onto
+   time-to-first-text.
+2. **Gate by screen, on a singleton.** Only the paywall arms the offer, in
+   `.onAppear` / `.onDisappear`. Keeping the flag on a singleton means the
+   notification handler can read it without a view reference, and nothing else
+   in the app can accidentally arm it.
+3. **Once per visit.** Set a flag when the ping goes out; reset it whenever
+   the paywall appears or disappears. Backgrounding twice during one paywall
+   visit sends nothing the second time; reopening the paywall and leaving
+   again does.
+4. **Prewarm, then grab background time.** Fire a throwaway GET at your
+   backend when the paywall appears so the TLS handshake (300–800 ms cold) is
+   already paid when it matters. When the trigger fires, wrap the ping in
+   `beginBackgroundTask` *before* the first `await`: iOS suspends the app
+   within seconds of backgrounding, and a request started after that never
+   leaves the phone.
+
+```swift
+@MainActor final class PaywallExitOffer {
+    static let shared = PaywallExitOffer()
+    private var sentThisVisit = false
+    private var observer: NSObjectProtocol?
+
+    /// Only PaywallView sets this, in .onAppear / .onDisappear.
+    var isPaywallShowing = false {
+        didSet {
+            guard oldValue != isPaywallShowing else { return }
+            sentThisVisit = false
+            if isPaywallShowing { prewarm() }
+        }
+    }
+
+    private init() {
+        observer = NotificationCenter.default.addObserver(
+            forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
+        ) { _ in MainActor.assumeIsolated { PaywallExitOffer.shared.userLeftPaywall() } }
+    }
+
+    func userLeftPaywall() {
+        guard user.optedIntoMessaging, isPaywallShowing, !sentThisVisit else { return }
+        sentThisVisit = true
+
+        var task: UIBackgroundTaskIdentifier = .invalid
+        task = UIApplication.shared.beginBackgroundTask(withName: "paywall-exit-offer") {
+            UIApplication.shared.endBackgroundTask(task); task = .invalid
+        }
+        Task {
+            var req = URLRequest(url: URL(string: "https://api.yourapp.com/left-paywall")!)
+            req.httpMethod = "POST"
+            req.setValue("Bearer \(session.token)", forHTTPHeaderField: "Authorization")
+            _ = try? await URLSession.shared.data(for: req)
+            if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
+        }
+    }
+
+    private func prewarm() {
+        Task { _ = try? await URLSession.shared.data(from: URL(string: "https://api.yourapp.com/health")!) }
+    }
+}
+
+// PaywallView — the only place these two lines exist.
+.onAppear    { PaywallExitOffer.shared.isPaywallShowing = true }
+.onDisappear { PaywallExitOffer.shared.isPaywallShowing = false }
+```
+
+`willResignActive` also fires for a phone call, Control Center, the
+notification shade, and a Face ID prompt. Once-per-visit caps that at one
+stray text; if that is still too many, wait for
+`didEnterBackgroundNotification` before pinging and accept the extra half
+second.
+
+<Note>
+
+For a demo you can call ZeroSettle straight from the device with
+the same shape (`send` in place of the ping, the sequence inside the
+background task — three sends and a tapback fit comfortably in the ~30 s
+budget). Do not ship it: the token would be in the binary.
+
+</Note>
+
+## Wire it — the backend
+
+Send a short sequence, not one long message. Three texts a few seconds apart
+read like a person typing; one paragraph reads like a campaign. Send them one
+at a time: each `POST /api/imessage/send` returns only once the line has
+handed the message to Apple (2–5 s), which guarantees the order and gives you
+the cadence for free. Land the offer last, and put a tapback on it so it sits
+highlighted in the thread.
+
+```python
+# /left-paywall — your backend. Sends are serialized per line; send them in order.
+SCRIPT = ["wait", "we saved your spot 🥺", "how about 30% off? reply YES and it's yours"]
+
+@app.post("/left-paywall")
+async def left_paywall(user: User = Depends(current_user)):
+    if not user.sms_consent_at or offers.sent_within(user, days=7) or not waking_hours(user.tz):
+        return {"ok": True}
+    offers.mark_sent(user)                     # before the first send, so a retry can't double-fire
+    queue.enqueue(send_offer, user.id)         # answer the app now; the phone is about to suspend it
+    return {"ok": True}
+
+def send_offer(user_id):
+    user = users.get(user_id)
+    code = billing.create_promo(user, percent_off=30, expires_in_hours=24)   # make it real before you promise it
+    last_id = None
+    for text in SCRIPT:
+        r = zs.send(user.phone, text)          # POST /api/imessage/send, blocks until handed to Apple
+        if not r.ok:
+            break                              # a half-sent script beats a re-sent one
+        last_id = r.id
+    if last_id:
+        zs.react(last_id, "emphasize")         # POST /api/imessage/reactions
+        pending_offers[user.phone] = Offer(user, code=code, deeplink=user.paywall_deeplink)
+```
+
+Return `200` as soon as the work is queued: the app's ping does not need to
+wait for the texts, and the queue is also where the new-contact limit gets
+handled (below). Your name and photo share automatically with the first
+message, so the sequence arrives as your brand, not a bare number.
+
+Measured on a real device: the first text is on the recipient's Lock Screen
+2–3 s after they leave the app, the third by about 9 s.
+
+## Close the loop
+
+Offers that ask for a reply need a webhook (see
+[Webhooks](/imessage/webhooks-step-by-step)). On `message.received`, match the handle
+to the user you sent the offer to and act on the text:
+
+```python
+@app.post("/webhook")
+async def webhook(req: Request):
+    body = await req.body()
+    if not verify(SECRET, req.headers.get("X-ZeroSettle-Signature", ""), body):
+        return Response(status_code=401)
+    ev = json.loads(body)
+    if ev["event"] != "message.received":
+        return {"ok": True}
+    m = ev["message"]
+    offer = pending_offers.get(m["handle"])          # keyed by E.164 number
+    if offer and m["text"].strip().upper() in ("YES", "Y", "CLAIM"):
+        apply_offer(offer)                            # your billing: coupon, plan change, ZeroSettle IAP…
+        zs.react(m["id"], "love")                     # POST /api/imessage/reactions — acknowledge without another text
+        zs.send(m["handle"], f"Done — 30% off is on your account. Open the app: {offer.deeplink}")
+    return {"ok": True}
+```
+
+A tapback is the cheapest acknowledgement: it shows up instantly on their
+bubble and does not read as another marketing message. The deep link should
+open the paywall with the discount already applied — every extra tap between
+"YES" and the purchase button loses people.
+
+## Test it
+
+Run it on a real device: background tasks and iMessage delivery do not exist
+in the Simulator. Log the trigger and each send with `os.Logger`, plug the
+phone in, and watch from the Mac:
+
+```
+log stream --predicate 'subsystem == "com.yourapp"'
+```
+
+Open the paywall, swipe home, and check three things: the ping left within
+~100 ms of resign-active, the first text arrived within ~3 s, and leaving
+twice without reopening the paywall sent nothing the second time. The console
+at `/imessage` shows every send and its status as it happens.
+
+## Rules of thumb
+
+- **One offer per trigger, one trigger per user per week.** Retention texts
+  work because they are rare. Enforce it on the backend; the app's
+  once-per-visit flag is a debounce, not a policy.
+- **Three texts, not ten.** Every message after the first arrives after they
+  have already looked at the phone, and a long script reads as spam.
+- **Make the offer real.** "30% off" in a text is copy; nothing grants the
+  discount until your billing system does. Create the code before the first
+  send, attach it to the pending offer, and apply it on YES.
+- **Send during waking hours** in the user's time zone (the app knows it; pass
+  it to your backend). Nothing promotional before 8 am or after 9 pm.
+- **Honor STOP** in the same webhook: mark the handle opted out and never
+  message it again.
+- **New-contact limit.** The first message to a user who has never texted you
+  counts as a new contact (5 a day on Pro; 3 per 15 minutes and 50 a day on
+  Growth). Queue offers and
+  drain them at that rate; a `429 new_contact_limit` tells you how long to wait
+  in `error.retry_after_s`.
+- **No link until they reply.** A link to someone who has never texted you
+  can't be tapped (see [Links in a first message](/imessage/send-a-message#links-in-a-first-message)).
+  Ask for the YES first and send the deep link with the confirmation, as above.

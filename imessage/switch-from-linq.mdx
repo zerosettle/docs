@@ -1,0 +1,30 @@
+---
+title: "Switch from Linq"
+---
+
+Moving from Linq to ZeroSettle is one pass for your AI agent: it finds
+your Linq API calls and webhook handlers, rewrites them against this API, moves your webhook, and tests the
+result on your own phone before removing Linq. Get your number and an API
+token in the console at `/imessage` first, then open your project in Claude
+Code, Cursor, ChatGPT or Grok and paste this.
+
+```text Agent prompt
+I'm moving my iMessage integration from Linq to ZeroSettle. ZeroSettle base URL ({BASE}): https://portal.zerosettle.io
+My ZeroSettle API token: PASTE_TOKEN_HERE. Put it in my environment as ZEROSETTLE_TOKEN; never commit it or print it.
+
+1. Read the full ZeroSettle API reference at {BASE}/docs.md before changing any code.
+2. Check the token with GET {BASE}/api/imessage/line (header Authorization: Bearer <token>) and tell me my new number (handle). On 402, stop and tell me to subscribe in the console at {BASE}/imessage.
+3. Find every Linq touchpoint and list them for me before editing: calls to api.linqapp.com (/api/partner/v2 or /v3), any Linq SDK, LINQ_* env vars, stored Linq chat ids, webhook subscriptions (POST /v3/webhook-subscriptions) and the handlers they post to.
+4. Put ZeroSettle behind one small module in my stack (plain HTTPS and JSON, no SDK) and map each call:
+   - POST /v3/messages to one number, and POST /v3/chats/{chat_id}/messages → POST {BASE}/api/imessage/send {to, text}. ZeroSettle keys a one-to-one conversation by the other person's handle (phone number or iMessage email), not a chat id: where my code stores a Linq chat_id for a person, keep their handle.
+   - A message to several numbers (a Linq group) → POST {BASE}/api/imessage/groups {to, text, name}, then chat_id on later sends; renames and members → POST {BASE}/api/imessage/groups/update.
+   - parts: a text part → text. A media part → download its url and send it base64 in the same call: image_b64 + image_format (photo) or audio_b64 + audio_format (voice message), with text as the caption. A video is uploaded with POST {BASE}/api/imessage/videos and sent with video_id once it is ready (1 credit per 3 MB, per recipient). Send other multi-part messages as one call per part.
+   - effect → effect (slam, loud, gentle, invisible_ink, echo, spotlight, balloons, confetti, love, lasers, fireworks, celebration, shooting_star). reply_to → reply_to (a ZeroSettle message id or guid).
+   - from and phone number selection → line_id (or line), only if I have more than one ZeroSettle number.
+   - Reactions → POST {BASE}/api/imessage/reactions {message_id, reaction}; typing → POST {BASE}/api/imessage/typing {to, state: "start" | "stop"}; contact cards → PUT {BASE}/api/imessage/profile {name, image_b64} (see Name and photo).
+5. Replace the webhook subscription with one URL that gets every event: PUT {BASE}/api/imessage/webhook {url}, adding "typing_events": true only if my code used Linq's typing events. Store the returned secret as ZEROSETTLE_WEBHOOK_SECRET (it is shown once). Verify X-ZeroSettle-Signature on the raw body (HMAC-SHA256 of "<t>.<raw body>", 300 s tolerance, constant-time compare), dedupe on message.id + event, answer 2xx within 10 s, and act only on event "message.received" (my own sends come back as message.sent; answering those loops). Map the events: message.received, message.sent and message.failed keep their names; message.delivered and message.read have no equivalent webhooks (look up 1:1 iMessage delivery with GET {BASE}/api/imessage/messages/delivery?ids=<message IDs>); reaction.added → reaction.received; chat.typing_indicator.started / stopped → typing.started / typing.stopped; poll.vote.added → poll.voted; participant and group-name events → group.event; chat.background_updated → background.changed. Map the payload: data.sender_handle.handle → message.handle, text parts → message.text, data.chat.id → message.chat_id (groups only); an inbound photo, voice message or video arrives as kind image, audio or video with a url fetched with the same bearer.
+6. Handle what differs. Every new signup includes SMS fallback. Use the same send endpoint for plain-text iMessage or SMS and inspect message.service == "SMS" for the actual carrier transport. The first successful SMS per account/recipient adds a separate opt-out notice. RCS and MMS fallback are unsupported. GET /api/imessage/availability checks only iMessage registration; read the SMS fallback section. New contacts per number: 5 a day on Pro, 3 per 15 minutes and 50 a day on Growth; people who text first don't count, and each number allows 10,000 messages a day, sent and received, with known contacts. On 429 wait error.retry_after_s and log error.message. At most 2 messages to someone who hasn't replied (403 awaiting_reply), text only until they reply (403 attachment_before_reply), and never a message to anyone who texted STOP (403 recipient_opted_out). A number sends one message at a time: on 429 line_busy, retry after 2 s. Only message people who consented; read the compliance section and remind me of it.
+7. My contacts will see a new number, and each is a new contact to it until they text it. Write me a short heads-up to send from the old number asking them to text the new one.
+8. Update tests and fixtures to the ZeroSettle shapes and run them. Send a test message to my own number (ask me for it), confirm message.sent reached the webhook, and that my reply arrives as message.received. Only then remove the Linq code, env vars and webhook subscription.
+9. Finish with a short runbook: how to run it, where the token and webhook secret live, how to rotate them, and how to check the last webhook delivery with GET {BASE}/api/imessage/line.
+```

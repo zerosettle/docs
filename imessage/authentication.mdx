@@ -1,0 +1,67 @@
+---
+title: "Authentication"
+---
+
+Every API call takes a bearer token:
+
+```
+Authorization: Bearer pt_mcp_…
+```
+
+| Status | Meaning |
+|---|---|
+| `401` | Missing, invalid, or revoked token. |
+| `402` | The line's subscription is not active. Subscribe (or resubscribe) in the console. (From `POST /api/imessage/agent/start` or a video send it can also be `ai_credits_exhausted`: the account is out of [credits](/imessage/ai-agent#credits).) |
+| `403` | Valid token, but the account has no iMessage number (or you called a non-iMessage route with an iMessage token). |
+| `422` | Body failed validation; `error.fields` lists each offending field with a message. |
+
+Tokens are minted in the console (`/imessage`), which calls
+`POST /account/mcp/token` with your Firebase sign-in. `DELETE /account/mcp/token`
+revokes every token on the account.
+
+Check that a token works and see your number's state:
+
+```http
+GET /api/imessage/line
+```
+
+<CodeGroup>
+
+```bash cURL
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/line
+```
+
+```json Response
+{
+  "handle": "+18055550100",
+  "phone": "+18055551234",
+  "webhook_url": "https://example.com/webhook",
+  "has_webhook_secret": true,
+  "typing_events": false,
+  "instant_typing": true,
+  "profile": {"name": "Example App", "has_photo": true, "updated_at": "2026-09-01T12:00:00+00:00"},
+  "last_delivery": {"message_id": 42, "event": "message.received", "url": "https://example.com/webhook",
+                    "ok": true, "status_code": 200, "attempts": 1, "error": null, "at": "…"},
+  "created_at": "2026-08-30T09:15:00+00:00",
+  "usage": {"inbound": {"used": 12, "limit": null, "period": "30d"},
+            "outbound": {"used": 9, "limit": null, "period": "30d"},
+            "new_contacts": {"used": 1, "limit": 50, "period": "day",
+                             "resets_at": "2026-09-02T07:00:00+00:00"}}
+}
+```
+
+</CodeGroup>
+
+`handle` is the line's own number (the one people text); `phone` is the
+number you were invited on. `usage.new_contacts.limit` is your plan's day of
+new contacts: 5 on Pro (the example above is a Growth number, 50).
+`usage.new_contacts.resets_at` is when today's
+new-contact count goes back to 0: the next 3 AM Eastern, in UTC. `profile` is `null` until a name and photo are
+set; `last_delivery` is `null` until the first webhook attempt. An account
+with videos enabled, a line group managed by the hosted AI agent, or past
+credit spending or purchases also gets `ai_credits`, its
+[credits](/imessage/ai-agent#credits). Videos are enabled by default for current and
+future accounts; `"videos": true` appears when enabled. ZeroSettle can set an
+individual account override. A number with
+[group chats](/imessage/group-chats) on (every number, unless ZeroSettle turned them
+off for it) also shows `"group_chats": true`; no other number has the key.

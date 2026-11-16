@@ -1,0 +1,63 @@
+---
+title: "Live stream (SSE)"
+---
+
+A server-sent-events feed of everything happening on the line, for a browser
+tab or dashboard that wants to watch in real time without hosting a webhook;
+the console at `/imessage` is built on it. EventSource cannot send headers,
+so mint a short-lived URL token first:
+
+```http
+GET /api/imessage/stream-token
+```
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/stream-token
+# {"stream_token":"1757400300.…","expires_at":1757400300,"stream_url":"/api/imessage/stream?device=…&token=…"}
+curl -N "$BASE$(…stream_url…)"
+```
+
+`stream_url` is relative to the base URL and carries its own auth; `GET
+/api/imessage/stream` with a bad or expired token is `401`. The stream opens
+with a `: connected` comment and sends a `: ping` comment after every 15 s of
+silence.
+
+Events:
+
+```
+event: message
+data: {"type":"message","event":"message.received","message":{"id":44,"direction":"in",…}}
+
+event: delivery
+data: {"type":"delivery","delivery":{"message_id":44,"event":"message.received","url":"https://…","ok":true,"status_code":200,"attempts":1,"error":null,"at":"…"}}
+
+event: typing
+data: {"type":"typing","event":"typing.started","typing":{"handle":"+18055559876","state":"start","direction":"in","ts_ms":1757400030000}}
+
+event: conversation
+data: {"type":"conversation","event":"conversation.deleted","handle":"+18055559876","deleted":7}
+
+event: optout
+data: {"handle":"+18055559876","opted_out_at":"2026-09-28T17:04:11Z"}
+
+event: ai_credits
+data: {"type":"ai_credits","ai_credits":{"left":0,"included_left":0,"purchased_left":0,"allowance":1000,"used":1000,"resets_at":null,"status":"exhausted","buy_url":"https://portal.zerosettle.io/imessage#credits"}}
+```
+
+`message` carries the same `event` + `message` pair the webhook gets
+(`message.*` and `reaction.*`) — the console and your webhook are two
+subscribers to one stream. `delivery` reports each webhook attempt as it
+happens (retries included). `typing` is always on here (no opt-in needed) and
+covers both directions: `direction: "in"` is them typing (the
+`typing.started` / `typing.stopped` events), `direction: "out"` is your own
+`POST /api/imessage/typing` call, with `expires_at_ms`, so a second console
+sees the bubble you raised. `group` carries `group.updated` with the
+[group chat](/imessage/group-chats) as it is now (stream only; never sent to a webhook). `conversation` is housekeeping: `conversation.deleted`
+after a `DELETE /api/imessage/conversations/{handle}`, and `line.released` if
+the operator unassigns the line. `optout` fires when a contact texts STOP, and
+again with `"opted_out_at": null` when they text START (see
+[STOP is enforced](/imessage/errors-limits-and-compliance#stop-is-enforced)).
+`ai_credits` (an account with videos enabled, a line group managed by the
+hosted AI agent, or past credit spending or purchases) carries its
+[credits](/imessage/ai-agent#credits) when they run low, run out, or more
+are bought. The token lives 5 minutes; reconnect with a fresh one.

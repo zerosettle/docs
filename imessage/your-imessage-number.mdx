@@ -1,0 +1,369 @@
+---
+title: "Your iMessage number"
+---
+
+ZeroSettle gives you a dedicated **phone number** on iMessage, backed by Apple
+hardware. New signups include [SMS fallback](/imessage/send-a-message#sms-fallback)
+for plain-text messages from the same number. The API calls this number your
+*line*. You can:
+
+- send an iMessage from that number to a registered phone number or iMessage
+  email, with plain-text SMS fallback to phone numbers on enabled accounts;
+- read every conversation and message on it, both directions;
+- register a **webhook** and get an HTTP POST the moment someone replies;
+- log every conversation in your CRM and text from inside it (see
+  [CRM integrations](/imessage/crm-integrations));
+- watch it all live in the console at `/imessage`.
+
+## Pricing
+
+Two plans, both billed monthly by Stripe with a **30-day money-back
+guarantee** (ask within 30 days and you are refunded in full and the
+subscription is cancelled):
+
+- **Pro** — one iMessage number, **$49/month**, with **5 new contacts a
+  day** (people who text you first, and ongoing conversations, don't count
+  toward it) and **10,000 messages a day, sent and received, with known
+  contacts**. Sign up yourself from
+  [portal.zerosettle.io/imessage](https://portal.zerosettle.io/imessage).
+  Need more? [Upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for 50 a day per
+  number at $199 a month per number.
+- **Growth** — new signups start with **two iMessage numbers** that work as
+  one, **25 new outbound contacts per day per number** (50 across both), and
+  **team members**. The standard invite is **$599/month** and each additional
+  number is **$199/month**. Partner and custom invite prices appear at signup.
+  Existing Pro customers can upgrade the numbers on their subscription in the
+  [console](https://portal.zerosettle.io/imessage#upgrade) for **$199/month per
+  number**. The upgrade is prorated today. A free trial ends at the upgrade
+  and the first Growth month is charged.
+
+Either plan can add numbers whenever you want, from the console or the API
+(see [Add a line](/imessage/your-imessage-number#add-a-line)); each one is billed
+monthly and has its own daily allowance for new contacts. Pro allows 5 per
+number. Growth allows 25 per number with CAP25 and 50 at the standard limit.
+
+Both include **credits** for the [hosted AI agent](/imessage/ai-agent), which
+answers your numbers for you with no server: each text it sends uses one.
+A new account gets **500 free** on Pro and **1,000** on Growth, once (upgrading
+from Pro adds the difference), for the whole account: every number shares
+them, and they never expire. Need more?
+Buy a pack in the console (**Buy credits**): **1,000 for $50** or
+**5,000 for $200**, paid once, and they never expire. Credits also pay for
+[videos](/imessage/attachments#send-a-video): every video a number sends, from the
+API or the console, uses **1 per 3 MB** of the normalized file, rounded up
+(at least 1), per recipient. On an account with videos enabled, every video
+it receives uses the same rate on the file as received once it can be
+watched (free when fewer credits are left). Apart from
+videos, numbers your own server answers never use any. The money-back
+guarantee covers the subscription, not packs.
+
+You subscribe at the end of setup. Until the subscription is active, the
+messaging API answers `402`. Cancel any time from the Billing card.
+
+## Getting your number
+
+1. Open [portal.zerosettle.io/imessage](https://portal.zerosettle.io/imessage)
+   and press **Get started** (Pro), or open your Growth link and press
+   **Get started** there. Sign in with your phone number (you get a one-time SMS code). A
+   number is set aside for you while you finish setting up.
+2. Answer one question — what you'll use the number for (sign in with
+   iMessage, branded messages, or an AI agent). That claims the number; a
+   Growth link claims all of its numbers at this point.
+3. Set your App/Brand Name and photo (prefilled with "Example App" and a
+   placeholder photo) and text your personal number a test message from the
+   new number, or skip that — you can change the name and photo whenever you
+   want from the console.
+4. Subscribe. The console and the API open once the subscription is active.
+   Numbers that are not paid for within 30 minutes are released.
+
+ZeroSettle shows your API token in the console. You can mint a new one at
+any time; minting again revokes nothing, revoking revokes all.
+
+<Tip>
+
+Every one of those steps can be done from your AI agent instead.
+[Connect the ZeroSettle connector](/imessage/connect-your-ai-agent) to Claude or
+Cursor, sign in with your phone number, and use the `get-started` prompt (or
+say "get me an iMessage number"): the agent calls `sign_up`, `set_profile`,
+`send_test_message`, and `subscribe`, hands you the payment link, and is
+ready to build the moment `get_line` shows `active: true`.
+
+</Tip>
+
+Your iMessage number (the one people text) is shown at the top once you're
+signed in, and returned as `handle` by `GET /api/imessage/line`.
+For testing before anyone has texted you, the operator can push a simulated
+inbound message, tapback, or typing event to your line; it reaches your
+webhook and the live stream exactly like a real one.
+
+## More than one number
+
+An account can have more than one iMessage number: Growth includes several,
+and any plan can [add more](/imessage/your-imessage-number#add-a-line). Each one is a
+*line*. Your API key, requests, webhook and live stream stay exactly the
+same; the lines work as one:
+
+- **Each line has a stable id.** `line_id` (`ln_` and 16 hex characters)
+  names a line for as long as it is on your account. Its number can change:
+  if ZeroSettle has to replace the number behind a line (one that fails or
+  is flagged), the line keeps its `line_id`, conversations, message ids,
+  name and photo, and STOPs, and only its number (`line`) changes. **Store
+  `line_id`; show `line`.**
+- **Every item says which line it is on.** Messages, conversations, opt-outs,
+  typing events, stream events and webhook payloads carry `line` (the E.164
+  number it was sent from or received on) and `line_id`. An account with one
+  number never gets either field.
+- **The server picks the line for each send, unless you name it.**
+  `POST /api/imessage/send` takes the same `{to, text}` as always. A contact
+  you already have a conversation with is always messaged from the line that
+  conversation is on, so each person hears from one number only. A new
+  contact goes to the line with the most room left today. To choose the line
+  yourself, pass `line_id` (see *Choosing the line* below).
+- **New contacts are counted per line.** Each line can reach its plan's new
+  contacts per day (**50** on Growth, with 3 per 15 minutes; **5** on Pro),
+  reset at 3 AM Eastern.
+  `usage.new_contacts` in `GET /api/imessage/line` is the account total, so three Growth lines show
+  `"limit": 150`; `lines` lists each line (`id`, `number`, `group_id`) with its own usage, primary first:
+
+  ```json
+  {"handle": "+18055550100", "usage": {"new_contacts": {"used": 38, "limit": 150, "period": "day", "resets_at": "…"}, …},
+   "lines": [{"id": "ln_3f9a0c2e7b1d4a56", "number": "+18055550100", "group_id": "lg_5e0c9a1f2b7d3e84", "usage": {"new_contacts": {"used": 20, "limit": 50, "period": "day", "resets_at": "…"}}},
+             {"id": "ln_8c41e07d92b3f615", "number": "+18055550111", "group_id": "lg_5e0c9a1f2b7d3e84", "usage": {"new_contacts": {"used": 12, "limit": 50, "period": "day", "resets_at": "…"}}},
+             {"id": "ln_d27b5e9f0a6c1843", "number": "+18055550122", "group_id": "lg_a73f18c0d94e2b65", "usage": {"new_contacts": {"used": 6, "limit": 50, "period": "day", "resets_at": "…"}}}]}
+  ```
+
+  A send to a new contact is refused with `429 new_contact_limit` only when
+  every line is full (or, when it names a line, when that line is).
+- **Reading and deleting.** `GET /api/imessage/messages` and
+  `/conversations` return every line's messages; add `?line_id=` (or
+  `?line=+18055550111`) to see one line. A conversation is one contact on
+  one line, so the same person can appear on two lines if they texted both.
+  `DELETE /api/imessage/conversations/{handle}` takes `?line_id=` / `?line=`
+  too; it is required only when that contact has a conversation on more than
+  one line (without it the answer is `409 ambiguous_line`, listing them in
+  `error.lines` and `error.line_ids`).
+- **A name and photo per line group.** Lines are grouped: every line of a
+  *line group* (`group_id`, `lg_` and 16 hex characters, on each of `lines`)
+  always presents the same name and photo, and a group can hold one line or
+  many. The name and photo are set on a group, never on one of its lines:
+  `PUT /api/imessage/profile?group=lg_…` sets every line of that group, and
+  `?line_id=` (or `?line=`) means the group of the line it names. Without
+  any of them it sets every line to the same name and photo, as before.
+  `GET /api/imessage/profile/photo?line_id=…` returns that line's (its
+  group's) photo. Each contact is shown the card of the line their
+  conversation is on. `404 unknown_group` when the group is not one of yours.
+
+### Choosing the line
+
+When you run something different on each line (an agent, a brand) and the
+same person texts more than one of them, reply on the line they texted: copy
+the `line_id` of the `message.received` you are answering into the reply.
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"+18055559876","line_id":"ln_8c41e07d92b3f615","text":"Hi from the second line"}' \
+  $BASE/api/imessage/send
+```
+
+- **Where it goes.** `line_id` in the JSON body of `POST /api/imessage/send`,
+  `/typing` and `/profile/share`, or as `?line_id=` on those and on every
+  other route that takes a line. `line` (the number) works in the same
+  places, but it changes if the line's number does; if you pass both, they
+  must name the same line. Leaving them out (or `null`) keeps the automatic
+  choice above. An account with one number has no `line_id` in what it
+  receives, so code that copies `message.line_id` into the reply works on
+  both.
+- **What it does.** The call acts on exactly that line and never another:
+  a send goes out from it; typing shows in its conversation with `to`; a
+  share sends its own name and photo, from it. A conversation is one contact
+  on one line, so `line_id` plus `to` names exactly one.
+- **Without a line,** a contact with conversations on more than one of your
+  lines is messaged from the one with the newest message (either
+  direction); typing and sharing follow the same rule.
+- **Already exact:** a reaction goes out from the line of the message it
+  reacts to, and the name and photo shared automatically after a send are
+  the card of the line the send went out from.
+- **Refusals,** with nothing sent: `404 unknown_line` when the line is not
+  one of yours; `422 invalid_request` when `line` and `line_id` name
+  different lines; `409 no_conversation` for typing when that line has no
+  conversation with them; `429 new_contact_limit` when the send would be a
+  new contact for that line and it is at its own limit (`error.line_id`
+  says which; your other lines are not tried); `409 line_draining` when that
+  line is being retired and the send would be a new contact for it (it
+  still answers its conversations). A STOP to any of your lines blocks them
+  all, as always.
+
+Every answer says which line acted, named or routed: `record.line_id` on a
+send, `line_id` on typing and share answers (each next to its `line`).
+
+## Add a line
+
+Add numbers to your account from code: the same purchase as **Add number**
+in the console, on any plan with a card subscription (Pro included). Each
+line has its own day of new contacts (5 on Pro, 50 on Growth) and is billed
+monthly with your subscription; today's part, prorated to
+your renewal date, is charged to the card on file. Up to 5 lines per
+request. Only the account owner's key can buy (a team member's key can
+quote).
+
+**Choose the sender.** The name and photo people see belong to a line
+group (see *A name and photo per line group* above). A new line either
+shares a sender you have or starts a new one:
+
+| Body | Sender |
+|---|---|
+| `{}` | The same as your primary number. |
+| `{"group_id": "lg_…"}` | The same as that line group (a `group_id` from `lines` in `GET /api/imessage/line`). |
+| `{"new_group": true}` | A new sender: a line group of its own, shown as "Example App" with a placeholder photo until you set one. |
+
+Add `"count": 3` to add several at once (all with that one sender) and
+`"code": "…"` for a discount code.
+
+See the price first (charges nothing):
+
+```http
+GET /api/imessage/lines/quote?count=1
+```
+
+<CodeGroup>
+
+```bash cURL
+curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/imessage/lines/quote?count=1"
+```
+
+```json Response
+{"plan": "pro", "count": 1, "monthly_cents": 5000, "today_cents": 3181,
+ "renews_at": "2026-11-02T09:15:00+00:00", "discount": null, "available": true, "free": 5}
+```
+
+</CodeGroup>
+
+`monthly_cents` is each line's monthly price and `today_cents` what the card
+is charged now for all of them. `available` is `false` when fewer than
+`count` numbers are free right now (`free` says how many could be added at
+once). Add `&code=…` to price a discount code. While an earlier purchase is
+waiting on payment, the answer is `{"pending": true, "action_url": "…"}`.
+
+Then add it:
+
+```http
+POST /api/imessage/lines
+```
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{"new_group": true}' $BASE/api/imessage/lines
+```
+
+```json Response
+{"ok": true, "lines": [{"id": "ln_8c41e07d92b3f615", "number": "+18055550111", "group_id": "lg_a73f18c0d94e2b65"}]}
+```
+
+</CodeGroup>
+
+The lines are live when this returns. They use your API key, webhook and
+live stream as they are, and appear in `lines` of `GET /api/imessage/line`.
+For a new sender, set its name and photo with
+`PUT /api/imessage/profile?group=lg_…` (see
+[Name and photo](/imessage/send-a-message#name-and-photo)).
+
+- **The card needs a step** (3-D Secure, or the bank wants it confirmed):
+  `202 {"ok": false, "action_url": "https://invoice.stripe.com/…"}`. Open
+  `action_url` to finish paying; the lines go live as soon as Stripe
+  confirms. Nothing else is bought while it waits, and a purchase not paid
+  within 23 hours is cancelled with nothing charged.
+- **Retries.** Send an `Idempotency-Key` header (any unique string up to 255
+  characters) and retry with the same key: it answers the request that
+  first used it (its lines, or the 202 while they wait on the card) and
+  never buys more. A key whose request added nothing (declined, none free)
+  can be sent again. Without a key, a retry after an error first applies
+  anything Stripe already charged and answers with that, but a retry after
+  a success buys again.
+- **Refusals**, with nothing charged: `402 payment_failed` (the card was
+  declined; `error.message` says why), `409 no_capacity` (not enough
+  numbers free right now: try fewer, or later), `409 add_number_unavailable`
+  (no active card subscription: contact ZeroSettle), `404 unknown_group`,
+  `400 invalid_code`, `403 owner_only`, and `422 invalid_request` (`count`
+  outside 1–5, or both `group_id` and `new_group`). `502 upstream_error`
+  means the payment service couldn't be reached: retry with the same key.
+
+To remove a line, contact ZeroSettle.
+
+## Release a number for recycling
+
+ZeroSettle can enable line recycling on your account. Use this API when your
+customer's paid access ends so their hold and ZeroSettle's hold start together.
+Releasing a number ends its current assignment immediately. Your ZeroSettle
+subscription and billing continue under their existing terms.
+
+Use an account owner's API key to list assignments, including on a
+single-number account. Each result has an assignment ID and its E.164 number.
+Release the account's other numbers before releasing its primary number.
+
+<CodeGroup>
+
+```bash cURL
+curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/imessage/recyclable-lines"
+```
+
+```json Response
+{"lines":[{"id":"ln_46b28125680ff86a","number":"+18055559876"}]}
+```
+
+</CodeGroup>
+
+Generate a new random secret for each release. Save it before making the
+request. Use it as the `Idempotency-Key` for this release and as the bearer
+credential to check its status. Use at least 128 bits of randomness and 22 to
+128 URL-safe characters. Keep it out of logs and treat it like an API key.
+
+```bash
+LINE_ID=ln_46b28125680ff86a
+RECEIPT=$(openssl rand -hex 32)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $RECEIPT" "$BASE/api/imessage/lines/$LINE_ID/release"
+```
+
+The release API returns `202 Accepted` with this record. If a response is
+lost, repeat the same `POST` with the same assignment ID and idempotency key
+to get the existing release. The retry works even after release revokes the
+original API key.
+
+```json
+{
+  "id": "rel_467752359cb9426aab2ad44169486e67",
+  "line_id": "ln_46b28125680ff86a",
+  "number": "+18055559876",
+  "status": "holding",
+  "released_at": "2026-11-11T17:00:00+00:00",
+  "hold_until": "2026-11-18T17:00:00+00:00",
+  "ready_at": null
+}
+```
+
+Access to that assignment ends at `released_at`. ZeroSettle disconnects its
+old routing and clears its inbox. Messages received during the hold are
+discarded and queued sends from the old assignment are blocked. The hold
+lasts at least seven days. If cleanup takes longer, the status stays `holding`
+past `hold_until`.
+
+Check the release using its receipt as the bearer token. The response has the
+same fields. Once the number is available for reassignment, `status` is
+`ready` and `ready_at` has a timestamp. The receipt only grants access to this
+release's status and retries.
+
+```bash
+RELEASE_ID=rel_467752359cb9426aab2ad44169486e67
+curl -s -H "Authorization: Bearer $RECEIPT" "$BASE/api/imessage/line-releases/$RELEASE_ID"
+```
+
+If the account's primary number had a registered webhook at release,
+ZeroSettle sends it the signed [`line.ready` event](/imessage/webhooks-step-by-step#line-ready).
+The number can then be assigned again through the usual provisioning process.
+Its next assignment has an empty inbox and a fresh ID, shown as `line_id` in
+`GET /api/imessage/line` for that number. When someone sends a new message to
+the number after activation, it goes to the new assignment, even if the sender
+wrote it in an existing thread.

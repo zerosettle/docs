@@ -1,0 +1,225 @@
+---
+title: "Errors, limits, and compliance"
+---
+
+The reference for what can go wrong and what is enforced: the one error
+shape every `/api/imessage/*` route uses, the full code table, the limits
+(new contacts, sizes, timeouts), and the consent rules you are responsible
+for.
+
+## Error shape
+
+Every error on `/api/imessage/*` is JSON with a machine-readable `code`:
+
+```json
+{"error": {"code": "new_contact_limit",
+           "message": "This line can message at most 3 new contacts per 15m (3 already in this window). Existing conversations are not limited. Try again in 412 s.",
+           "limit": 3, "window": "15m", "used": 3, "retry_after_s": 412},
+ "detail": "This line can message at most 3 new contacts per 15m …"}
+```
+
+On Pro, a `new_contact_limit` message ends with how to get more: `Pro
+includes 5 new contacts a day per number. Need more? Upgrade to Growth for
+50 a day per number at $199 a month per number:
+https://portal.zerosettle.io/imessage#upgrade`. The code and fields are the same on every plan.
+
+Branch on `error.code`, show `error.message` to a human. Rate-limited
+responses also carry a `Retry-After` header (`2` for `line_busy`, `30` for `rate_limited`). A
+validation error carries `error.fields`, a list of `{"field", "message"}`.
+A failed send or reaction keeps its `record` (the stored row with
+`status: "failed"`) and `id` next to the error, plus the line's `status`
+(`busy`, `offline`, `timeout`, or `error`).
+
+| HTTP | `code` | Meaning | What to do |
+|---|---|---|---|
+| 401 | `unauthorized` | Bad or missing bearer. | Check the token. |
+| 402 | `payment_required` | The line's subscription is not active. | Subscribe in the console. |
+| 402 | `ai_credits_exhausted` | `POST /api/imessage/agent/start` when the account has fewer [credits](/imessage/ai-agent#credits) left than the first message needs, or a video send with fewer left than the video costs (1 per 3 MB). Nothing was sent. `error.left`, `error.needed` and `error.buy_url` say how many are left, how many it needs, and where to buy more (`error.resets_at` is `null`: nothing refills). | Buy more at `error.buy_url`, or send fewer first-message texts. |
+| 403 | `forbidden` | Not a line account, or a line token on a non-iMessage route. | — |
+| 403 | `recipient_opted_out` | They texted STOP (see below). `error.handle` and `error.opted_out_at` say who and when. | Don't retry. Only their START opts them back in. |
+| 403 | `awaiting_reply` | You already sent this contact 2 messages and they have never replied. Messages sent within 5 minutes of each other count as one, so a greeting plus a link is one. Once they send anything back (a text, photo, video, voice note or tapback), the limit is gone for good. `error.handle` and `error.unanswered` say who and how many. | Wait for their first reply. |
+| 403 | `attachment_before_reply` | A photo, video, voice message or poll to a contact who has never sent this number anything. Nothing was sent or stored. `error.handle` and `error.kind` (`image`, `video`, `audio` or `poll`) say who and what. | Send text until they reply. |
+| 403 | `managed_by_zerosettle` | A send from Close or HubSpot would come from a line managed by the AI agent: it answers there. With several numbers, a new conversation has to name a line managed by API. `POST /api/imessage/send` and MCP `send_imessage` aren't refused. | Send it with `POST /api/imessage/send`, start it with `POST /api/imessage/agent/start`, or set the group back to `managed_by: "api"`. |
+| 404 | `not_found` | No such message on this line, no stored recording / photo / video / poster / profile photo for that route, or a video id (`GET /api/imessage/videos/{id}`, or `video_id` on `/send` or `/broadcast`) that isn't one of your uploads. Nothing was sent. | — |
+| 409 | `conflict` | E.g. reacting to a message that was never delivered (no GUID). | — |
+| 409 | `no_conversation` | Typing at a handle the line has never exchanged a message with. | Send a message first. |
+| 409 | `poll_unsupported` | A poll from a line that requires an update to send polls. Nothing was sent or stored. | Send text, or try again after the update. |
+| 409 | `video_unsupported` | A video when videos are disabled for the account, or the line requires an update to send videos. Nothing was sent, stored or charged. | Send a photo or a link, or contact ZeroSettle about availability or the update. |
+| 409 | `video_processing` | A `video_id` still processing after the send waited a minute for it (a broadcast waits only a few seconds). `error.video_id` names the video (for a `video_b64`, the upload it became). Nothing was sent. | Try again in a few seconds. |
+| 413 | `video_too_large` | A video upload over 100 MB. | Trim or compress it first. |
+| 422 | `video_invalid` | A video that isn't MP4/MOV/WebM or can't be read, has no picture or runs longer than a minute, or a `video_id` that failed processing. `error.message` says which. Nothing was sent. | Fix the file and upload it again. |
+| 409 | `no_profile` | Sharing the name and photo before setting them. | `PUT /api/imessage/profile` first. |
+| 409 | `not_managed` | `POST /api/imessage/agent/start` on a line group managed by API. | `PUT /api/imessage/agent` with `managed_by: "zerosettle"` first. |
+| 502 | `agent_unavailable` | `POST /api/imessage/agent/start` with `first_message_enabled: false`: the agent couldn't write the opening text just now. Nothing was sent. | Try again, or turn `first_message` back on. |
+| 404 | `unknown_line` | The `line_id` or `line` given is not one of your account's lines. | Use an `id` (or `number`) from `lines` in `GET /api/imessage/line`. |
+| 404 | `unknown_group` | The `group` (or `group_id`) given is not one of your account's line groups. | Use a `group_id` from `lines` in `GET /api/imessage/line`. |
+| 403 | `group_chats_not_enabled` | A [group chat](/imessage/group-chats) call on a number without group chats. Nothing was sent. | Group chats are on for every number; contact ZeroSettle support, which may have turned them off for this one. |
+| 404 | `unknown_chat` | No line on your account has that `chat_id`. Nothing was sent. | Use a `chat_id` from `GET /api/imessage/groups`. |
+| 409 | `client_update_required` | A group chat call to a line that requires an update to support group chats. Nothing was sent. | Try again after the update. |
+| 400 | `invalid_code` | [Adding a line](/imessage/your-imessage-number#add-a-line) with a discount code that isn't valid. | Check the code, or leave it out. |
+| 402 | `payment_failed` | Adding a line: the card was declined. Nothing was charged. | Update the card in the console, then retry. |
+| 403 | `owner_only` | Adding a line with a team member's key. | Use the account owner's key. |
+| 409 | `no_capacity` | Adding a line: not enough numbers are free right now. Nothing was charged. | Try fewer, or try again later. |
+| 409 | `add_number_unavailable` | Adding a line to an account without an active card subscription. | Contact ZeroSettle. |
+| 409 | `line_draining` | The line named is being retired: it answers its conversations but opens no new one. `error.line_id` and `error.line` name it. | Send from another line, or leave the line out. |
+| 409 | `ambiguous_line` | Deleting a conversation with a contact who is on more than one of your lines, without `?line_id=`. `error.line_ids` and `error.lines` list them. | Add `?line_id=`. |
+| 422 | `invalid_request` | Bad `to`, `text`, `url`, `reaction`… `error.fields` lists them. | Fix the input. |
+| 422 | `not_on_imessage` | Creating a group chat with a member who isn't on iMessage. `error.handle` says who. | Leave them out. |
+| 429 | `line_busy` | The line was busy for the whole retry window. | Retry after 2 s. |
+| 429 | `rate_limited` | A video upload (`POST /api/imessage/videos`, or a send with `video_b64`) while the account already has 3 videos processing, or 10 are processing across ZeroSettle. `Retry-After: 30`, `error.retry_after_s` 30. Nothing was stored or sent. | Wait for one to be `ready` (or 30 s), then retry. |
+| 429 | `daily_limit` | The number has sent and received 10,000 messages today (see below). `error.used`, `error.limit`. | Wait `retry_after_s` (the next 3 AM Eastern). |
+| 429 | `new_contact_limit` | Too many *new* contacts in the window (see below). | Wait `retry_after_s`. On Pro, [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for more a day ($199 a month per number). |
+| 429 | `agent_call_limit` | `POST /api/imessage/agent/start` with `first_message_enabled: false` when the AI agent was already asked to write to that contact 60 times today (UTC), counting the times it decided to send nothing. Nothing was sent. | Wait `retry_after_s`. |
+| 503 | `phone_offline` / `phone_timeout` | The line is temporarily unreachable or did not answer. | Retry with backoff. |
+| 503 | `unavailable` | Video storage is briefly unavailable (an upload, a video send, or fetching a video or its poster). Nothing was sent or charged. | Retry in a minute. |
+| 502 | `send_failed` | The line could not send it (e.g. a bad handle). | Fix the input. |
+| 502 | `typing_failed` | The line could not raise the typing indicator for that handle. | Fix the input; it is best-effort anyway. |
+
+## Limits
+
+Each number allows **10,000 messages a day, sent and received, with known
+contacts** (people who texted it first, or whom it already has a conversation
+with). Once a number has sent and received 10,000 messages since 3 AM
+Eastern, every send from it is refused with `429 daily_limit` until the day
+resets; incoming messages still arrive. The console and `GET /api/imessage/line` → `usage`
+show the last 30 days' counts (rolling; texts, voice messages, photos, and
+videos, not reactions) with `limit: null`. The other enforced allowances
+are new contacts and unanswered messages, and, for the hosted AI agent and
+for videos, credits:
+
+| Usage | Allowance | Enforced? |
+|---|---|---|
+| Messages, sent and received | **10,000 / day** per number, reset at 3 AM Eastern | Yes — `429 daily_limit` |
+| New contacts | Pro: **5 / day**. Growth: **25 / day** per number with CAP25, **50 / day** at the standard limit, and **3 / 15 min**. Daily limits reset at 3 AM Eastern. | Yes — `429 new_contact_limit` |
+| Unanswered messages | **2** per contact until their first reply | Yes — `403 awaiting_reply` |
+| Photos, videos, voice messages and polls | Only to contacts who have replied at least once | Yes — `403 attachment_before_reply` |
+| Texts the hosted AI agent sends | **500 free credits** on Pro, **1,000** on Growth, once per account; packs add more ([credits](/imessage/ai-agent#credits)) | Yes — the agent goes quiet; `402 ai_credits_exhausted` on `/agent/start` |
+| Videos | **1 credit per 3 MB** of each video sent (per recipient) or received, rounded up (a full minute is about 6), from the same credits; a received one is free when fewer are left | Yes — `402 ai_credits_exhausted` |
+
+- Text: 1–4000 characters. Attachments: voice messages (6 MB), photos
+  (5 MB, with a caption) and videos (up to a minute; 100 MB uploaded or 25
+  MB as `video_b64`, sent as a 720p MP4 of at most 15 MB, with a caption) —
+  see [Attachments](/imessage/attachments); tapbacks on any of them. Profile photo:
+  JPEG or PNG, 3 MB. A received video is delivered up to 60 MB.
+- Handles: E.164 phone numbers or iMessage email addresses, up to 128
+  characters.
+- **New contacts**: on Pro, a line may reach out to at most **5 new
+  contacts per day**; need more? [Upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console ($199 a month per number).
+  On Growth, a line may reach out to at most **3 new contacts per 15
+  minutes** (a rolling window). New Growth signups get CAP25, which limits
+  each number to **25 new contacts per day**. The standard Growth limit is
+  **50 per day**. The day runs 3 AM to 3 AM
+  Eastern, EST or EDT — midnight Pacific: `usage.new_contacts` counts since
+  the last 3 AM Eastern and resets to 0 then; the 429's `window` is `"day"`. A
+  "new contact" is a handle the line delivers a text, voice message, photo,
+  or video to **first**; reactions, typing, profile shares, and failed sends never
+  count. Anyone who texted the line first never counts, and neither does an
+  ongoing conversation; both share the number's 10,000 messages a day. This
+  is what keeps the number out of Apple's spam filters; it applies to every caller, the console included. Deleting a
+  conversation makes that handle a new contact again. With [more than one
+  number](/imessage/your-imessage-number#more-than-one-number) each number has its
+  own daily limit and `usage` shows the account's total.
+  In a [group chat](/imessage/group-chats), each member new to the line counts as a
+  new contact when you start the group or add them.
+- **Unanswered messages**: at most **2 messages** to a contact who has never
+  sent the line anything (a text, photo, video, voice note, or tapback). After their
+  first reply there is no limit for that contact. Messages
+  sent within 5 minutes of the first count as one, so a greeting plus a link
+  is one; put the link in the same message when you can. A third is refused
+  with `403 awaiting_reply` (nothing sent or stored; `error.handle` and
+  `error.unanswered` say who and how many) until they first reply. Failed sends
+  and the line's own tapbacks don't count. Repeated messages to people who
+  never answer are the fastest way to get a number flagged by Apple: when
+  that happens every send fails, to everyone.
+- **Attachments wait for a reply**: until a contact has sent the line
+  anything (a text, photo, video, voice note, or tapback), it can only text them:
+  a photo, video or voice message is refused with `403 attachment_before_reply`
+  (nothing sent or stored). So a new contact's first messages are text.
+- One send at a time per line; concurrent sends queue behind each other and
+  surface as `line_busy` after ~12 s of waiting. Typing calls share that
+  lock but hold it for under 2 s.
+- Typing: `ttl_s` at most 60 per call; not stored, not counted, not billed.
+  Inbound typing events are delivered once with no retries.
+- Inbound latency: about 1–2 s from the line receiving a text to your webhook.
+  Inbound is pushed; nothing polls for it, so inbound never delays a send.
+- Webhook: HTTPS only (HTTP for localhost), 10 s timeout, 3 retries, no redirects
+  followed.
+- Retention: messages are kept indefinitely for now.
+
+<a id="compliance-you-need-consent" />
+
+## Compliance — you need consent
+
+<Warning>
+
+Use ZeroSettle only to contact people who agreed to hear from
+you for the intended purpose. Requirements depend on the message's purpose,
+sending technology and jurisdiction. Establish consent independently of
+the delivery method or automatic opt-out notice.
+
+</Warning>
+
+- **United States:** the [FCC's delivery restrictions](https://www.ecfr.gov/current/title-47/chapter-I/subchapter-B/part-64/subpart-L/section-64.1200)
+  generally require prior express written consent for advertising or
+  telemarketing covered by the autodialer rules. What qualifies as an
+  autodialer depends on the equipment's capabilities; see the Supreme Court's
+  [Facebook v. Duguid decision](https://www.supremecourt.gov/opinions/20pdf/19-511_p86b.pdf).
+  Do-not-call and state-law requirements may apply independently.
+- **Canada (CASL), UK/EU (PECR, GDPR ePrivacy), Australia (Spam Act):** consent
+  first, an easy opt-out in every campaign, and records of who agreed and when.
+- **Carrier and Apple rules:** unsolicited volume gets a number filtered or
+  deactivated. The new-contact limits above exist for this reason; they are a
+  floor, not a licence.
+
+What "consent" means in practice:
+
+1. The person gave you their number **for this purpose** — a form, a checkbox,
+   a purchase flow, a reply to you — and you can show the record.
+2. Your first message says who you are.
+3. **Honor "STOP"** immediately: never message that handle again unless they
+   opt back in. ZeroSettle enforces this for you (below); keep your own
+   opt-out list as well, for your other channels and your records.
+4. Don't message before 8 am or after 9 pm in the recipient's time zone for
+   anything promotional.
+
+ZeroSettle suspends lines used for unsolicited messaging. If you are unsure
+whether you have consent, you don't.
+
+## STOP is enforced
+
+When a contact texts **STOP** directly to your number, the server records it
+and blocks every number on your account from reaching them:
+
+- **What counts:** the whole message, or its first sentence, is one of
+  `stop`, `stop all`, `stopall`, `unsubscribe`, `unsubscribe me`, `quit`,
+  `opt out`, `optout`, `opt-out`, `stop please`, `please stop`,
+  `stop texting me`, `stop messaging me`, or a supported phrase such as
+  "take me off your list", "remove me", "don't text me", "no more texts",
+  "wrong number" or "leave me alone". Matching uses the whole message or
+  first sentence, ignoring case, spacing, apostrophes and end punctuation;
+  a phrase appearing elsewhere in a longer sentence is not enough.
+  `CANCEL` and `END` are not currently recognized opt-out keywords. This same
+  parser applies to SMS on enabled accounts.
+- In group chats, STOP and other opt-out keywords are delivered as ordinary
+  messages, including when someone replies to or mentions your number.
+- **What is blocked:** texts, voice messages, photos and videos (`POST /send`),
+  reactions, typing indicators and name-and-photo shares to that handle all
+  return `403 recipient_opted_out` with `error.handle` and
+  `error.opted_out_at`. Nothing is sent and nothing is stored. The
+  console disables the conversation and says when they texted STOP.
+  A [group chat](/imessage/group-chats) with them in it is blocked too: sends into
+  it are refused the same way until they are removed from it or text START.
+- **You still receive everything.** The STOP itself, and anything they send
+  afterwards, arrives on your webhook and stream like any other message.
+- **Opting back in:** the contact texts **START** (or `unstop`). If they ask
+  you some other way, contact ZeroSettle and we can clear it.
+- **Who has opted out:** `GET /api/imessage/opt-outs` returns
+  `{"opt_outs": [{"handle": "+18055559876", "opted_out_at": "2026-09-28T17:04:11Z"}]}`,
+  and the [live stream](/imessage/live-stream-sse) sends an `optout` event on each STOP
+  and START. If your account has more than one number, each opt-out and each
+  `optout` event also carries `line` and `line_id`: the line the STOP or START
+  came in on. To get them on your webhook too, register it with
+  `"optout_events": true` ([opt-out events](/imessage/webhooks-step-by-step#opt-out-events)).
+- **Only STOPs received since this enforcement launched are recorded.**
+  Anyone who texted STOP before then is not on the list and is not blocked,
+  so keep honoring those earlier opt-outs yourself.

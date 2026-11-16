@@ -3202,10 +3202,8 @@
                       "type": "integer"
                     },
                     "reconciliation_id": {
-                      "type": [
-                        "integer",
-                        "null"
-                      ],
+                      "type": "integer",
+                      "nullable": true,
                       "description": "Present when a `link_token` was sent. For a `zs_anon_` `previous_user_id` it is an integer on a merge and `null` otherwise."
                     }
                   }

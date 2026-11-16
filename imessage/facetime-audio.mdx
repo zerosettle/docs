@@ -1,0 +1,735 @@
+---
+title: FaceTime Audio
+description: "Place and answer FaceTime Audio calls from your ZeroSettle number."
+---
+
+Place and answer FaceTime Audio calls from your ZeroSettle number. The person
+you call gets an ordinary one-to-one FaceTime Audio call from your line's
+number. Your side of the call is either a person in a browser (the ZeroSettle
+console's call button, or your own web app with the ZeroSettle calls SDK) or
+your own server, which sends and receives the call's audio itself, for
+example to run an AI voice agent (see
+[Server-side audio](/imessage/facetime-audio#server-side-audio)).
+
+> ZeroSettle enables FaceTime Audio by default for new subscriptions and
+> additional numbers as their phones come online with a compatible client.
+> `GET /api/imessage/line` includes `"facetime_audio": true` when the account
+> has access. A calling request for an account without access returns
+> `403 facetime_disabled`.
+
+## Integration prompt
+
+Paste into your coding agent in the repository of the web app that will place
+calls. For a server that handles the audio itself, follow
+[Server-side audio](/imessage/facetime-audio#server-side-audio) instead.
+
+```text Agent prompt
+Add ZeroSettle FaceTime Audio calling to this web app. The complete contract is https://portal.zerosettle.io/docs/facetime-audio.md; read it first and implement only what it documents.
+
+Configuration (server-side secrets only): CALLS_BASE_URL=https://portal.zerosettle.io/calling and ZEROSETTLE_API_KEY (our existing ZeroSettle API key, the same bearer the iMessage API uses). The key must never reach the browser, source code, or logs.
+
+1. Calling proxy. Add a backend route, for example /zerosettle/calling/*, that forwards only these requests to CALLS_BASE_URL: GET /v1/me, GET /v1/lines, GET /v1/calls, GET /v1/calls/{id}, POST /v1/calls, POST /v1/calls/{id}/media-session, /start, /answer and /end. The SDK never sends cookies, so the route authenticates our signed-in user from "Authorization: Bearer <our own app token>" (the token the SDK's getToken returns), then replaces that header with "Bearer ZEROSETTLE_API_KEY". Forward X-Client-Session, Idempotency-Key, the query string and the JSON body unchanged, and return the status and body unchanged; never answer with a redirect (the SDK refuses redirects). The calling API does not accept cross-origin browser requests, so the browser always goes through this route.
+2. Line. GET /v1/lines and pick the line by its number; use its id as line_id.
+3. Call UI. Serve zerosettle-calls.mjs from our own site. Create a CallsClient whose baseUrl is the proxy route, whose getToken returns a non-empty token from our own app, and whose sessionId is kept in sessionStorage so a reload keeps control of the call; and a BrowserCall for the UI. Call dial({lineId, to}) for outbound calls (it creates the call, joins its media session, waits for the line's audio and starts it) and answer({id}) for an inbound ringing call from a click handler, then setMuted and end. Wire onPlayback: when it reports false, show a button that calls enableAudio(). After a reload, rejoin a live call with connect(call) within 15 seconds. Keep the call page open while a call is live: if its audio leaves for about 15 seconds the line hangs up. Show readableError(error) to the user.
+4. Events. Run one event consumer on our server: GET /v1/events?after=<cursor> on an interval (or the /v1/events/stream WebSocket). Persist the cursor after processing and deduplicate by event id. Record call.ended outcomes. For inbound calls, the browser polls GET /v1/calls?line_id=<line> through the proxy every 1–2 seconds (or gets the call id from our own push channel on call.incoming), picks a call with direction "inbound", status "ringing" and can_control true, and shows an Answer button that calls answer({id}).
+5. Errors. Handle both error shapes ({"error":{"code","message"}} and {"detail": ...}). Retry line_not_ready and gateway_media_not_ready after a short wait; never retry facetime_disabled or recipient_opted_out.
+
+There are no call webhooks. Use the one ZeroSettle API key for every request; a call can be ended only with the X-Client-Session that controls it. Add tests against a mocked calling API for dial, answer, end, a busy line, and an event replay. Place real test calls only to numbers whose owners agreed.
+```
+
+## What works today
+
+- **Person-to-person calls.** An outbound call rings the destination as a
+  normal FaceTime Audio call from your line's number. An incoming FaceTime
+  Audio call to your line rings in the console and through the API, and a
+  person answers it in a browser or your server answers it.
+- **Server-side audio:** your backend joins the call's audio with a LiveKit
+  realtime SDK, sends 48 kHz PCM and receives the other person's audio, for
+  an AI voice agent or a recorder.
+- **Call control over REST:** list lines, create and end calls and read
+  their state; start and answer once your side has joined the call's audio.
+- **Call events** by polling `GET /v1/events` or holding the
+  `/v1/events/stream` WebSocket.
+- **Call history** for each conversation: `GET /api/imessage/calls`.
+
+Not available yet:
+
+- **Call webhooks.** Call events are read from `/v1/events` or the event
+  stream; nothing is POSTed to your server.
+- FaceTime links, group calls, and video.
+
+Destinations can be E.164 phone numbers or FaceTime email addresses.
+Outbound email calling requires an updated line: its `GET /v1/lines`
+`capabilities.email_destinations` must be `true`. If it is absent or false,
+ask ZeroSettle to update the line. Incoming email callers can still be
+answered and appear in call history.
+
+One line carries one call at a time, and a call ends automatically after 4
+hours (`maximum_call_duration`).
+
+## Base URL and authentication
+
+```text
+CALLS_BASE_URL=https://portal.zerosettle.io/calling
+ZEROSETTLE_API_KEY=<your ZeroSettle API key: Settings → API key in the console>
+```
+
+Every request takes your existing ZeroSettle API key, the same bearer the
+iMessage API uses, and a client session:
+
+```http
+Authorization: Bearer pt_mcp_…
+X-Client-Session: <a stable ID for this worker or browser tab>
+```
+
+`X-Client-Session` is 1–128 ASCII characters with no spaces (codes 33–126).
+It decides who controls a call: the session that creates or claims a call is
+its only controller, so send the same value for every request about one call,
+including a reconnect and `/end`. A request about that call from any other
+session answers `409 call_owned`, so a server that needs to end a call a
+browser placed must record that browser's session and send it, or create the
+call itself and hand its session to the browser. Without the header the
+session is `api`, and every caller that omits it shares that one controller.
+Use one API key for everything about a call: a call created with one team
+member's key cannot be controlled with another's.
+
+Your key is the whole account: there is no account header and no key scope to
+choose. The key needs the account's active subscription (`402` otherwise) and
+FaceTime Audio turned on (`403 facetime_disabled` otherwise).
+
+Calls are paid in your account's credits: $0.02 per answered minute, or one
+credit for every 150 answered seconds, inbound and outbound. Unanswered calls
+are free, and no call is rounded up; part of a credit carries over to the next
+call. The console's credits sheet shows FaceTime Audio as its own line item
+with your rate. Starting a call needs at least one credit (`402
+ai_credits_exhausted` otherwise); a call in progress is never cut for credits.
+
+JSON bodies use `Content-Type: application/json`. Lists answer
+`{"data": [...]}`; call actions answer the call object. There is no OpenAPI
+document; this page is the contract.
+
+## Lines
+
+```http
+GET /v1/lines
+```
+
+<CodeGroup>
+
+```bash cURL
+curl -s "$CALLS_BASE_URL/v1/lines" \
+  -H "Authorization: Bearer $ZEROSETTLE_API_KEY" \
+  -H "X-Client-Session: $CLIENT_SESSION"
+```
+
+```json Response
+{"data": [{
+  "id": "ab12cd34ef56",
+  "name": "ab12cd34ef56",
+  "number": "+18055550100",
+  "readiness": "ready",
+  "active_call_id": null,
+  "draining": false,
+  "media_status": "unavailable",
+  "unavailable_reason": null,
+  "capabilities": {"…": "…"}
+}]}
+```
+
+</CodeGroup>
+
+Only the account's numbers that ZeroSettle set up for calling appear. `number`
+is the line's own number (the one people text and call). `id` is the calling
+line ID: pass it as `line_id`. It is not the iMessage API's `ln_` ID or the
+line's number. `capabilities.email_destinations` is `true` when the line
+supports outbound email destinations. Treat a missing value as false; the
+other capability fields are diagnostic details.
+
+| `readiness` | Meaning |
+| --- | --- |
+| `ready` | Idle and able to place or take a call. |
+| `busy` | Has a call: `active_call_id` names it. |
+| `not_ready` | Online but not idle yet (for example just after a call), or `draining`. |
+| `offline` | ZeroSettle has not heard from the line in the last 15 seconds. |
+
+`media_status` is the line's side of the current call's audio: `unavailable`,
+`connecting`, `ready`, `reconnecting`, or `failed`.
+
+`GET /v1/me` reports the account's calling `line_ids` and the
+`controller_id` your `X-Client-Session` maps to. Its other fields are
+informational.
+
+## The call object
+
+```json
+{
+  "id": "call_6f1c…",
+  "line_id": "ab12cd34ef56",
+  "to": "+14155550123",
+  "from": "+18055550100",
+  "direction": "outbound",
+  "status": "active",
+  "media_status": "ready",
+  "reason": null,
+  "native_call_id": "…",
+  "controller_session_id": "ctl_…",
+  "can_control": true,
+  "created_at": "2026-11-02T18:04:11Z",
+  "updated_at": "2026-11-02T18:04:30Z",
+  "answered_at": "2026-11-02T18:04:29Z",
+  "ended_at": null
+}
+```
+
+For an inbound call `from` is the caller and `to` is your line's number.
+`can_control` is `true` when your `X-Client-Session` controls the call or no
+session has claimed it yet. `native_call_id` is an opaque ID for the FaceTime
+call itself.
+
+`status` moves `preparing → dialing → ringing → active → ending → ended`. An
+incoming call starts at `ringing`. `answered_at` is set when the call
+connects. A call that ends carries a `reason`. `reason` can be set before the
+call ends (for example `reconciliation_required` while the line confirms the
+call's state); the call has ended only when `status` is `ended`.
+
+| `reason` | Meaning |
+| --- | --- |
+| `completed` | The call connected and then ended. |
+| `cancelled` | Ended by `POST /end` before it connected. |
+| `no_answer` | Rang without being answered. |
+| `call_not_connected` | Dialed, but there is no evidence the other side rang. |
+| `preparation_expired` | Created but not started within 120 seconds. |
+| `start_expired` | Started, but the line did not pick up the request within 30 seconds. |
+| `controller_disconnected` | The controlling session's audio (browser or server) was gone from the room for about 15 seconds. |
+| `native_media_stalled` | The call's audio stopped flowing for about 5 seconds. |
+| `maximum_call_duration` | The call reached the 4-hour limit. |
+
+Other reasons can appear (for example `native_media_failed` or
+`credential_revoked`); treat an unknown reason on an `ended` call as a call
+that ended.
+
+## Place a call
+
+1. Pick a line with `readiness: "ready"` and save an idempotency key for this
+   attempt.
+2. Create the call with `POST /v1/calls`. It reserves the line and does not
+   dial yet.
+3. Join the call's audio: `POST /v1/calls/{id}/media-session` (see
+   [Media session](/imessage/facetime-audio#media-session)), connect, and publish a
+   microphone track.
+4. Wait for the line's audio: poll `GET /v1/lines` until your line shows
+   `active_call_id` equal to this call and `media_status: "ready"`. This
+   usually takes a few seconds; the SDK waits up to 25.
+5. Dial with `POST /v1/calls/{id}/start`, then watch the call
+   (`GET /v1/calls/{id}` or events) through `ringing` to `active`.
+
+`BrowserCall.dial()` in the SDK runs steps 2–5 for you.
+
+```http
+POST /v1/calls
+```
+
+```bash
+curl -s -X POST "$CALLS_BASE_URL/v1/calls" \
+  -H "Authorization: Bearer $ZEROSETTLE_API_KEY" \
+  -H "X-Client-Session: $CLIENT_SESSION" \
+  -H "Idempotency-Key: $ATTEMPT_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{"line_id":"ab12cd34ef56","to":"+14155550123"}'
+```
+
+The answer is `202` with the call in `preparing`. `to` is an E.164 phone
+number or a FaceTime email address, for example `person@example.com`.
+Pass an email address unchanged, without a display name or `mailto:` prefix.
+Outbound email requires `capabilities.email_destinations: true` on the line.
+`Idempotency-Key` (1–200 characters) is required: a retry with the
+same key and body returns the same call, and the same key with a different
+body is `409 idempotency_conflict`. If the response is lost, retry with the
+same key; never create a second call for the same attempt. A call left in
+`preparing` ends after 120 seconds (`preparation_expired`).
+
+```http
+POST /v1/calls/{id}/start
+```
+
+The answer is `202` with the call in `dialing`. The body can be empty (`{}`),
+and repeating the request is safe.
+
+## Answer a call
+
+1. Learn of the call: a `call.incoming` event, or an inbound call with
+   `status: "ringing"` in `GET /v1/calls`.
+2. `POST /v1/calls/{id}/media-session`. This claims the call for your
+   `X-Client-Session` for 30 seconds; another session then gets
+   `409 call_owned`. Connect and publish a microphone track.
+3. Wait for the line's audio, as when placing a call.
+4. Answer with `POST /v1/calls/{id}/answer`.
+
+`BrowserCall.answer(call)` runs steps 2–4.
+
+```http
+POST /v1/calls/{id}/answer
+```
+
+The answer is `202`. The call becomes `active` when it connects. If the caller
+hung up first you get `409 call_not_ringing` or `call_ended`. An unanswered
+incoming call ends with `no_answer`.
+
+## End a call
+
+```http
+POST /v1/calls/{id}/end
+```
+
+Cancels, declines or hangs up, and is idempotent (`202`). An outbound call
+that was never dialed ends at once (`cancelled`). Otherwise the call is
+`ending` until the FaceTime call is down, then `ended`, and the line becomes
+free. To hang up on purpose, always call `/end`.
+
+Once a call is live, the browser or server that controls it must stay in the
+call's room with its microphone track published (muted is fine). If its audio is
+gone for about 15 seconds the line hangs up (`controller_disconnected`), and
+if the audio stops flowing for about 5 seconds it hangs up
+(`native_media_stalled`). To survive a reload or a dropped connection, rejoin
+within that window by requesting a new media session with the same
+`X-Client-Session` (`BrowserCall.connect(call)` does this in a browser).
+
+`GET /v1/calls?line_id=…&limit=…` (limit 1–200, default 50) lists recent calls
+newest first, inbound included. `GET /v1/calls/{id}` reads one.
+
+## Media session
+
+```http
+POST /v1/calls/{id}/media-session
+```
+
+```json
+{
+  "url": "wss://…",
+  "token": "<join token>",
+  "expires_at": 1793635500,
+  "room": "ft-call_6f1c…-1a2b3c4d5e6f",
+  "identity": "controller:call_6f1c…:ctl_…",
+  "gateway_identity": "gateway:ab12cd34ef56"
+}
+```
+
+Each call has one audio room, a LiveKit room: a browser joins it with the
+ZeroSettle calls SDK, a server with a LiveKit realtime SDK (see
+[Server-side audio](/imessage/facetime-audio#server-side-audio)). `url` and `token`
+join it as `identity`; connect within 5 minutes of the request (`expires_at`),
+and the token may publish only a microphone track. `gateway_identity` is the line's own participant: subscribe to its audio
+and accept audio from no other participant. Ask again with the same
+`X-Client-Session` to rejoin the same room after a disconnect, within the 15
+seconds described in [End a call](/imessage/facetime-audio#end-a-call).
+
+`/start` and `/answer` check the room first: `409 browser_media_not_ready`
+until your microphone track is published (muted counts), and
+`409 gateway_media_not_ready` until the line's audio has joined.
+
+## Server-side audio
+
+Your server can be your side of the call: it joins the call's media session
+itself, sends audio to the person you are calling and receives theirs. Use it
+for an AI voice agent (connect the audio to your own speech recognition,
+model and speech synthesis), an IVR or a recorder. No browser is involved,
+and everything else (creating, starting, answering, ending, events, history,
+credits) is the same API as above.
+
+The media session is a LiveKit room, so any LiveKit realtime SDK can join
+it. We test with the Python SDK (`pip install livekit httpx`; `livekit`
+1.2.0, Python 3.11); `@livekit/rtc-node` and the Go and Rust SDKs speak the
+same protocol.
+
+**Audio format.** Send and receive 16-bit signed PCM, mono, 48 kHz, in 20 ms
+frames (960 samples, 1,920 bytes). Publish one audio track with source
+`microphone` (the token allows nothing else) and subscribe only to the
+participant named `gateway_identity`. Ask the SDK for 48 kHz mono when you
+read that track: the SDK resamples for you, and a 16 or 24 kHz speech model
+needs resampling on your side.
+
+**Keep sending.** The line expects a frame from you at least every 2 seconds
+for the whole call: send silence between utterances, or mute the track
+(muted counts as present). If your frames stop for about 5 seconds the line
+hangs up (`native_media_stalled`); if your track or connection is gone for
+about 15 seconds it hangs up (`controller_disconnected`).
+
+**Who controls the call.** The `X-Client-Session` your server sends when it
+creates a call (or requests the media session for an incoming one) is the
+call's only controller: the room identity is minted for it, and every other
+session gets `409 call_owned`, including a browser or another worker on the
+same API key. Use one session ID per call (for example `agent-<uuid>`) and
+store it with the call ID. A worker that restarts mid-call rejoins by
+requesting a new media session with the same session ID within 15 seconds,
+and ends a call it lost with `POST /end` under that same ID.
+
+**Outbound:** `POST /v1/calls`, then the media session; connect, publish
+your track and start sending; wait until `GET /v1/lines` shows your line
+with `active_call_id` equal to the call and `media_status: "ready"`, then
+`POST /start`. The call is `active` (with `answered_at`) when the person
+picks up.
+
+**Inbound:** on `call.incoming` (or an inbound `ringing` call in
+`GET /v1/calls`), request the media session within the call's ring time:
+this claims it for your session for 30 seconds. Join, publish, wait for the
+line's audio as above, then `POST /answer`.
+
+**Hang-up confirmation.** `POST /v1/calls/{id}/end` answers `202` with the
+call in `ending` (or already `ended`). The FaceTime call is confirmed down
+when `GET /v1/calls/{id}` shows `status: "ended"`, which is also when the
+`call.ended` event for that ID arrives; in our tests that takes about 4
+seconds, and the line takes a new call a few seconds later. Leave the room only after that. When the
+other person hangs up, the call goes to `ended` with `reason: "completed"`
+by itself. Treat only `status: "ended"` on the call as final, never the room
+emptying.
+
+**Usage.** An ended call carries `answered_at` and `ended_at` (no
+`answered_at`: never answered, free). `GET /api/imessage/calls` returns the
+call with `duration_seconds`, the answered seconds that are billed: at the
+standard rate one credit per 150 seconds (an 18-second call is 0.12 credit),
+and a part credit carries over. The console's credits sheet shows the
+total under FaceTime Audio.
+
+A complete Python client, tested end to end against live lines (a dialer on
+one line and an answerer on another, each hearing the other's audio,
+followed by `/end` confirmation):
+
+```python
+"""Server-side FaceTime Audio call: your backend is the caller's other end.
+
+pip install httpx livekit   (Python 3.9+)
+Env: CALLS_BASE_URL, ZEROSETTLE_API_KEY.
+
+Audio is 48 kHz, mono, 16-bit PCM in 20 ms frames (960 samples) both ways.
+`speak()` returns the next frame to send (bytes of 1920) or None for silence;
+`hear(frame)` receives each frame of the other person's audio.
+"""
+
+import asyncio
+import os
+import uuid
+
+import httpx
+from livekit import rtc
+
+RATE, SAMPLES = 48_000, 960
+SILENCE = bytes(SAMPLES * 2)
+
+
+class CallAgent:
+    def __init__(self, session_id=None):
+        # One X-Client-Session per call: it alone controls the call. Store it
+        # with the call id so a restarted worker can rejoin or end the call.
+        self.session_id = session_id or "agent-" + uuid.uuid4().hex
+        self.api = httpx.AsyncClient(
+            base_url=os.environ["CALLS_BASE_URL"], timeout=10,
+            headers={"Authorization": "Bearer " + os.environ["ZEROSETTLE_API_KEY"],
+                     "X-Client-Session": self.session_id})
+        self.room, self.call, self.tasks = rtc.Room(), None, []
+
+    async def request(self, method, path, **kwargs):
+        response = await self.api.request(method, path, **kwargs)
+        body = response.json() if response.content else {}
+        if response.status_code >= 400:
+            error = body.get("error") or {}
+            raise RuntimeError(f"{response.status_code} {error.get('code') or body.get('detail')}")
+        return body
+
+    async def join(self, speak, hear):
+        """Join the call's audio room: publish our audio, receive the line's."""
+        media = await self.request("POST", f"/v1/calls/{self.call['id']}/media-session")
+
+        @self.room.on("track_subscribed")
+        def subscribed(track, _publication, participant):
+            # Accept audio only from the line itself.
+            if participant.identity == media["gateway_identity"] and track.kind == rtc.TrackKind.KIND_AUDIO:
+                self.tasks.append(asyncio.ensure_future(self._receive(track, hear)))
+
+        await self.room.connect(media["url"], media["token"])
+        source = rtc.AudioSource(RATE, 1, queue_size_ms=60)   # small queue: low speaking latency
+        track = rtc.LocalAudioTrack.create_audio_track("agent", source)
+        await self.room.local_participant.publish_track(
+            track, rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE))
+        self.tasks.append(asyncio.ensure_future(self._send(source, speak)))
+        # The line's audio joins within a few seconds; /start and /answer need it.
+        for _ in range(50):
+            lines = (await self.request("GET", "/v1/lines"))["data"]
+            line = next(l for l in lines if l["id"] == self.call["line_id"])
+            if line["active_call_id"] == self.call["id"] and line["media_status"] == "ready":
+                return
+            await asyncio.sleep(0.5)
+        raise RuntimeError("the line's audio did not join")
+
+    async def _send(self, source, speak):
+        # Send a frame every 20 ms for the whole call, silence included: the
+        # line hangs up if our audio stops for about 5 seconds.
+        while True:
+            pcm = speak() or SILENCE
+            await source.capture_frame(rtc.AudioFrame(pcm, RATE, 1, SAMPLES))
+
+    async def _receive(self, track, hear):
+        async for event in rtc.AudioStream(track, sample_rate=RATE, num_channels=1, frame_size_ms=20):
+            hear(bytes(event.frame.data.cast("B")))
+
+    async def dial(self, line_id, to, speak, hear):
+        self.call = await self.request("POST", "/v1/calls", json={"line_id": line_id, "to": to},
+                                       headers={"Idempotency-Key": "dial-" + uuid.uuid4().hex})
+        await self.join(speak, hear)
+        self.call = await self.request("POST", f"/v1/calls/{self.call['id']}/start")
+        return self.call
+
+    async def answer(self, call_id, speak, hear):
+        self.call = await self.request("GET", f"/v1/calls/{call_id}")
+        await self.join(speak, hear)
+        self.call = await self.request("POST", f"/v1/calls/{call_id}/answer")
+        return self.call
+
+    async def wait(self, *statuses, timeout=120):
+        """Poll the call until its status is one of `statuses`."""
+        for _ in range(int(timeout * 2)):
+            self.call = await self.request("GET", f"/v1/calls/{self.call['id']}")
+            if self.call["status"] in statuses or self.call["status"] == "ended":
+                return self.call
+            await asyncio.sleep(0.5)
+        raise RuntimeError("timed out waiting for " + "/".join(statuses))
+
+    async def hang_up(self):
+        """End the call and return it once the FaceTime call is confirmed down."""
+        if self.call["status"] != "ended":
+            await self.request("POST", f"/v1/calls/{self.call['id']}/end")
+        return await self.wait("ended", timeout=60)
+
+    async def close(self):
+        for task in self.tasks:
+            task.cancel()
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await self.room.disconnect()
+        await self.api.aclose()
+```
+
+Using it from an agent: put your speech synthesis output, as 20 ms frames,
+on a queue that `speak` reads, and feed `hear` into your speech recognition
+or realtime model.
+
+```python
+import asyncio, collections
+from zerosettle_call_agent import CallAgent
+
+outgoing = collections.deque()           # 1,920-byte frames from your TTS
+
+def speak():
+    return outgoing.popleft() if outgoing else None   # None sends silence
+
+def hear(frame):
+    my_speech_pipeline.feed(frame)       # 48 kHz mono PCM16, 20 ms
+
+async def main():
+    agent = CallAgent()                  # save agent.session_id with the call
+    try:
+        await agent.dial("ab12cd34ef56", "+14155550123", speak, hear)
+        call = await agent.wait("active", timeout=90)
+        if call["status"] == "active":
+            await my_conversation_done()  # your agent decides when to hang up
+        call = await agent.hang_up()     # returns once status is "ended"
+        print(call["reason"], call["answered_at"], call["ended_at"])
+    finally:
+        await agent.close()
+
+asyncio.run(main())
+```
+
+## ZeroSettle calls SDK
+
+The SDK is the browser module the console's call button uses:
+[zerosettle-calls.mjs](https://portal.zerosettle.io/assets/zerosettle-calls.mjs). It exports
+`CallsClient`, `BrowserCall`, `CallsError`, `EventSubscription`,
+`callOutcome` and `readableError`, and bundles everything it needs to join a
+media session.
+
+The calling API does not accept cross-origin browser requests, and your API
+key must never reach a browser. Serve the module from your own site and point
+`CallsClient` at a route on your backend that forwards to `CALLS_BASE_URL`
+with your key (see the integration prompt).
+
+```js
+import { CallsClient, BrowserCall, readableError } from "/js/zerosettle-calls.mjs";
+
+// Keep one session per tab across reloads, so the tab keeps control of its call.
+let sessionId = sessionStorage.getItem("zs-call-session");
+if (!sessionId) {
+  sessionId = crypto.randomUUID();
+  sessionStorage.setItem("zs-call-session", sessionId);
+}
+
+const client = new CallsClient({
+  baseUrl: "https://app.example.com/zerosettle/calling",   // your proxy route
+  getToken: async () => mySessionToken(),                  // non-empty token from your own app, checked by the proxy
+  sessionId,
+});
+const call = new BrowserCall({
+  client,
+  audioContainer: document.getElementById("call-audio"),
+  onChange: (state) => render(state),   // {call, roomStatus, muted, microphoneActive, mediaStatus, ...}
+  onNotice: (message) => showNotice(message),
+  onPlayback: (canPlay) => enableAudioButton.hidden = canPlay,
+});
+enableAudioButton.onclick = () => call.enableAudio();
+
+callButton.onclick = async () => {
+  try {
+    await call.dial({ lineId: "ab12cd34ef56", to: "+14155550123" });
+  } catch (error) {
+    showNotice(readableError(error));
+  }
+};
+// Later: await call.setMuted(true); await call.end();
+// Incoming: answerButton.onclick = () => call.answer({ id: ringingCallId });
+// After a reload: await call.connect(liveCall);
+```
+
+Pages need HTTPS (or localhost) for the microphone. `CallsClient` picks a
+random `X-Client-Session` per instance unless you pass `sessionId`; without a
+saved one, a reloaded page cannot end or rejoin its own call (`call_owned`).
+The SDK sends no cookies and refuses redirects: `getToken` must return a
+non-empty token (otherwise every request fails `unauthorized` before it is
+sent), your proxy authenticates the user from `Authorization: Bearer <that
+token>` and replaces it with your ZeroSettle key, and it must not answer with
+a redirect. While a call is live, `BrowserCall` polls its state every 2
+seconds and leaves the room when the call ends or another session controls
+it.
+
+Browsers may block audio playback until the user clicks. `dial()` and
+`answer()` wait for the line's audio and for playback, and fail after 25
+seconds with "Speaker audio was not enabled" if playback stays blocked. Call
+them from a click handler, and when `onPlayback` reports `false`, show a
+button that calls `enableAudio()`.
+
+| `BrowserCall` method | What it does |
+| --- | --- |
+| `dial({lineId, to, idempotencyKey?})` | Creates the call, joins its audio, waits for the line and starts it. Resolves to the call. |
+| `answer({id})` | Claims, joins and answers an inbound ringing call. Resolves to the call; does nothing if the call is no longer inbound and ringing. |
+| `end()` | Ends the current call. |
+| `setMuted(muted)` | Mutes or unmutes your microphone (the track stays published). |
+| `connect(call)` / `reconnect(call)` | Rejoins a live call your session controls, for example after a reload. |
+| `cancel()` | Stops audio setup and ends the current call if your session controls it. |
+| `enableAudio()` | Unblocks speaker audio; call it from a click. |
+| `prepare({lineId, to, idempotencyKey?})` then `start()` | Splits `dial()` into create and start. |
+| `dispose()` | Leaves the room and stops the session. |
+
+The SDK accepts idempotency keys of 1–200 letters, digits, `_`, `.`, `:` and
+`-` (stricter than the API), and generates one when you omit it.
+
+## Events
+
+```http
+GET /v1/events?after=<cursor>&limit=<1-500>
+```
+
+```json
+{"data": [{
+  "id": "evt_9a…",
+  "sequence": 1042,
+  "type": "call.incoming",
+  "created_at": "2026-11-02T18:10:02Z",
+  "data": {"id": "call_…", "line_id": "ab12cd34ef56", "from": "+14155550123", "to": "+18055550100",
+           "direction": "inbound", "status": "ringing", "media_status": "unavailable", "...": "..."}
+}], "cursor": 1042}
+```
+
+Events cover every calling line on the account, oldest first after `after`.
+`data` is the call as it was at that moment (without `can_control`). Persist
+`cursor` after processing a page, pass it back as `after`, and deduplicate by
+`id`. Types: `call.created`, `call.dialing`, `call.ringing`, `call.incoming`,
+`call.answering`, `call.active`, `call.media_changed`, `call.ending`,
+`call.ended`, `call.reconciliation_required`. Ignore types you don't know.
+
+For live delivery, open `wss://portal.zerosettle.io/calling/v1/events/stream`
+with the WebSocket subprotocol `zerosettle.events.v1` and no query string.
+Within 5 seconds send:
+
+```json
+{"type":"subscribe","authorization":"Bearer pt_mcp_…","tenant_id":null,"after":1042,"limit":100,"binding":null}
+```
+
+The server answers `{"type":"ready","cursor":…,"binding":"…","reset":false}`,
+then sends `{"type":"events","data":[…],"cursor":…}` pages (the same event
+objects as above). Acknowledge each page within 10 seconds with
+`{"type":"ack","cursor":<that cursor>}`; the next page follows the ack.
+`{"type":"heartbeat","cursor":…}` arrives every 2 seconds while idle. Keep the
+`binding` and send it back when you reconnect: if your access changed, the
+server answers `reset: true` and replays from cursor 0. Server clients send no
+`Origin`; a browser may connect only from the ZeroSettle console.
+
+After the socket opens, an error arrives as
+`{"type":"error","error":{"code","message"}}` before it closes: `4400` invalid
+message, `4401` key no longer valid, `4403` access changed, `4408`
+acknowledgement timeout, `4429` more than 4 streams open for the same API key
+holder, `1013` temporarily unavailable. Connection attempts are also limited
+per client address (60 a minute): past that, or while the stream is not
+available, the handshake itself fails with no error message. Back off on any
+failed handshake or close, then reconnect from your saved cursor.
+
+## Call history
+
+```http
+GET /api/imessage/calls
+```
+
+This is the iMessage API (base `https://portal.zerosettle.io`, same key). It
+lists the account's calls newest first and keeps them after FaceTime Audio is
+turned off. Filters: `line_id` (the iMessage `ln_` ID or the line's number),
+`recipient` (the exact caller identifier), `limit` (1–200, default 100).
+Incoming caller identifiers can include names or international characters
+that cannot be used as outbound destinations. Preserve the identifier from
+the call and URL-encode it, including `+` when it occurs in an address.
+
+```json
+{"calls": [{
+  "id": "call_6f1c…", "line_id": "ln_…", "recipient": "+14155550123",
+  "direction": "outbound", "status": "ended", "reason": "completed",
+  "started_at": "2026-11-02T18:04:11+00:00", "answered_at": "2026-11-02T18:04:29+00:00",
+  "ended_at": "2026-11-02T18:09:40+00:00", "duration_seconds": 311
+}]}
+```
+
+## Errors
+
+Call-control errors answer:
+
+```json
+{"error": {"code": "line_busy", "message": "The line already has an active call"}}
+```
+
+Branch on `error.code` when it is present; account errors
+(`facetime_disabled`, `recipient_opted_out`) may also carry a `detail` string.
+Subscription (`402`), an account with no number (`403`) and request
+validation (`422`, for example an invalid `to` address or an unknown body
+field) answer FastAPI's `{"detail": …}` with no `error.code`. A `401` usually
+answers `{"detail": …}`; some answer `error.code: "unauthorized"`. Handle both
+shapes. The REST API has no rate limit and never answers `429`.
+
+| Status and code | What to do |
+| --- | --- |
+| `401` | The API key is missing, invalid or revoked. |
+| `402` | The subscription is not active; resubscribe in the console. |
+| `402 ai_credits_exhausted` | `POST /v1/calls` only: the account has no credits left. Buy credits in the console, then retry. |
+| `403` (no code) | The key's account has no ZeroSettle number. |
+| `403 facetime_disabled` | FaceTime Audio is not on for this account. Ask ZeroSettle. |
+| `403 recipient_opted_out` | The number texted STOP to your line. Do not call it. |
+| `404 line_not_found` | The `line_id` is not one of your calling lines. Use an `id` from `GET /v1/lines`. |
+| `404 call_not_found` | No such call on your account. |
+| `409 line_busy` | The line has a call. One call per line at a time. |
+| `409 line_offline` | The line is offline. Check `GET /v1/lines`; retry later. |
+| `409 line_not_ready` / `line_draining` | The line is not taking a new call right now. Right after a call ends this lasts a few seconds; retry. |
+| `409 idempotency_conflict` | The key was used for a different call. Use a new key for a new attempt. |
+| `409 call_owned` | Another `X-Client-Session` controls the call. |
+| `409 controller_not_ready` | Your claim on the call lapsed (an incoming call's 30 seconds). Request a new media session. |
+| `409 browser_media_not_ready` | Publish your microphone track (a browser's or your server's) in the call's room, then retry. |
+| `409 gateway_media_not_ready` | The line's audio has not joined the room yet. Retry after a moment; right after a previous call this can take a few seconds. |
+| `409 line_not_reserved` | The call no longer holds the line. Read the call; it has ended. |
+| `409 call_ended` | The call is ending or has ended. |
+| `409 call_not_ringing` | The incoming call stopped ringing before you answered. |
+| `409 wrong_direction` | Use `/start` for outbound calls and `/answer` for inbound ones. |
+| `422 idempotency_key_required` | Send an `Idempotency-Key` header with `POST /v1/calls`. |
+| `422 invalid_client_session` | `X-Client-Session` must be 1–128 ASCII characters with no spaces. |
+| `503` (any code, for example `calling_unavailable`, `database_unavailable`, `media_service_unavailable`, `media_unconfigured`) | Temporary. Retry with backoff; for a create, keep the same idempotency key. |

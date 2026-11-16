@@ -1,0 +1,96 @@
+---
+title: "MCP"
+---
+
+Add ZeroSettle to your AI coding agent — Claude, Cursor, or any MCP client —
+and it can sign you up, wire your server to your number, verify the wiring,
+and text from your line, all from inside your editor. See
+[Connect your AI agent](/imessage/connect-your-ai-agent) for one-click install and
+the per-use-case prompts.
+
+The connector gets you a number and sets up the server that will use this
+API, and an agent can text from the line with it: to your own number for a
+test, and to people who asked to hear from you. A server receives on a
+[webhook](/imessage/webhooks-step-by-step) and replies with
+[`POST /api/imessage/send`](/imessage/send-a-message); an agent on the connector sends
+with `send_imessage` and reads replies with `list_messages` (with the hosted
+AI agent on, it answers those replies too; see [AI agent](/imessage/ai-agent)). STOP, the
+new-contact limits and every other rule of `POST /api/imessage/send` apply to
+both.
+
+An account signed in on the ZeroSettle host sees these tools at `/mcp`.
+Use `/mcp?integrations=hubspot` to also enable the optional
+[HubSpot contact tools](/imessage/crm-integrations#hubspot). Every outcome — including `402`, `409
+no_conversation`, and a sign-up that finds no free number — comes back as a
+text result with `isError: true` rather than an HTTP error. The exceptions
+are the sending limits (`429 new_contact_limit`, `daily_limit`,
+`monthly_limit`): they stay HTTP 429 with `Retry-After`, as in the REST API,
+so wait and retry later. `get_line`,
+`sign_up`, `set_profile`, `send_test_message`, `subscribe`, and `read_docs`
+work before the subscription; the rest need an active one.
+
+**Status and sign-up** (the console's onboarding, as tools; an account with no
+number yet can call the first two):
+
+| Tool | Arguments | Does |
+|---|---|---|
+| `get_line` | — | Where you stand (`onboarding`: `sign_up` / `claim` / `test` / `subscribe` / `ready`, with a `next` hint), `active`, `handle` (the line's number), `your_number` (the one you signed in with), the profile, webhook URL and `last_delivery`, the last 30 days' usage, `api_base`; `ai_credits` once you use the hosted AI agent. |
+| `sign_up` | `use_cases`, `invite?` | Take a free number and claim it for `use_cases` (`sign_in`, `branded_messages`, `ai_agent`); with `invite` (the token from a signup link), the number that link is for. Idempotent once you have one. A self-serve number must be paid for by `self_serve_deadline`. |
+| `set_profile` | `name`, `image_b64?` | Same as `PUT /api/imessage/profile`; works before paying. |
+| `send_test_message` | `to?` | The onboarding test text to your own number (default: the one you signed in with), sharing the name and photo; marks onboarding complete. |
+| `subscribe` | — | A hosted Stripe Checkout link to open in a browser. The Stripe webhook activates the line; `get_line` then shows `active: true`. Says so when already active. |
+
+**Building** (the server that owns the conversation):
+
+| Tool | Arguments | Does |
+|---|---|---|
+| `read_docs` | `section?` | This reference: the table of contents, or a section by number or keyword (`support`, `agent`, `retention`, `sign in`, `webhook`, `compliance`, `group`). |
+| `create_api_key` | `label?` | A `zs_mcp_` bearer for your server, shown once. Same as the console's mint (`POST /account/mcp/token`). |
+| `set_webhook` | `url`, `typing_events?`, `instant_typing?` | Same as `PUT /api/imessage/webhook`: registers the receiver and returns the signing secret once (calling again rotates it). |
+| `clear_webhook` | — | Same as `DELETE /api/imessage/webhook`. |
+| `test_webhook` | — | One signed synthetic `message.received` (id `0`, `"test": true`, `X-ZeroSettle-Test: 1`, from your own number) to the registered URL; reports status, latency, error, and the response's first 200 chars. Not retried, not recorded as a delivery. |
+
+**Messaging** (an agent texting from the line, or a test of your build):
+
+| Tool | Arguments | Does |
+|---|---|---|
+| `send_imessage` | `to`, `text?`, `image_b64?`, `audio_b64?`, `poll?` | Same as `POST /api/imessage/send`, with its limits and consent rules: to your own number for a test, or to people who asked to hear from you. |
+| `list_conversations` | — | Same as `GET /api/imessage/conversations`. |
+| `list_messages` | `handle?`, `after_id?`, `limit?` | Same as `GET /api/imessage/messages`: their replies, and whether your server answered. |
+| `show_typing` | `to`, `state?`, `ttl_s?` | Same as `POST /api/imessage/typing`. |
+
+**Managed by AI Agent** (no server; see [AI agent](/imessage/ai-agent)):
+
+| Tool | Arguments | Does |
+|---|---|---|
+| `get_agent` | — | Same as `GET /api/imessage/agent`: who answers (`managed_by`) and the agent's settings, with `ai_credits` once you use it. |
+| `set_agent` | `managed_by?`, `business_context?`, `first_message?`, `first_message_enabled?`, `goal?`, `goal_enabled?`, `link?`, `triggers?`, `timezone?` | Same as `PUT /api/imessage/agent`: only what you pass changes. |
+| `start_conversation` | `to`, `name?` | Same as `POST /api/imessage/agent/start`: the agent opens the conversation (an error result, with the buy link, when the account is out of [credits](/imessage/ai-agent#credits)). |
+
+An account with more than one number also sees an optional `line` argument
+on `send_imessage`, `show_typing`, `list_conversations`, `list_messages` and
+`set_profile` and the three agent tools: a line's `line_id` or its number, the
+same selector as the REST `line_id` / `line` (see
+[Choosing the line](/imessage/your-imessage-number#choosing-the-line)). On
+`set_profile` and the agent tools it means that line's group, and `group` (a
+`group_id`) names the group directly.
+
+When one of your numbers has [group chats](/imessage/group-chats) on,
+`send_imessage`, `list_messages` and `show_typing` also take `chat_id`, and
+`create_group_chat`, `list_group_chats` and `update_group_chat` are added
+(see [Group chats](/imessage/group-chats#mcp)). Otherwise the tools are exactly the
+ones above.
+
+Tapbacks, name-and-photo sharing, contact lookup, videos, and attachments
+are REST only (`/api/imessage/reactions`, `/profile/share`, `/videos`,
+`/messages/{id}/image`…): a server uses those, not the connector.
+
+**Prompts** (`prompts/list`): `get-started`, `build-support-bot`,
+`build-agent`, `build-retention-flow`, `build-sign-in` — see
+[Connect your AI agent](/imessage/connect-your-ai-agent).
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_line","arguments":{}}}' \
+  $BASE/mcp
+```

@@ -1,0 +1,116 @@
+---
+title: "ZeroSettle iMessage API"
+sidebarTitle: "Overview"
+---
+
+Send and receive iMessages through a real phone number, from code. New signups
+include [SMS fallback](/imessage/send-a-message#sms-fallback), so the same number and API
+also send and receive plain-text SMS. This page is written for agents and
+developers integrating the API.
+
+[Get a number](https://portal.zerosettle.io/imessage) · [Read as markdown](https://portal.zerosettle.io/docs.md)
+
+<Tip>
+
+Agents: fetch the raw markdown at [`GET /docs.md`](https://portal.zerosettle.io/docs.md) (no auth) and read it
+in one go. Every example uses `$BASE` (the API origin, e.g.
+`https://portal.zerosettle.io`) and `$TOKEN` (your bearer).
+
+</Tip>
+
+
+## Set it up with your AI agent
+
+Paste this into Claude Code, Cursor, ChatGPT, Grok, or any agent with a shell.
+It wires up everything: the token check, a signed webhook receiver, a tunnel,
+registration, and a test message. Fill in the two placeholders first.
+
+```text Agent prompt
+You are wiring up a ZeroSettle iMessage line for me. Base URL: https://portal.zerosettle.io
+My API token: PASTE_TOKEN_HERE
+Where my code runs: DESCRIBE_YOUR_STACK (e.g. "a Python FastAPI app", "a Next.js app on Vercel", "nothing yet — pick something simple")
+
+Do this end to end, and show me each result:
+1. Read the full API reference at {BASE}/docs.md before writing any code.
+2. Verify the token with GET {BASE}/api/imessage/line and tell me my line's number and whether it is paid. If you get 402, stop and tell me to subscribe in the console at {BASE}/imessage.
+3. Build a webhook receiver in my stack that: reads the raw request body; verifies X-ZeroSettle-Signature exactly as the docs describe (HMAC-SHA256 of "<t>.<raw body>", 300 s tolerance, constant-time compare); deduplicates on message.id; returns 200 within a second; and handles ONLY event == "message.received" (ignore message.sent, message.failed, and reaction.* except for logging). Persist inbound messages somewhere durable.
+4. Expose it on a public HTTPS URL (use cloudflared or ngrok if I have no deployment), then register it with PUT {BASE}/api/imessage/webhook. Store the returned secret in my environment as ZEROSETTLE_WEBHOOK_SECRET — it is shown once. Never print it into a chat transcript or commit it.
+5. Send me a test message with POST {BASE}/api/imessage/send to my own number (ask me for it), then confirm the message.sent event arrived at the webhook and that a reply from my phone arrives as message.received. Photos and voice messages go through the same endpoint (image_b64 / audio_b64, see the Attachments section); an inbound photo arrives as kind "image" with an image.url you fetch with the same bearer. A video (up to a minute) is uploaded first with POST {BASE}/api/imessage/videos and sent with video_id once it is ready, for 1 credit per 3 MB per recipient; an inbound video (1 per 3 MB too) arrives as kind "video" with a video.url that redirects to the file.
+6. Add a helper to react with POST {BASE}/api/imessage/reactions and a fallback poller using GET {BASE}/api/imessage/messages?after_id=… for when the webhook is down.
+7. Respect the limits: new contacts per number are 5 a day on Pro, and 3 per 15 minutes and 50 a day on Growth (people who text first don't count; each number allows 10,000 messages a day, sent and received, with known contacts); handle 429 by waiting error.retry_after_s and showing me error.message (on Pro it says how to get more: upgrade to Growth in the console, $199 a month per number); never send more than 2 messages (a burst within 5 minutes counts as one) to someone who hasn't replied — the API returns 403 awaiting_reply; send only text (no photos, videos or voice messages) to someone who has never replied — 403 attachment_before_reply; Every new signup includes SMS fallback. Eligible plain text prefers iMessage and falls back to SMS through the same send endpoint; read the SMS fallback section, including its separate first-SMS opt-out notice. GET /api/imessage/availability checks iMessage registration without sending; it does not report whether this account has SMS enabled. Treat 402 as "stop and tell me". Honor STOP/unsubscribe replies by never messaging that handle again (the API enforces it too: a send to them returns 403 recipient_opted_out; don't retry it). Only message people who consented — read the compliance section and remind me of it.
+When done, give me a short runbook: how to run it, where the secret lives, how to rotate the token, and how to check the last webhook delivery via GET {BASE}/api/imessage/line.
+```
+
+## Browse the docs
+
+<CardGroup cols={2}>
+  <Card title="Your iMessage number" href="/imessage/your-imessage-number">
+    ZeroSettle gives you a dedicated phone number on iMessage, backed by Apple hardware.
+  </Card>
+  <Card title="Authentication" href="/imessage/authentication">
+    `GET /api/imessage/line`
+  </Card>
+  <Card title="Quick start for an agent" href="/imessage/quick-start-for-an-agent">
+    The whole API in seven curls, in the order an integration uses them; run them top to bottom against a paid line to see every piece work before you write real code.
+  </Card>
+  <Card title="Send a message" href="/imessage/send-a-message">
+    One call sends a text from your line to a phone number or iMessage email and returns once the line accepts the message for sending. iMessage is preferred; accounts enabled for SMS fallback can send plain text as carrier SMS from the same number.
+  </Card>
+  <Card title="Attachments" href="/imessage/attachments">
+    A line sends three kinds of attachment: a voice message, a photo and a video.
+  </Card>
+  <Card title="Read messages" href="/imessage/read-messages">
+    Everything that happened on the line — both directions, every attempt — is stored and readable through the conversation list and the message history cursor.
+  </Card>
+  <Card title="Typing indicators" href="/imessage/typing-indicators">
+    Show the "…" bubble on the other party's screen while you work on a reply.
+  </Card>
+  <Card title="Retention offers" href="/imessage/retention-offers">
+    Catch a user at the moment they leave, and put a real offer on their Lock Screen before they have found the next app.
+  </Card>
+  <Card title="Customer support" href="/imessage/customer-support">
+    Give customers a support channel that is already on their phone, opens in one tap, and shows your name and logo.
+  </Card>
+  <Card title="Sign in with iMessage" href="/imessage/sign-in-with-imessage">
+    Sign a user in by proving they control an iMessage handle.
+  </Card>
+  <Card title="AI agent" href="/imessage/ai-agent">
+    Put a model behind your number.
+  </Card>
+  <Card title="AI agent in the console" href="/imessage/ai-agent-in-the-console">
+    Turn on AI replies without writing any code: the hosted AI agent answers every text to your number from a business context you write.
+  </Card>
+  <Card title="Webhooks, step by step" href="/imessage/webhooks-step-by-step">
+    A webhook is one HTTPS URL that ZeroSettle POSTs to for every message event on the line — exactly the same stream the console at /imessage renders.
+  </Card>
+  <Card title="Live stream (SSE)" href="/imessage/live-stream-sse">
+    A server-sent-events feed of everything happening on the line, for a browser tab or dashboard that wants to watch in real time without hosting a webhook; the console at /imessage is built on it.
+  </Card>
+  <Card title="Connect your AI agent" href="/imessage/connect-your-ai-agent">
+    Add ZeroSettle to Claude, Cursor, or any MCP client and let the agent do the whole job from inside your editor: sign you up for a number, then set up your server against this API for the use case you want — customer support, an iMessage agent, retention offers, or Sign in with iMessage — and verify it end to end.
+  </Card>
+  <Card title="MCP" href="/imessage/mcp">
+    Add ZeroSettle to your AI coding agent — Claude, Cursor, or any MCP client — and it can sign you up, wire your server to your number, verify the wiring, and text from your line, all from inside your editor.
+  </Card>
+  <Card title="Errors, limits, and compliance" href="/imessage/errors-limits-and-compliance">
+    The reference for what can go wrong and what is enforced: the one error shape every /api/imessage/* route uses, the full code table, the limits (new contacts, sizes, timeouts), and the consent rules you are responsible for.
+  </Card>
+  <Card title="CRM integrations" href="/imessage/crm-integrations">
+    Use your ZeroSettle number from your CRM or automation tool.
+  </Card>
+  <Card title="Group chats" href="/imessage/group-chats">
+    Every number can start an iMessage group with up to 31 people, send into it, read it, and rename it, add or remove members, or leave it.
+  </Card>
+  <Card title="Switch from Photon" href="/imessage/switch-from-photon">
+    Moving from Photon to ZeroSettle is one pass for your AI agent: it finds your Photon SDK calls and event listeners, rewrites them against this API, moves your webhook, and tests the result on your own phone before removing Photon.
+  </Card>
+  <Card title="Switch from Linq" href="/imessage/switch-from-linq">
+    Moving from Linq to ZeroSettle is one pass for your AI agent: it finds your Linq API calls and webhook handlers, rewrites them against this API, moves your webhook, and tests the result on your own phone before removing Linq.
+  </Card>
+  <Card title="Switch from Sendblue" href="/imessage/switch-from-sendblue">
+    Moving from Sendblue to ZeroSettle is one pass for your AI agent: it finds your Sendblue API calls and webhook handlers, rewrites them against this API, moves your webhook, and tests the result on your own phone before removing Sendblue.
+  </Card>
+  <Card title="FaceTime Audio" href="/imessage/facetime-audio">
+    Place and answer FaceTime Audio calls from your number: talk from a browser with the ZeroSettle calls SDK, or stream the audio to and from your own server for an AI voice agent.
+  </Card>
+</CardGroup>

@@ -1,0 +1,705 @@
+---
+title: "Send a message"
+---
+
+One call sends a text from your line to a phone number or iMessage email and
+returns once the line accepts the message for sending. iMessage is preferred;
+accounts enabled for [SMS fallback](/imessage/send-a-message#sms-fallback) can send plain
+text as carrier SMS from the same number. This endpoint also sends iMessage
+voice messages, photos, videos and polls.
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "text": "Hi from the line"}
+```
+
+- `to`: a phone number **or an email address** (up to 128 characters).
+  iMessage recipients must be registered with iMessage; SMS fallback supports
+  phone numbers only and requires an enabled account.
+  - Phone number: include a country code and it is honoured — as a leading `+`
+    (`+44…`), or an international dialing prefix (`00`/`011`). With no country
+    code the US is assumed, so a bare 10-digit number (or `1` + 10 digits)
+    becomes `+1…`.
+  - Email: sent to the Apple Account that uses that address for iMessage, e.g.
+    `{"to": "jane@example.com", "text": "Hi"}`. It is lowercased, and that is
+    the `handle` the conversation, webhooks and opt-outs use. The address must
+    be on someone's iMessage; there is no SMS or email fallback.
+- `text`: 1–4000 characters after trimming whitespace.
+- `image_b64` / `audio_b64` (optional): a photo or a voice message instead;
+  see [Attachments](/imessage/attachments).
+- `video_id` / `video_b64` (optional): a video instead (1
+  [credit](/imessage/ai-agent#credits) per 3 MB of the normalized file, rounded up,
+  at least 1, per recipient); see
+  [Send a video](/imessage/attachments#send-a-video).
+- `poll` (optional): `{"question": "…", "options": ["…", "…"]}` sends a poll
+  instead of text; see [Polls](/imessage/send-a-message#polls).
+- `reply_to` (optional): the `id` (or `guid`) of a message in this
+  conversation; the text, photo, video or poll is sent as an inline reply to
+  it, threaded under it in Messages. See [Replies](/imessage/send-a-message#replies).
+- `effect` (optional): send the text, photo or video with an iMessage effect,
+  e.g. `"invisible_ink"`; see [Effects](/imessage/send-a-message#effects).
+- `line_id` (optional, an account with [more than one number](/imessage/your-imessage-number#choosing-the-line)):
+  the line to send from (or `line`, its number). Without it the server picks.
+- `chat_id` (optional, a number with [group chats](/imessage/group-chats) on): send
+  into that group instead of to one person. Pass `to` or `chat_id`, not both.
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"+18055559876","text":"Hi from the line"}' $BASE/api/imessage/send
+```
+
+Response (`200`):
+
+```json
+{
+  "ok": true,
+  "status": "message_sent",
+  "message": "…",
+  "id": 43,
+  "record": {"id": 43, "direction": "out", "handle": "+18055559876", "text": "Hi from the line",
+             "status": "sent", "guid": null, "ts_ms": 1757400000000}
+}
+```
+
+<Note>
+
+The call waits for the line to accept the send, normally 2–5 seconds
+and at most about 75 for a text (about 105 for a voice message or photo,
+which ZeroSettle converts first, and about 90 for a ready video; see
+[Send a video](/imessage/attachments#send-a-video) for a call that ends without an
+answer). An enabled account's first SMS to a recipient can add up to 15
+seconds for its separate opt-out notice attempt. `id` and `record` still
+refer to your original message, which also arrives on the console's live
+stream and at your webhook as `message.sent`. For 1:1 iMessages, use
+[Delivery receipts](/imessage/read-messages#delivery-receipts) to check what happened
+after the line accepted the send.
+
+</Note>
+
+| HTTP | `status` | What happened | What to do |
+|---|---|---|---|
+| 200 | `message_sent` | The line accepted the message for sending through iMessage or, on an enabled account, SMS. | — |
+| 429 | `busy` | The line was busy with another request for the whole retry window (~12 s). Error code `line_busy`. | Retry after 2 s. Sends are serialized per line. |
+| 429 | — | Too many new contacts. Error code `new_contact_limit`. | Wait `error.retry_after_s`. On Pro (5 a day), [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for 50 a day per number ($199 a month per number). |
+| 403 | — | They texted STOP. Error code `recipient_opted_out`; nothing was sent or stored. | Don't retry. They can text START to opt back in. |
+| 403 | — | They have never replied, and you already sent them 2 messages. Error code `awaiting_reply`; nothing was sent or stored. | Wait for their first reply. |
+| 403 | — | A photo, video, voice message or poll to someone who has never replied to this number. Error code `attachment_before_reply`; nothing was sent or stored. | Send text until they reply. |
+| 402 | — | A video when the account has fewer [credits](/imessage/ai-agent#credits) left than it costs (1 per 3 MB). Error code `ai_credits_exhausted` (`error.needed` says how many); nothing was sent. | Buy more at `error.buy_url`. |
+| 409 | — | A poll from a line that requires an update to send polls. Error code `poll_unsupported`; nothing was sent or stored. | Send it as text, or try again after the update. |
+| 409 | — | A video when videos are disabled for the account, or the line requires an update to send videos. Error code `video_unsupported`; nothing was sent or stored. | Send a photo or a link, or contact ZeroSettle about availability or the update. |
+| 409 | — | A `video_id` that was still processing after a minute's wait (a broadcast waits only a few seconds). Error code `video_processing`; nothing was sent. `error.video_id` names the video (for a `video_b64`, the upload it became). | Wait until `GET /api/imessage/videos/{id}` says `ready`, then send that `video_id`. |
+| 429 | — | A `video_b64` send while the account already has 3 videos processing, or 10 are processing across ZeroSettle. Error code `rate_limited`, `Retry-After: 30` (`error.retry_after_s` 30); nothing was stored or sent. | Wait for one to be `ready` (or 30 s), then retry. |
+| 404 | — | A `video_id` that isn't one of your uploads. Error code `not_found`; nothing was sent or stored. | Use an `id` from `POST /api/imessage/videos`. |
+| 503 | — | Video storage was briefly unavailable. Error code `unavailable`; nothing was sent, stored or charged. | Retry in a minute. |
+| 409 | — | An inline reply (`reply_to`) from a line that requires an update to send it. Error code `reply_unsupported`; nothing was sent or stored. | Send it without `reply_to`, or try again after the update. |
+| 404 | — | `reply_to` names no message on your account. Error code `reply_target_not_found`; nothing was sent or stored. | Use an `id` or `guid` from your messages. |
+| 409 | — | An `effect` from a line that requires an update to send effects. Error code `effect_unsupported`; nothing was sent or stored. | Send it without `effect`, or try again after the update. |
+| 422 | — | `reply_to` names a message in another conversation, on another line than the one you named, a reaction or poll vote, or a send that never reached iMessage. Error code `invalid_reply_to`; nothing was sent or stored. | Reply to a message in this conversation. |
+| 503 | `offline` / `timeout` | The line is temporarily unreachable or did not answer in time. Error code `phone_offline` / `phone_timeout`. | For offline, retry with backoff. For timeout, inspect message history before retrying: the send may have gone. |
+| 502 | `send_failed` | The line could not send it (e.g. a bad handle). `error.message` says why. | Fix the input. |
+| — | — | No JSON answer: your client timed out, the connection dropped, or a `5xx` page that isn't JSON came back (such as a gateway's `524`). The send may still have gone. | Inspect `GET /api/imessage/messages` before retrying a text, photo or voice message; repeating the call can send it again. For a video, the same call within 10 minutes returns `duplicate: true` if it already went, without sending or charging again (see [Send a video](/imessage/attachments#send-a-video)). |
+
+Every attempt, successful or not, is stored (`record.status` is `sent` or
+`failed`) so the console and `GET /api/imessage/messages` show exactly what
+your code did.
+
+## SMS fallback
+
+**SMS fallback is included with every new signup.** It turns on when you claim
+your number and applies to all numbers on the account. If you signed up before
+the feature launched, contact ZeroSettle to check your account's access.
+
+On an enabled account, use the same `POST /api/imessage/send` request, bearer
+token and `to` / `text` fields. No extra public request parameter is needed:
+
+1. The line prefers iMessage when it is available.
+2. If the recipient's phone number is not registered with iMessage, plain text
+   uses carrier SMS from the **same line number**. If iMessage is unavailable
+   on the sending line, plain text can also use SMS.
+3. For a phone number, an unknown or failed iMessage lookup sends nothing.
+   An uncertain iMessage handoff is never retried automatically as SMS.
+
+Fallback supports **one-to-one plain-text SMS to phone numbers**. Email
+destinations, photos, voice messages, videos, polls, effects, inline replies,
+reactions, group chats, typing indicators and name-and-photo sharing use
+iMessage. RCS and MMS are outside the scope of SMS fallback.
+
+Incoming SMS uses your existing message history, live stream and
+`message.received` webhook. SMS message records carry `"service": "SMS"`, in
+both directions. The same field appears in a send's `record`, history and
+webhook message object. Existing iMessage records keep their previous shape
+and may omit `service`. There is no `was_downgraded` field.
+
+For example, an SMS message in history can be:
+
+```json
+{"id":43,"kind":"message","direction":"out","handle":"+18055559876",
+ "text":"Hi from the line","status":"sent","guid":"SMS-GUID",
+ "ts_ms":1757400000000,"service":"SMS"}
+```
+
+The console draws sent SMS bubbles green and shows **Sent**. For SMS,
+`status: "sent"`, `message_sent` and `message.sent` mean that the line
+accepted the send; they do not guarantee carrier delivery or that the recipient
+read it. Check history before retrying an uncertain send. The
+`GET /api/imessage/availability` endpoint checks only iMessage registration;
+its answer is not an SMS delivery result or an account-feature check.
+
+### Opt-out notice after the first SMS
+
+After the first successful SMS handoff to a recipient on your account,
+ZeroSettle sends this **separate second SMS from the same line**:
+
+```text
+Reply STOP to opt out.
+```
+
+Your original text is unchanged. The separate notice is sent even if your
+original message already contains that sentence. It has its own message ID,
+history entry, `message.sent` webhook and usage count; your send response still
+returns the original message's ID and record.
+
+The notice is once per **account and recipient**, across all your lines.
+Later SMS messages to that recipient do not repeat it. Changing the sending
+line, deleting conversation history or restarting the service does not reset
+that state. Failed or unconfirmed original handoffs, and iMessage sends, do
+not trigger a notice.
+
+A recognized opt-out recorded before the notice's final enqueue check blocks
+it. Before dispatch, ZeroSettle also checks that SMS is still enabled and the
+original line still belongs to the same account; failed checks suppress the
+follow-up. A proven pre-handoff busy/offline failure can delay the notice;
+an uncertain notice handoff is not resent automatically. A failed or deferred
+notice does not turn your successful original send into an API error.
+
+The existing customer-message limits and [STOP enforcement](/imessage/errors-limits-and-compliance#stop-is-enforced)
+apply to SMS too. See the [consent guidance](/imessage/errors-limits-and-compliance#compliance-you-need-consent)
+when designing your messaging flow.
+
+## Broadcast to many recipients
+
+To send the same message to a list of people, use `POST /api/imessage/broadcast`.
+Each recipient gets the message in **their own 1:1 conversation** — a
+broadcast never creates or uses a [group chat](/imessage/group-chats), and recipients
+never see each other. It is exactly a `POST
+/api/imessage/send` to each handle, so the body is the same (`text`, or
+`image_b64` / `media_id` / `audio_b64` for a photo or voice message, `video_id` for a
+video, and `line` / `line_id` to pick the number), with `to` a **list**
+instead of one handle.
+
+```http
+POST /api/imessage/broadcast
+Content-Type: application/json
+{"to": ["+18055559876", "+13105550000", "jane@example.com"], "text": "Weekend sale: 20% off"}
+```
+
+- `to`: 1–100 handles (phone numbers or emails, each as in `/send`). Duplicates
+  are merged; order is kept.
+- Every per-send rule still applies **to each recipient**: a recipient who
+  texted STOP is skipped, the [new-contact caps](/imessage/errors-limits-and-compliance#limits)
+  count each new person, and the monthly allowance is spent per message. One
+  blocked or failed recipient never stops the others.
+- **Pacing.** Broadcast sends from one number start at least **6 seconds
+  apart** (10 a minute), including across calls. A broadcast to 100 recipients
+  on one number takes about 10 minutes. A call reaches about nine recipients
+  per number when pacing is the only delay. The fixed gap helps protect the
+  number from being flagged by Apple. A recipient refused by a rule such as
+  STOP or a contact cap takes no slot. Pacing applies only to broadcast sends.
+- **A video** is converted once and reused for every recipient, and each
+  recipient it is sent to uses its [credits](/imessage/ai-agent#credits), 1 per 3 MB
+  (a broadcast of a 6 MB video to 20 people is 40). Once the credits run out, the rest come
+  back `skipped` with `code` `ai_credits_exhausted`.
+  - Broadcast it by `video_id`, after `GET /api/imessage/videos/{id}` says
+    `ready` ([Send a video](/imessage/attachments#send-a-video)). A `video_b64`
+    becomes an upload like any other. A broadcast waits only a few seconds
+    for it: if it is still processing, the whole call answers `409
+    video_processing` with the upload's id in `error.video_id` and sends
+    nothing. Broadcast that `video_id` once it is `ready`.
+  - A video send can take about 90 s, and a broadcast answers within about
+    95 s, so it starts a video send only while that send can still finish.
+    That is usually **one recipient per call**, and the rest come back
+    `deferred`. Call again with just the `deferred` handles and the same
+    `video_id` until none are left.
+  - **Re-running a video broadcast that didn't answer is safe within 10
+    minutes** (a timeout, a dropped connection, a `5xx` page that isn't JSON).
+    A recipient this number already sent the same video to in the last 10
+    minutes comes back `ok` with `"duplicate": true` and the first send's `id`
+    (counted in `sent`), and is not sent or charged again. A send still in
+    progress is waited for. After 10 minutes it would go again, so first
+    check `GET /api/imessage/messages` (or their `message.sent` webhooks).
+
+The call sends to the recipients one at a time (a line sends one message at a
+time) and returns a per-recipient breakdown:
+
+```json
+{
+  "ok": false, "requested": 3, "recipients": 3,
+  "sent": 2, "failed": 0, "skipped": 1, "deferred": 0,
+  "results": [
+    {"to": "+18055559876", "ok": true,  "delivered": true,  "status": "message_sent", "message": "…", "id": 61},
+    {"to": "+13105550000", "ok": false, "delivered": false, "status": "skipped", "code": "recipient_opted_out", "message": "…"},
+    {"to": "jane@example.com", "ok": true, "delivered": true, "status": "message_sent", "message": "…", "id": 62}
+  ]
+}
+```
+
+- `sent` counts sends the line accepted. The top-level `ok` is `true`
+  when every recipient's send succeeded. A result with `status: "message_sent"`
+  and `delivered: true` means the line accepted the send. Use the returned
+  `id` to check [delivery receipts](/imessage/read-messages#delivery-receipts).
+- A per-send rule that refuses a recipient returns `status: "skipped"` and a
+  `code` from `/send`, such as `recipient_opted_out` or `new_contact_limit`.
+- A video entry may carry `duplicate: true` with the original send's `id`. It
+  counts in `sent`. See [Send a video](/imessage/attachments#send-a-video).
+- A result with `status: "deferred"` means the API never attempted that
+  recipient. The request stops starting new sends after about 55 seconds for
+  a standard broadcast. If the next slot on the line falls beyond the request
+  budget, the result has `reason: "broadcast_pacing"` and `retry_after_s`.
+  If the budget ran out before the API reached the recipient, the result has
+  `reason: "request_budget"`. Send again with **just the deferred handles**,
+  waiting `retry_after_s` where given.
+- Each attempted send produces a `message.sent` or `message.failed` webhook
+  for its send result.
+
+## Links in a first message
+
+Messages can suppress links and preview images from an unknown sender.
+The recipient controls this: adding your number to Contacts or using
+**Mark as Known** in Messages is the reliable way to allow them. A reply can
+also enable links, but screening behavior varies with iOS and the recipient's
+settings. The sender cannot override these protections.
+
+- **Let them text first.** A pre-filled `sms:` button (see
+  [Let them start the conversation](/imessage/customer-support#let-them-start-the-conversation))
+  lets the recipient initiate the conversation before you send a link.
+- **If you text first,** open with plain text that asks for a reply ("Reply
+  YES for your link") and send the link once they answer.
+- **Screen Unknown Senders (iOS 26)** moves texts from unknown senders into a
+  separate list without a notification, so a cold first text may never be
+  seen. It is on for anyone who had the older unknown-sender filter turned on.
+  Ask the recipient to check that list if they cannot find your message.
+
+If a conversation is in **Unknown Senders**, open it and choose **Mark as
+Known**, or tap the number at the top and create a contact. Apple's
+[screening guide](https://support.apple.com/guide/iphone/iph203ab0be4/ios)
+describes these controls. Its three-replies rule concerns text-message
+filtering; it is not a promise that three messages sent by your business will
+unlock an iMessage preview. Sending extra unsolicited messages is not a fix.
+
+A text or photo caption with a link, sent to someone who has never texted the
+line, still goes out. The response adds a `warning` with a plain-language
+message, for example:
+
+```json
+{"ok": true, "status": "message_sent", "id": 43, "record": {…},
+ "warning": {"code": "link_not_tappable",
+             "message": "Messages may show your link as plain text."}}
+```
+
+## Link previews
+
+Send an ordinary `text` message through `/api/imessage/send`; no extra preview
+parameter is required. For the most predictable layout, send the full
+`https://` URL by itself, or put one URL on its own line at the end of your
+text. When preview metadata is available and the line supports it, ZeroSettle
+includes the page title and available image or site icon in a link card.
+Text and the card may appear as separate bubbles in Messages. The API keeps
+one message record.
+
+| What the recipient sees | What to check |
+| --- | --- |
+| Plain, untappable URL or hidden imagery from an unknown sender | Have the recipient mark the sender as known or save the number; check Unknown Senders. |
+| “Tap to Load Preview” after the sender is known | The message may lack usable preview metadata. Check the URL's metadata and send a fresh test after fixing it. |
+| A title card without artwork | The page may not provide a supported image or icon, or its image fetch may fail. A site icon can appear beside the title instead of as a large image. |
+| One site fails while another site's card works | Check the failing site's redirects, crawler response, metadata, and image access. More messages or another saved contact cannot supply missing metadata. |
+
+Preview lookup is best effort. Pages must expose their title and optional
+image or icon in HTML accessible to `ZeroSettleBot`. JavaScript-only content,
+blocked crawlers, slow responses, and unavailable images can prevent enrichment.
+If metadata is unavailable, the text still sends. URLs embedded in the middle
+of prose, photo captions, and mixed text with reply threading or effects do
+not always get a separate card. Apple controls the final rendering.
+
+The recipient does **not** universally need to save a contact or exchange
+three messages. In our November 2026 test on iOS 26.5.1, one reply made
+already-sent Apple preview cards visible without saving the sender, and the
+next API send displayed its title and image without tapping the link. Treat
+that as a verified example. Results vary with the recipient's settings.
+
+## Voice messages, photos and videos
+
+The same endpoint sends a **voice message** when you pass `audio_b64`
+instead of `text`, a **photo** when you pass `image_b64`, and a **video**
+when you pass `video_id` (a video you uploaded) or `video_b64` (with `text`
+as an optional caption on a photo or a video). See
+[Attachments](/imessage/attachments) for the request shapes, the formats the line
+accepts, and what the recipient sees.
+
+## Polls
+
+The same endpoint sends a Messages **poll** when you pass `poll` instead of
+`text`. Recipients on iOS 26 or later vote in it right in the conversation;
+on older iOS versions they see "Sent a poll" and can't vote.
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "poll": {"question": "Which day works?", "options": ["Tue", "Wed", "Thu"]}}
+```
+
+- `options`: 2–12 strings, each 1–150 characters after trimming, all
+  different (ignoring case).
+- `question` (optional, `null` means none): up to 300 characters. iOS draws
+  no question on a poll, so the question follows it as a separate text with
+  its own `id` and `message.sent` webhook. The text counts toward your limits.
+  If it can't be sent, the poll still stands.
+- A poll carries no `text`, `image_b64`, `audio_b64` or video. Like a photo, it goes
+  only to someone who has replied to this number (`403
+  attachment_before_reply`), and it counts as a message toward every limit.
+- With `reply_to` a poll is an inline reply, threaded under that message
+  (its question too); see [Replies](/imessage/send-a-message#replies).
+- `409 poll_unsupported`: the line requires an update to send polls. Nothing
+  was sent or stored. With several numbers, the API checks the number you name
+  or the one it selects. If none support polls, it checks the first number.
+
+The response has the same shape as a text send. The record is `kind: "poll"`,
+its `text` is `📊 ` plus the question (or `📊 Poll` without one), and `poll`
+carries the options with live results:
+
+```json
+{"id": 46, "kind": "poll", "direction": "out", "handle": "+18055559876",
+ "text": "📊 Which day works?", "status": "sent", "guid": "2F54F31C-…", "ts_ms": 1757400000000,
+ "poll": {"question": "Which day works?",
+          "options": [{"id": "186E4755-…", "text": "Tue", "votes": 1, "voters": ["+18055559876"]},
+                      {"id": "9A1C…", "text": "Wed", "votes": 0, "voters": []},
+                      {"id": "4B2E…", "text": "Thu", "votes": 0, "voters": []}],
+          "voter_count": 1}}
+```
+
+- `voters` are the handles who chose that option, oldest vote first; `votes`
+  is how many. A person can choose several options; `voter_count` is how many
+  people have a vote in.
+- **Results** are on every poll record: in `GET /api/imessage/messages`, in
+  webhooks, and from `GET /api/imessage/messages/{id}/poll` (one poll's
+  record, `404 not_found` if that id isn't a poll on your account).
+- **Votes** arrive as the `poll.voted` webhook event whenever someone votes,
+  changes their vote or removes it. Its `message` is a `kind: "poll_vote"`
+  record (`direction: "in"`) with `target_id` / `target_guid` (the poll),
+  `vote.option_ids` (that voter's whole selection now; `[]` = they removed
+  their vote), a readable `text` (`Voted “Tue”`), and `poll`: the poll's
+  results after this vote (`null` if the poll isn't stored on the line).
+  Votes can arrive out of order: a vote older than the one already counted
+  for that person changes nothing, and its event's `vote.option_ids` and
+  `text` give the selection that stands. A vote that arrives before its poll
+  is counted once the poll is stored.
+  Vote rows also come back from `GET /api/imessage/messages`, without `poll`.
+- **Polls they send** arrive as `message.received` with `kind: "poll"`, and
+  votes on them as `poll.voted`.
+- Reactions work on a poll like on any message.
+
+## Replies
+
+Pass `reply_to` with a text, a photo, a video or a poll to send it as an
+**inline reply**. Messages threads it under the original message.
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "text": "Friday at 3 works.", "reply_to": 44}
+```
+
+- `reply_to` is the `id` of a message (a number, or a string of digits) or
+  its iMessage `guid`. It must be a message, photo, video, voice message or
+  poll in this conversation (with `to`) on your account that reached iMessage
+  (it has a `guid`).
+- A reply is text, a photo or a video (with or without a caption), or a
+  poll; not a voice message (`422 invalid_request`). A poll's question
+  follows it into the same thread.
+- With several numbers, a reply goes out from the number its original is
+  on; naming a different `line` / `line_id` is `422 invalid_reply_to`.
+- `409 reply_unsupported`: the line requires an update to send that kind of
+  reply. Text and poll replies can have different requirements. Nothing was
+  sent or stored.
+- `404 reply_target_not_found` / `422 invalid_reply_to`: see the table
+  above. Nothing was sent or stored.
+- If the line can't find the original in the conversation, the send fails (`502 send_failed`, `record.status` is `failed`) and nothing
+  was sent.
+
+Any message that is a reply, in either direction, carries `reply_to`: in
+the send response's `record`, in `GET /api/imessage/messages`, and in
+webhooks (`message.received`, `message.sent`, `message.failed`). Replies they
+send arrive the same way.
+
+```json
+{"id": 47, "kind": "message", "direction": "out", "handle": "+18055559876",
+ "text": "Friday at 3 works.", "status": "sent", "guid": "9C0E…", "ts_ms": 1757400030000,
+ "reply_to": {"id": 44, "guid": "5A6F…", "text": "hey!"}}
+```
+
+- `reply_to.guid` is the original's iMessage GUID; `id` and `text` (the
+  original's text, up to 200 characters) are `null` when the original isn't
+  stored on the line (it predates the line, or was deleted).
+- A message that is not a reply has no `reply_to` key at all.
+
+## Effects
+
+Pass `effect` with a text, a photo or a video to send it the way **Send with
+effect** does in Messages (long-press the send arrow). `invisible_ink` hides the
+message under shimmering dots until they swipe over it.
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "text": "Your code is 482913", "effect": "invisible_ink"}
+```
+
+| `effect` | What they see |
+|---|---|
+| `slam` | the bubble slams down |
+| `loud` | the bubble shakes, large |
+| `gentle` | the bubble arrives small and grows |
+| `invisible_ink` | hidden until they swipe over it |
+| `echo` | the message fills the screen |
+| `spotlight` | a spotlight on the message |
+| `balloons` | balloons float up |
+| `confetti` | confetti falls |
+| `love` | a heart grows from the bubble |
+| `lasers` | a laser show |
+| `fireworks` | fireworks |
+| `celebration` | sparkles |
+| `shooting_star` | a shooting star |
+
+- Text, a photo or a video (with or without a caption); not a poll or a voice
+  message. Works with `reply_to`.
+- Any other value is `422 invalid_request`; the message lists the names.
+- `409 effect_unsupported`: the line requires an update to send effects.
+  Nothing was sent or stored.
+- Screen effects play when the message arrives with Messages open. An
+  unsupported effect shows as a plain message.
+
+Any message sent with an effect, in either direction, carries `effect` (the
+name above): in the send response's `record`, in `GET /api/imessage/messages`,
+and in webhooks (`message.received`, `message.sent`, `message.failed`).
+
+```json
+{"id": 48, "kind": "message", "direction": "in", "handle": "+18055559876",
+ "text": "guess who", "status": "received", "guid": "1B2C…", "ts_ms": 1757400090000,
+ "effect": "invisible_ink"}
+```
+
+- A message without an effect (or with one this API doesn't name yet) has no
+  `effect` key at all.
+
+## Chat backgrounds
+
+On iOS 26, either side of a conversation can set a background picture for
+it. When **they** set, change or remove the background of their conversation
+with your number, it arrives as a `background.changed` webhook event (never
+`message.received`, so an auto-responder doesn't answer it). Its `message` is
+a `kind: "background"` record:
+
+```json
+{"id": 49, "kind": "background", "direction": "in", "handle": "+18055559876",
+ "text": "Changed the chat background", "status": "received", "guid": "4D5E…", "ts_ms": 1757400120000,
+ "background": {"action": "changed",
+                "image": {"url": "/api/imessage/messages/49/image", "content_type": "image/jpeg",
+                          "width": 1179, "height": 2556}}}
+```
+
+- `background.action` is `changed` (set or changed) or `removed`; `text` is
+  `Changed the chat background` or `Removed the chat background`.
+- `background.image` is the new picture, fetched like a photo with the same
+  bearer: `GET /api/imessage/messages/{id}/image` (see
+  [Fetch a photo](/imessage/attachments#fetch-a-photo)). It is `null` for a removal,
+  and for a change whose picture could not be downloaded.
+- It shows in `GET /api/imessage/messages` and the console's thread, but it
+  is not a message: it doesn't count toward usage or a conversation's
+  `count`, the hosted AI agent doesn't answer it, and it is not logged in a
+  connected CRM. You can't react or reply to it.
+- A sender using iOS 26 or later can make a change. ZeroSettle reports the
+  change when the receiving line supports background events.
+
+Read the conversation's latest known background independently of message
+history pagination:
+
+```text
+GET /api/imessage/background?handle=%2B18055559876
+Authorization: Bearer YOUR_TOKEN
+```
+
+Returns `{"record": ...}` with the full latest successful background record,
+or `{"record": null}` when none is stored. Add `line` or `line_id` for a specific
+number; otherwise it uses the conversation's most recently active number.
+Failed changes do not replace the current background. A removal, or a newer
+change with `background.image: null`, supersedes an older picture; do not fall
+back to that picture. The dashboard displays the available current picture
+behind the conversation.
+
+On a line that supports background changes, set or remove the background:
+
+```text
+POST /api/imessage/background
+Content-Type: application/json
+Authorization: Bearer YOUR_TOKEN
+```
+
+```json
+{"to": "+18055559876", "image_b64": "<base64 image bytes>"}
+```
+
+Custom images can be JPEG, PNG, WebP, HEIC, GIF, TIFF or BMP, up to 5 MiB
+before base64 encoding and 40 megapixels. Animated images use their first
+frame. The server applies EXIF orientation, centers and crops to 1125 × 2436,
+places transparent pixels on white, and strips metadata. It constructs the
+native background archive, so an image upload needs no Mac or archive builder.
+
+For a browser-ready preview before applying, call authenticated
+`POST /api/imessage/background/prepare` with `{"image_b64": "<base64 image bytes>"}`.
+It returns `{"image_b64": "<normalized JPEG base64>", "content_type": "image/jpeg",
+"width": 1125, "height": 2436}`. Preview preparation does not change a
+conversation, apply the background or store the image. Send the original
+`image_b64` to the background endpoint only when ready to apply. Preparation
+has a 30-second limit, admits one running and one waiting conversion, and
+returns `503 background_unavailable` when busy or unable to finish. Closing or
+replacing the preview cancels its conversion when the HTTP request disconnects.
+
+To use a ready-made background, send
+`{"to": "+18055559876", "preset": "aurora"}`. The four presets are
+`aurora` (emerald and violet light), `sorbet` (peach and coral waves),
+`lagoon` (turquoise water), and `bloom` (rose and lilac petals). Their names,
+descriptions, images, thumbnails and reusable native ZIPs are listed in
+`GET /assets/chat-backgrounds/manifest.json`, a public same-origin catalog.
+The console offers them in **Profile → Appearance → Chat background**, above
+**Name & Photo**, with sample-message previews before you apply one. Applying or
+removing a background changes it for both people in that conversation.
+The demo only previews backgrounds and never sends a change.
+
+Successful new sets retain a preview at the record's `background.image.url`:
+the normalized full JPEG for an image upload, the full photo for a bundled
+preset, or the watch rendering from a custom archive when it is a supported
+image under 5 MiB. Older outbound changes may
+have `background.image: null` because their previews were not stored.
+
+Over MCP, call `list_background_presets` to browse the same catalog and preview
+URLs. Then call `set_chat_background` with `{"to": "+18055559876", "preset": "aurora"}`,
+or `{"to": "+18055559876", "remove": true}` to remove it. The tool also accepts
+`image_b64` for the same custom image upload, `archive_b64` for a custom
+archive, and `line` / `line_id` to select the sending number. It uses the same
+conversation, STOP and line compatibility checks as REST.
+
+To remove it, send `{"to": "+18055559876", "remove": true}` instead. Pass
+exactly one of `image_b64`, `archive_b64`, `preset`, and `remove: true`. This requires an existing
+conversation with `to`; it cannot open a new one. The recipient must use an
+iMessage version that displays chat backgrounds.
+
+Alternatively, Base64-encode a prebuilt transcript-background archive for
+`archive_b64` (at most 8 MiB before Base64 encoding). It contains a photo poster
+and watch rendering. Pass ordinary image files as `image_b64`. ZeroSettle
+validates archives before applying them. Use `line` or `line_id` in the body or
+query to select a sending line. Otherwise, the line on the conversation sends
+the change.
+Unknown preset names and conflicting actions return `422 invalid_request`.
+A missing or damaged bundled asset returns `503 background_unavailable`
+before attempting the change.
+
+A successful response has `ok: true`, `id` and `record`. The record has
+`kind: "background"`, `direction: "out"`, `status: "sent"`, and
+`background: {"action": "changed" | "removed", "image": <preview or null>}`. It is
+listed in message history and emitted as `background.changed`. It consumes
+no message or new-contact allowance. A failed change is stored with
+`status: "failed"` and emitted as `background.failed`.
+Success confirms that the native transport accepted the change; it does
+not confirm that the recipient displayed the background.
+
+Errors retain the ordinary structured API shape: `409 background_unsupported`
+when the line requires an update, `409 no_conversation` without prior messages,
+`403 recipient_opted_out` after STOP, `422 invalid_request` for a bad archive,
+and `502 background_failed` when the attempt fails. Busy and
+offline errors behave like sends.
+
+## Reactions (tapbacks)
+
+```http
+POST /api/imessage/reactions
+Content-Type: application/json
+{"message_id": 44, "reaction": "love"}
+```
+
+`reaction` is `love`, `like`, `dislike`, `laugh`, `emphasize`, or `question`;
+prefix with `remove_` to retract one. `message_id` is any message on the line
+(theirs or yours). The response has the same shape as a send; the stored
+record is a message row with `kind: "reaction"`:
+
+```json
+{"ok": true, "status": "tapback_sent", "id": 45,
+ "record": {"id": 45, "kind": "reaction", "direction": "out", "handle": "+18055559876",
+            "reaction": "love", "target_id": 44, "target_guid": "5A6F…",
+            "text": "Loved “hey!”", "status": "sent", "ts_ms": 1757400020000}}
+```
+
+Reactions **they** send arrive the same way: `kind: "reaction"`, `direction: "in"`,
+`target_id` pointing at your message. `404 not_found` means there is no such
+message on this line, or the target is itself a reaction (you can only react
+to a bubble: `message`, `audio`, `image`, or `video`). `409 conflict` means the target
+has no iMessage GUID yet (a send that never went out).
+
+## Typing indicator
+
+Show the "…" bubble while you work on a reply: `POST /api/imessage/typing`.
+It is its own page — see [Typing indicators](/imessage/typing-indicators).
+
+## Group chats
+
+On every number, `POST /api/imessage/groups` starts an
+iMessage group and `chat_id` on a send goes into one. They have their own
+page — see [Group chats](/imessage/group-chats).
+
+## Name and photo
+
+Messages lets a sender share a name and photo ("Share Name and Photo"); the other
+party sees **"&lt;name> shared a name and photo with you"** and can save it to your
+contact card, so your number shows up with your brand instead of a bare number.
+Set the profile once, then share it per conversation:
+
+```http
+PUT /api/imessage/profile
+Content-Type: application/json
+{"name": "ZeroSettle", "image_b64": "<base64 JPEG or PNG>"}
+```
+
+`name` is your App/Brand Name (required, up to 64 characters) — the one name
+recipients see (it becomes the contact's first name; there is no last name).
+`image_b64` is a base64 **JPEG or PNG under 3 MB** (a `data:image/…;base64,`
+prefix is tolerated); it is optional after the first call (the current photo
+is kept). Square images, 600 px or larger, look best. Anything else is `422
+invalid_request` with `error.fields` naming `name` or `image_b64`. ZeroSettle
+applies the profile to the line before replying, so this call can take a few
+seconds; the response has the same shape as a send, with status
+`profile_set`.
+
+`GET /api/imessage/line` reports the current profile under `profile`
+(`{"name", "has_photo", "updated_at"}`, or `null` before the first `PUT`), and
+`GET /api/imessage/profile/photo` returns the current photo itself (`image/jpeg`
+or `image/png`; `404` when there is none) — the console uses it for its
+preview.
+
+```http
+POST /api/imessage/profile/share
+{"to": "+18055559876"}
+```
+
+Once a profile is set, **every message you send shares it automatically** with
+that recipient (in the background, right after the message): on the first
+message of a conversation, and again on the next message after you change the
+name or photo, so existing contacts get the new card too. You normally never
+call this endpoint — it exists for re-sharing on demand and for conversations
+they started. Because the first message of a conversation always shares the
+current card, deleting a conversation (`DELETE /api/imessage/conversations/{handle}`,
+or from the console) and texting the number again presents the name and photo
+afresh — handy for testing a change. Status `profile_shared`. Pass
+`"force": true` to re-send the card to someone who already has it. `409
+no_profile` means the profile was never set. Sharing is iMessage-only and,
+like a reaction, counts toward nothing — it is not a new contact. With
+[more than one number](/imessage/your-imessage-number#choosing-the-line), add
+`"line_id"` to share that line's card from that line.

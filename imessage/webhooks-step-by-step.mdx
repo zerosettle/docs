@@ -1,0 +1,347 @@
+---
+title: "Webhooks, step by step"
+---
+
+A webhook is one HTTPS URL that ZeroSettle POSTs to for **every message event
+on the line** — exactly the same stream the console at `/imessage` renders:
+
+| `event` | When | `message.direction` / `status` |
+|---|---|---|
+| `message.received` | Someone texted the line. | `in` / `received` |
+| `message.sent` | The line accepted a send from your code, the console, or MCP. | `out` / `sent` |
+| `message.failed` | The API recorded a send attempt that the line did not confirm. | `out` / `failed` |
+| `reaction.received` | They tapbacked one of your messages. `message.kind` is `reaction`; `message.target_id` is the message. | `in` / `received` |
+| `reaction.sent` / `reaction.failed` | A tapback left (or failed to leave) the line. | `out` / `sent` or `failed` |
+| `poll.voted` | Someone voted in a poll, changed their vote or removed it. `message.kind` is `poll_vote`; `message.poll` is the poll's results now. See [Polls](/imessage/send-a-message#polls). | `in` / `received` |
+| `background.changed` | A conversation's background was set, changed or removed. The line must support the corresponding incoming or outgoing change. `message.kind` is `background`; `message.background` is `{action, image}`. See [Chat backgrounds](/imessage/send-a-message#chat-backgrounds). | `in` / `received`, `out` / `sent` |
+| `background.failed` | An attempt to set or remove a conversation's background failed. | `out` / `failed` |
+| `group.event` | A [group chat](/imessage/group-chats)'s system item: a rename, a member added, removed or leaving, a new group photo. `message.kind` is `group_event`; `message.group_event` has the details. Nobody wrote it, so it is never a `message.received`. | `in` / `received` |
+| `typing.started` / `typing.stopped` | Opt-in only (`typing_events: true`): the other party started or stopped typing. No `message`; see [Typing events](/imessage/webhooks-step-by-step#typing-events). | — |
+| `contact.opted_out` / `contact.opted_in` | Opt-in only (`optout_events: true`): a contact texted STOP or START (or ZeroSettle cleared an opt-out). No `message`; see [Opt-out events](/imessage/webhooks-step-by-step#opt-out-events). | — |
+| `line.ready` | A number released by an account with recycling enabled is available again. The body carries `release`. See [Line ready](/imessage/webhooks-step-by-step#line-ready). | — |
+
+The webhook stays registered until you delete it or release the number.
+
+<Warning>
+
+React only to `message.received` in an auto-responder. Your own
+sends come back to you as `message.sent` events; replying to those would loop.
+
+</Warning>
+
+## Step 1 — have a public URL
+
+Production: any HTTPS endpoint. Local development: expose your machine.
+
+```bash
+# cloudflared (no account needed)
+cloudflared tunnel --url http://localhost:8100
+# or ngrok
+ngrok http 8100
+```
+
+Either prints an `https://…` URL. Plain `http://` is accepted only for
+`localhost` / `127.0.0.1` (useful when the server itself runs on your machine).
+
+<a id="step-2-register-it" />
+
+## Step 2 — register it
+
+```http
+PUT /api/imessage/webhook
+Content-Type: application/json
+{"url": "https://abc123.trycloudflare.com/webhook"}
+```
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"url":"https://abc123.trycloudflare.com/webhook"}' $BASE/api/imessage/webhook
+```
+
+```json Response
+{"url": "https://abc123.trycloudflare.com/webhook",
+ "secret": "whsec_…",
+ "typing_events": false,
+ "instant_typing": true,
+ "usage": "Verify X-ZeroSettle-Signature with this secret. Shown once."}
+```
+
+</CodeGroup>
+
+<Warning>
+
+Store the secret now. It is shown only once; registering again
+(same or different URL) rotates it and resets `last_delivery`.
+
+</Warning>
+
+`url` must be `https://` and at most 2048 characters (`http://` only for
+`localhost` / `127.0.0.1`); anything else is `422 invalid_request`.
+
+<Tip>
+
+From a connected AI agent this is `set_webhook(url)` — same
+validation, same one-time secret — and `test_webhook` then POSTs one signed
+synthetic `message.received` (message id `0`, `"test": true`, header
+`X-ZeroSettle-Test: 1`, from your own number) so you can prove the receiver
+verifies signatures and answers 2xx before anyone texts the line. See
+[MCP](/imessage/mcp).
+
+</Tip>
+
+Add `"typing_events": true` to the same body to also receive
+`typing.started` / `typing.stopped` when the other party types (see
+[Typing events](/imessage/webhooks-step-by-step#typing-events) below). Off by default: they are chatty,
+ephemeral, and carry no `message`, so a receiver written against the
+examples here never sees one unless it asked.
+
+Add `"optout_events": true` as well to receive `contact.opted_out` /
+`contact.opted_in` when someone texts STOP or START (see
+[Opt-out events](/imessage/webhooks-step-by-step#opt-out-events) below), for
+mirroring opt-outs into your own CRM. Off by default for the same reason.
+Each PUT sets both flags: leaving one out turns it off.
+
+### Instant typing
+
+`instant_typing` (**on by default**) shows your "…" automatically in eligible
+one-to-one iMessage conversations while your number's subscription is active.
+It needs no separate typing call from your server:
+
+- When their message lands on your number, it shows "…" before the webhook
+  even fires, while your server is still reading the message. Incoming photos
+  (including GIFs), videos and voice messages are included on supported lines,
+  before the attachment finishes transferring.
+- On supported lines, it also shows "…" as your outgoing photo,
+  GIF, video or voice message starts sending. The send starts immediately;
+  there is no artificial typing delay. The arriving message replaces the bubble.
+- Uploading or preparing media ahead of a send does not raise "…".
+- Clear it with `POST /api/imessage/typing` and `"state": "stop"` when you
+  decide not to answer. Otherwise it clears itself after 20 seconds; to keep
+  it up longer for a slow reply, call the same endpoint with `"state": "start"`.
+- Only in one-to-one conversations, never in a group chat, and never for a
+  text that is a STOP or for a contact who opted out.
+- Other file attachments do not raise the indicator.
+
+Turn it off (or back on) without touching the webhook, its secret or
+`typing_events`, on every number of the account:
+
+```bash
+curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"instant_typing": false}' $BASE/api/imessage/webhook
+# {"ok": true, "instant_typing": false}
+```
+
+`PUT /api/imessage/webhook` also takes `"instant_typing": true | false`;
+leaving it out keeps the current setting. `GET /api/imessage/line` reports it
+as `instant_typing`. Removing the webhook does not change it, and it needs no
+webhook URL. The console has the same switch on the webhook card.
+
+## Step 3 — what you will receive
+
+```
+POST https://abc123.trycloudflare.com/webhook
+Content-Type: application/json
+User-Agent: ZeroSettle-iMessage/1
+X-ZeroSettle-Event: message.received
+X-ZeroSettle-Signature: t=1757400012,v1=3f0c…(64 hex chars)
+
+{"event":"message.received","message":{"direction":"in","guid":"5A6F…","handle":"+18055559876","id":44,"status":"received","text":"hey!","ts_ms":1757400012000}}
+```
+
+The body is compact JSON with keys sorted. `message` is the same object
+`GET /api/imessage/messages` returns, and `event` matches the
+`X-ZeroSettle-Event` header. A send you make through the API comes back to you
+as a `message.sent` event after the line accepts it. Use
+[delivery receipts](/imessage/read-messages#delivery-receipts) to check what happened
+after acceptance for a 1:1 iMessage.
+On an account enabled for [SMS fallback](/imessage/send-a-message#sms-fallback), SMS
+messages use these same events and carry `message.service: "SMS"`. The
+separate first-SMS opt-out notice produces its own `message.sent` event;
+ignore it when deciding whether an inbound message needs a reply. SMS sent
+events confirm acceptance by the line. Carrier delivery is a separate step.
+
+## Line ready
+
+When a [released number](/imessage/your-imessage-number#release-a-number-for-recycling)
+becomes available again, ZeroSettle sends `X-ZeroSettle-Event: line.ready` to
+the webhook registered on the account's primary number at release. Verify
+the same signature as for message events, using the signing secret in effect
+when you released the number. Keep that secret until this event is received
+or polling confirms the release is ready.
+
+The JSON body has `event: "line.ready"` and a `release` object with the same
+fields as the release status endpoint. Its `line_id` is the released
+assignment's ID. Deduplicate on `release.id` and return `2xx` within 10
+seconds. ZeroSettle retries failed deliveries up to three times. If there
+was no registered webhook or delivery fails, poll the release status endpoint.
+
+## Step 4 — verify the signature
+
+The signature is HMAC-SHA256 with your secret over the string
+`"<t>." + <raw request body bytes>`. Verify the **raw bytes** you received,
+before any JSON parsing or re-serialization, and reject if `t` is more than
+300 seconds from now.
+
+Python:
+
+```python
+import hmac, hashlib, time
+
+def verify(secret: str, header: str, raw_body: bytes, tolerance: int = 300) -> bool:
+    try:
+        parts = dict(p.split("=", 1) for p in header.split(","))
+        t, v1 = int(parts["t"]), parts["v1"]
+    except Exception:
+        return False
+    if abs(time.time() - t) > tolerance:
+        return False
+    expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, v1)
+```
+
+Node:
+
+```js
+const crypto = require("crypto");
+function verify(secret, header, rawBody, tolerance = 300) {
+  const m = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(header || "");
+  if (!m) return false;
+  const t = Number(m[1]);
+  if (Math.abs(Date.now() / 1000 - t) > tolerance) return false;
+  const expected = crypto.createHmac("sha256", secret)
+    .update(`${t}.`).update(rawBody).digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(m[2]));
+}
+```
+
+## Step 5 — respond, dedupe, retry
+
+- Respond with any `2xx` within 10 seconds. Do your work after responding
+  (queue it) if it can take longer.
+- On a non-2xx or a timeout ZeroSettle retries **3 more times**, after 1 s, 5 s,
+  and 20 s. Then it gives up on that message and records the failure.
+- Retries carry the same `message.id` and `event`. Deduplicate on the pair.
+- Delivery is per line, so if two systems need the same messages, fan out
+  from your receiver.
+- Events for one line are delivered concurrently and may arrive out of order
+  under retries; order by `message.id` if it matters.
+
+## Typing events
+
+With `typing_events: true` on the registration, the other party starting or
+stopping to type reaches you as its own event. There is no `message` — the
+body carries a `typing` object instead:
+
+```
+X-ZeroSettle-Event: typing.started
+
+{"event":"typing.started","typing":{"direction":"in","handle":"+18055559876","state":"start","ts_ms":1757400030000}}
+```
+
+- `typing.started` fires when their "…" appears; `typing.stopped` when they
+  clear the field, when they send (the `message.received` follows at once),
+  or 60 s after the last `started` with nothing else heard — so a `started`
+  is always closed, but not always promptly.
+- Only iMessage conversations produce them; SMS never does. In a
+  [group chat](/imessage/group-chats), `typing` also carries `chat_id`, and
+  `handle` is the member typing.
+- Delivered once, best effort: a 5 s timeout, **no retries**, never stored,
+  never in `GET /api/imessage/messages`, and not recorded as the line's
+  `last_delivery` — a typing event can never mask a failed message delivery.
+- Dedupe is unnecessary; treat a repeated `started` as a refresh.
+- Signed exactly like every other event (Step 4).
+
+A good use is holding a canned auto-reply for a beat while they are still
+typing, so you answer the whole thought instead of the first line of it.
+
+## Opt-out events
+
+With `optout_events: true` on the registration, a contact opting out or back
+in reaches you as its own event, so your CRM can mirror the
+[STOP list](/imessage/errors-limits-and-compliance#stop-is-enforced). There is no
+`message`; the body carries a `contact` object:
+
+```
+X-ZeroSettle-Event: contact.opted_out
+
+{"event":"contact.opted_out","contact":{"at":"2026-11-03T17:04:11.000000+00:00","by":"contact","handle":"+18055559876","id":"evt_3f9a1c2b7d4e5f60","keyword":"stop","message_id":61,"opted_out":true}}
+```
+
+- `contact.opted_out`: they texted STOP (or another opt-out phrase).
+  `keyword` is what matched and `message_id` is that text, which also
+  arrives as a `message.received` as usual.
+- `contact.opted_in`: they texted START or `unstop` (`by: "contact"`), or
+  ZeroSettle cleared the opt-out at their request (`by: "zerosettle"`,
+  `keyword` and `message_id` null). `opted_out` is `false`.
+- `at` is when it happened. With more than one number, `contact` also
+  carries `line` and `line_id`: the number it came in on (an opt-out still
+  blocks every number on the account).
+- Retried like a message event (up to 3 retries) and signed the same way;
+  `contact.id` stays the same across retries, so dedupe on it. Never
+  recorded as the line's `last_delivery`.
+
+## Step 6 — debug
+
+`GET /api/imessage/line` → `last_delivery` shows the newest message delivery
+(the final attempt of it): `message_id`, `event`, `url`, `ok`, `status_code`,
+`error` (for example `ConnectionError: …` or `HTTP 500`), `attempts`, `at`.
+The console dashboard shows the same, live, and the
+[live stream](/imessage/live-stream-sse) reports every attempt as a `delivery` event.
+
+To remove the webhook (this also turns `typing_events` off; `instant_typing`
+stays as it is):
+
+```http
+DELETE /api/imessage/webhook
+```
+
+```bash
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/webhook
+# {"ok": true}
+```
+
+## A complete receiver
+
+This is the whole of a working integration: verify, store, auto-reply.
+
+```python
+# receiver.py — run: uvicorn receiver:app --port 8100
+import hashlib, hmac, os, time, requests
+from fastapi import FastAPI, Request, Response
+
+BASE = os.environ.get("ZEROSETTLE_BASE_URL", "https://portal.zerosettle.io")
+TOKEN = os.environ["ZEROSETTLE_TOKEN"]
+SECRET = os.environ["ZEROSETTLE_WEBHOOK_SECRET"]
+app = FastAPI()
+seen: set[int] = set()
+
+def verify(header, raw):
+    try:
+        parts = dict(p.split("=", 1) for p in header.split(","))
+        t, v1 = int(parts["t"]), parts["v1"]
+    except Exception:
+        return False
+    if abs(time.time() - t) > 300:
+        return False
+    expected = hmac.new(SECRET.encode(), f"{t}.".encode() + raw, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, v1)
+
+@app.post("/webhook")
+async def webhook(request: Request):
+    raw = await request.body()
+    if not verify(request.headers.get("X-ZeroSettle-Signature", ""), raw):
+        return Response(status_code=401)
+    payload = await request.json()
+    if payload["event"] != "message.received":
+        return Response(status_code=200)     # our own sends echo back as message.sent; typing.* has no message
+    msg = payload["message"]
+    if msg["id"] in seen:
+        return Response(status_code=200)     # a retry of one we already handled
+    seen.add(msg["id"])
+    requests.post(f"{BASE}/api/imessage/send",
+                  json={"to": msg["handle"], "text": f"You said: {msg['text']}"},
+                  headers={"Authorization": f"Bearer {TOKEN}"}, timeout=90)
+    return Response(status_code=200)
+```
