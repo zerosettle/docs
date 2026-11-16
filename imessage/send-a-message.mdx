@@ -3,10 +3,9 @@ title: "Send a message"
 ---
 
 One call sends a text from your line to a phone number or iMessage email and
-returns once the line accepts the message for sending. iMessage is preferred;
-accounts enabled for [SMS fallback](/imessage/send-a-message#sms-fallback) can send plain
-text as carrier SMS from the same number. This endpoint also sends iMessage
-voice messages, photos, videos and polls.
+returns once the line accepts the message for sending. The line prefers
+iMessage and uses [SMS fallback](/imessage/send-a-message#sms-fallback) for eligible plain text from the same number.
+This endpoint also sends iMessage voice messages, photos, videos and polls.
 
 ```http
 POST /api/imessage/send
@@ -15,8 +14,8 @@ Content-Type: application/json
 ```
 
 - `to`: a phone number **or an email address** (up to 128 characters).
-  iMessage recipients must be registered with iMessage; SMS fallback supports
-  phone numbers only and requires an enabled account.
+  SMS fallback supports phone numbers only. See [SMS fallback](/imessage/send-a-message#sms-fallback) for how the line
+  chooses a service.
   - Phone number: include a country code and it is honoured — as a leading `+`
     (`+44…`), or an international dialing prefix (`00`/`011`). With no country
     code the US is assumed, so a bare 10-digit number (or `1` + 10 digits)
@@ -24,7 +23,7 @@ Content-Type: application/json
   - Email: sent to the Apple Account that uses that address for iMessage, e.g.
     `{"to": "jane@example.com", "text": "Hi"}`. It is lowercased, and that is
     the `handle` the conversation, webhooks and opt-outs use. The address must
-    be on someone's iMessage; there is no SMS or email fallback.
+    be registered for iMessage. Carrier SMS requires a phone number.
 - `text`: 1–4000 characters after trimming whitespace.
 - `image_b64` / `audio_b64` (optional): a photo or a voice message instead;
   see [Attachments](/imessage/attachments).
@@ -68,7 +67,7 @@ The call waits for the line to accept the send, normally 2–5 seconds
 and at most about 75 for a text (about 105 for a voice message or photo,
 which ZeroSettle converts first, and about 90 for a ready video; see
 [Send a video](/imessage/attachments#send-a-video) for a call that ends without an
-answer). An enabled account's first SMS to a recipient can add up to 15
+answer). Your account's first SMS to a recipient can add up to 15
 seconds for its separate opt-out notice attempt. `id` and `record` still
 refer to your original message, which also arrives on the console's live
 stream and at your webhook as `message.sent`. For 1:1 iMessages, use
@@ -79,7 +78,7 @@ after the line accepted the send.
 
 | HTTP | `status` | What happened | What to do |
 |---|---|---|---|
-| 200 | `message_sent` | The line accepted the message for sending through iMessage or, on an enabled account, SMS. | — |
+| 200 | `message_sent` | The line accepted the message for sending through iMessage or SMS. | — |
 | 429 | `busy` | The line was busy with another request for the whole retry window (~12 s). Error code `line_busy`. | Retry after 2 s. Sends are serialized per line. |
 | 429 | — | Too many new contacts. Error code `new_contact_limit`. | Wait `error.retry_after_s`. On Pro (5 a day), [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for 50 a day per number ($199 a month per number). |
 | 403 | — | They texted STOP. Error code `recipient_opted_out`; nothing was sent or stored. | Don't retry. They can text START to opt back in. |
@@ -106,12 +105,13 @@ your code did.
 
 ## SMS fallback
 
-**SMS fallback is included with every new signup.** It turns on when you claim
-your number and applies to all numbers on the account. If you signed up before
-the feature launched, contact ZeroSettle to check your account's access.
+SMS fallback sends and receives one-to-one plain text from the same ZeroSettle
+number you use for iMessage. ZeroSettle turns it on when a new account claims
+its first number. The setting applies to all numbers on the account; contact
+ZeroSettle if you need to check SMS access on an existing account.
 
-On an enabled account, use the same `POST /api/imessage/send` request, bearer
-token and `to` / `text` fields. No extra public request parameter is needed:
+To send, use the same `POST /api/imessage/send` request, bearer token and
+`to` / `text` fields. No extra public request parameter is needed:
 
 1. The line prefers iMessage when it is available.
 2. If the recipient's phone number is not registered with iMessage, plain text
@@ -123,7 +123,7 @@ token and `to` / `text` fields. No extra public request parameter is needed:
 Fallback supports **one-to-one plain-text SMS to phone numbers**. Email
 destinations, photos, voice messages, videos, polls, effects, inline replies,
 reactions, group chats, typing indicators and name-and-photo sharing use
-iMessage. RCS and MMS are outside the scope of SMS fallback.
+iMessage. The send API does not fall back to MMS or RCS.
 
 Incoming SMS uses your existing message history, live stream and
 `message.received` webhook. SMS message records carry `"service": "SMS"`, in

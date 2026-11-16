@@ -65,9 +65,8 @@ in ascending order, for loading history. `limit` is 1–500, default 100.
 inline reply also carries `reply_to` ([Replies](/imessage/send-a-message#replies)), and
 one sent with an effect carries `effect` ([Effects](/imessage/send-a-message#effects)).
 A message in a group chat carries `chat_id`, and a rename or membership
-change there is `kind: "group_event"` ([Group chats](/imessage/group-chats)). On an
-account enabled for [SMS fallback](/imessage/send-a-message#sms-fallback), incoming and
-outgoing SMS records carry `service: "SMS"`; the separate first-SMS opt-out
+change there is `kind: "group_event"` ([Group chats](/imessage/group-chats)).
+Incoming and outgoing SMS records carry `service: "SMS"`; the separate first-SMS opt-out
 notice is a normal outbound message with its own ID.
 
 ## Delivery receipts

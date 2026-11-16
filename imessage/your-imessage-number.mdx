@@ -3,12 +3,12 @@ title: "Your iMessage number"
 ---
 
 ZeroSettle gives you a dedicated **phone number** on iMessage, backed by Apple
-hardware. New signups include [SMS fallback](/imessage/send-a-message#sms-fallback)
-for plain-text messages from the same number. The API calls this number your
+hardware. [SMS fallback](/imessage/send-a-message#sms-fallback) uses that same number for one-to-one plain-text messages.
+The API calls this number your
 *line*. You can:
 
 - send an iMessage from that number to a registered phone number or iMessage
-  email, with plain-text SMS fallback to phone numbers on enabled accounts;
+  email, with SMS fallback for eligible plain text to phone numbers;
 - read every conversation and message on it, both directions;
 - register a **webhook** and get an HTTP POST the moment someone replies;
 - log every conversation in your CRM and text from inside it (see
@@ -17,9 +17,9 @@ for plain-text messages from the same number. The API calls this number your
 
 ## Pricing
 
-Two plans, both billed monthly by Stripe with a **30-day money-back
+Pro and Growth are billed monthly by Stripe with a **30-day money-back
 guarantee** (ask within 30 days and you are refunded in full and the
-subscription is cancelled):
+subscription is cancelled). Enterprise is available through sales.
 
 - **Pro** — one iMessage number, **$49/month**, with **5 new contacts a
   day** (people who text you first, and ongoing conversations, don't count
@@ -28,7 +28,8 @@ subscription is cancelled):
   [portal.zerosettle.io/imessage](https://portal.zerosettle.io/imessage).
   Need more? [Upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for 50 a day per
   number at $199 a month per number.
-- **Growth** — new signups start with **two iMessage numbers** that work as
+- **Growth** — from **$199/month** when upgrading one Pro number. New
+  signups start with **two iMessage numbers** that work as
   one, **25 new outbound contacts per day per number** (50 across both), and
   **team members**. The standard invite is **$599/month** and each additional
   number is **$199/month**. Partner and custom invite prices appear at signup.
@@ -36,8 +37,10 @@ subscription is cancelled):
   [console](https://portal.zerosettle.io/imessage#upgrade) for **$199/month per
   number**. The upgrade is prorated today. A free trial ends at the upgrade
   and the first Growth month is charged.
+- **Enterprise** — custom pricing through sales for high volume and
+  compliance needs.
 
-Either plan can add numbers whenever you want, from the console or the API
+Pro and Growth can add numbers whenever you want, from the console or the API
 (see [Add a line](/imessage/your-imessage-number#add-a-line)); each one is billed
 monthly and has its own daily allowance for new contacts. Pro allows 5 per
 number. Growth allows 25 per number with CAP25 and 50 at the standard limit.
