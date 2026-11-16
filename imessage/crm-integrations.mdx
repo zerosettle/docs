@@ -1,0 +1,355 @@
+---
+title: "CRM integrations"
+---
+
+Use your ZeroSettle number from your CRM or automation tool. Each setup below
+shows how to send messages and where to find them.
+
+| CRM | Where messages go | Send from the CRM | Connect with |
+|---|---|---|---|
+| [Close](/imessage/crm-integrations#close) | an **iMessage** activity on the lead | log an iMessage activity | Close sign-in or an API key |
+| [HubSpot](/imessage/crm-integrations#hubspot) | an SMS communication on the contact, or a conversation in your HubSpot inbox | the iMessage card, a workflow action, or a reply in the inbox | install the ZeroSettle iMessage app |
+| [GoHighLevel and LeadConnector](/imessage/crm-integrations#gohighlevel-and-leadconnector) | the ZeroSettle inbox | a Custom Webhook workflow action | a ZeroSettle API key |
+| [Zapier](/imessage/crm-integrations#zapier) | start a Zap on each message | the Send iMessage action in any Zap | an API key in the ZeroSettle Zapier app |
+| Salesforce | coming soon | | |
+
+Using another CRM? Log messages from your [webhook](/imessage/webhooks-step-by-step)
+and send with `POST /api/imessage/send`: the same events and rules these
+integrations use.
+
+## Close
+
+Connect your [Close](https://close.com) organization and your iMessage number
+works from inside Close, both ways:
+
+- **Every message is logged.** Each text your numbers send or receive (from
+  the API, the console, the AI agent, or a reply from the contact) shows up
+  on the lead's timeline as an **iMessage** activity: the text, the
+  direction, the status, their number and yours. It lands on the lead whose
+  contact has that phone number. A number Close doesn't have yet gets a new
+  lead, unless you turn that off.
+- **Send from Close.** On a lead, log an **iMessage** activity with a
+  **Message** and leave **Status** empty. ZeroSettle sends it from your
+  number and fills in Status (`Sent` or `Failed`, with the reason in
+  **Error**). It goes to the **Phone** you type, else the **Contact** you
+  pick, else the lead's only contact with a phone number. Their reply is
+  logged on the same lead.
+
+Sends from Close follow the same rules as `POST /api/imessage/send`: an
+active subscription, STOP, the unanswered-touch rule, the new-contact limits,
+and a number managed by the AI agent only sending through the agent. A send
+those rules refuse (or one with no one to send to) is marked `Failed` with
+the reason; fix what it says and clear **Status** to send it again. If the
+line itself couldn't confirm a send, the Error says so: check the
+conversation before logging it again, since it may have gone out.
+
+### Connect
+
+In the console, open **Settings → CRM → Close** and choose **Connect with
+Close**, or paste a Close API key (in Close: **Settings → Developer → API
+Keys**). Connecting adds an **iMessage** custom activity type and a webhook
+to your Close organization, so connect as a Close **admin** (or with an
+admin's key). If your organization already has an activity type called
+iMessage, ZeroSettle leaves it alone and adds **iMessage (ZeroSettle)**. A
+Close organization connects to one ZeroSettle account; connecting it to a
+second one answers `409 close_org_taken`. Your server can do the same with
+its API key:
+
+```http
+POST /api/imessage/integrations/close
+Content-Type: application/json
+{"api_key": "api_…"}
+```
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"api_key":"api_…"}' $BASE/api/imessage/integrations/close
+```
+
+```json Response
+{"connected": true, "oauth_available": true, "auth": "api_key",
+ "organization": {"id": "orga_…", "name": "Acme"},
+ "user": {"id": "user_…", "name": "Dana Admin"},
+ "activity_type_id": "actitype_…", "line_id": null, "create_leads": true,
+ "connected_at": "2026-10-11T18:02:11Z", "last_synced_at": null,
+ "last_error": null, "last_error_at": null}
+```
+
+</CodeGroup>
+
+The key is never shown again. Connecting again (another key, or Close
+sign-in) replaces the connection and keeps the same activity type.
+
+### Settings and status
+
+```http
+GET /api/imessage/integrations/close
+```
+
+Returns the connection as above (with `pending`: messages waiting to be
+logged), or `{"connected": false, "oauth_available": …}`. `last_error` says
+what last went wrong talking to Close.
+
+```http
+PATCH /api/imessage/integrations/close
+Content-Type: application/json
+{"line_id": "ln_…", "create_leads": false}
+```
+
+- `line_id`: with several numbers, the one Close sends from. `null` (the
+  default) sends from the number the conversation is already on, like the
+  API does.
+- `create_leads`: `false` logs only messages with numbers Close already has.
+
+```http
+POST /api/imessage/integrations/close/check
+```
+
+Checks the connection and puts back anything missing in Close: the activity
+type, one of its fields, or the webhook (Close pauses a webhook after days of
+failed deliveries).
+
+```http
+DELETE /api/imessage/integrations/close
+```
+
+Disconnects: nothing more is logged, iMessage activities logged in Close are
+no longer sent, the webhook is removed from Close and a Close sign-in is
+revoked. What was already logged stays in Close. A Close organization stays
+connected to one ZeroSettle account until it disconnects, or until that
+account no longer has a paid number.
+
+### What lands in Close
+
+| Field | Logged message | Sent from Close |
+|---|---|---|
+| **Message** | the text (`🎤 Voice message` / `📷 Photo` / `🎬 Video` for media) | what you typed |
+| **Direction** | `Incoming` or `Outgoing` | empty, or `Outgoing` |
+| **Status** | `Received`, `Sent` or `Failed` | empty until ZeroSettle fills it in |
+| **Contact** | the contact with that number | optional: who to text |
+| **Phone** | their number | optional: who to text |
+| **Your iMessage number** | the number it was on | filled in once sent |
+| **Error** | why it failed | why it wasn't sent |
+
+Close being slow or down only delays things: messages are logged once it
+answers again (retried for about a day), a send logged in Close waits for it
+(for about an hour and a half), and Status and Error are written as soon as
+Close takes them. An activity you log with a Status already set (for example
+a text you sent from your own phone), with Direction `Incoming`, or from
+before you connected is kept as a record and never sent; neither is one
+still waiting to be sent when you disconnect.
+
+## HubSpot
+
+Install the **ZeroSettle iMessage** app in your HubSpot account and your
+numbers work from inside HubSpot:
+
+- **Every message is logged** on the contact with that phone number as an
+  SMS communication (HubSpot has no iMessage type), with whether it was sent
+  or received and on which of your numbers. A number HubSpot doesn't have yet
+  gets a new contact, unless you turn that off.
+- **Send from a contact.** The **iMessage** card on the contact record shows
+  the conversation; type and send. Add the card to your contact record
+  layout once (in HubSpot: a contact → **Customize record**).
+- **Send from a workflow.** Add the **Send iMessage** action to a contact
+  workflow (needs a HubSpot plan with workflows). It sends to the phone you
+  map, else the contact's mobile or phone number, and reports `sent`,
+  `failed` or `refused` with an `errorCode`.
+- **Reply in your HubSpot inbox** (Sales or Service Hub Professional and
+  up). Connect your numbers to an inbox and conversations live there:
+  incoming texts, copies of what you send elsewhere, and replies your team
+  types in the inbox, which are sent from your number and marked Sent or
+  Failed. Messages in the inbox aren't logged again as communications. HubSpot
+  only adds a copy of a message you sent elsewhere to an open conversation,
+  so the first text to someone who hasn't written yet (or after the
+  conversation was closed) is logged on the contact instead.
+
+Sends from HubSpot follow the same rules as `POST /api/imessage/send`.
+
+### Connect
+
+In the console, open **Settings → CRM → HubSpot** and choose **Connect with
+HubSpot**, then approve the app in HubSpot (a Super Admin, or someone with
+App Marketplace access). One HubSpot account connects to one ZeroSettle
+account. To use the inbox, pick it under **HubSpot inbox** in the same
+panel, or in HubSpot go to **Settings → Inbox & Help Desk → Connect a
+channel → ZeroSettle iMessage**.
+
+```http
+GET /api/imessage/integrations/hubspot
+```
+
+```json
+{"connected": true, "available": true, "portal_id": 48807704,
+ "hub_domain": "acme.com", "user_email": "dana@acme.com",
+ "line_id": null, "create_contacts": true,
+ "inbox": {"available": true, "inbox_id": "77", "numbers": ["+16465550100"]},
+ "workflows": true, "last_synced_at": "2026-10-11T18:02:11Z",
+ "last_error": null, "pending": 0}
+```
+
+```http
+PATCH /api/imessage/integrations/hubspot
+Content-Type: application/json
+{"line_id": "ln_…", "create_contacts": false}
+```
+
+```http
+GET /api/imessage/integrations/hubspot/inboxes
+```
+
+```http
+PUT /api/imessage/integrations/hubspot/inbox
+Content-Type: application/json
+{"inbox_id": "77"}
+```
+
+`{"inbox_id": null}` takes your numbers back out of the inbox.
+
+```http
+DELETE /api/imessage/integrations/hubspot
+```
+
+Disconnecting stops logging and sending, takes your numbers out of the
+inbox and revokes the app's access. What was logged stays in HubSpot.
+
+### Phone contacts in the console
+
+After connecting, use **Contacts with phone numbers** in the HubSpot panel to search
+contacts and import selected ones into ZeroSettle. Importing keeps the
+contact's original source URLs and does not send a message. Mobile numbers
+take priority over the standard phone field. A phone must include its
+international country code; local numbers are held until corrected.
+Phone presence alone does not establish iMessage availability. Imported
+contacts show **Not checked**. Use the separate
+`GET /api/imessage/availability` endpoint to check a recipient without sending.
+
+| Request | Purpose |
+|---|---|
+| `GET /api/imessage/hubspot/contacts?query=&after=0&limit=25&phone_only=true` | Search live HubSpot contacts, with `portal_id`, normalized phones, source URLs and a next-page `after`. |
+| `GET /api/imessage/hubspot/contacts/{id}` | Read a fresh contact before acting. |
+| `GET /api/imessage/hubspot/contacts/imported?after=&limit=25` | Page through the contacts imported into this account and portal. |
+| `POST /api/imessage/hubspot/contacts/import` | Cache selected phone contacts: `{"expected_portal_id": 48807704, "contact_ids": ["123"]}`. At most 100 per request; skipped contacts have a reason. |
+| `POST /api/imessage/hubspot/contacts/upsert` | Create or update explicitly supplied properties, retaining optional `source_urls`. Include `expected_portal_id`; `contact_id` selects an update, otherwise an exact email is checked before create. |
+| `POST /api/imessage/hubspot/contacts/{id}/send` | Send one text using the fresh read's `expected_portal_id` and `expected_phone`, plus `text` and optional `phone_property`, `line` or `line_id`. |
+
+Supported properties are `firstname`, `lastname`, `email`, `phone`,
+`mobilephone`, `website`, `company`, `jobtitle`, `hs_linkedin_url` and `message`. Source URLs
+are also retained in the standard `message` property under
+`ZeroSettle source URLs:`. Existing message context is preserved.
+
+For a send, read the contact first and pass the exact portal and phone
+displayed in that read. A changed portal returns `409 hubspot_changed`; a
+changed phone returns `409 hubspot_contact_changed`. Refresh and review the
+recipient before trying again. Sends use the same STOP, billing, managed
+agent, unanswered-message and number limits as the regular send API, and
+flow into the existing HubSpot message log.
+
+### HubSpot through MCP
+
+Connect your MCP client to `https://portal.zerosettle.io/mcp?integrations=hubspot`
+using your existing ZeroSettle authentication. The dashboard has a
+**Copy HubSpot MCP URL** button. The ordinary `/mcp` catalog stays unchanged.
+
+| Tool | Purpose |
+|---|---|
+| `hubspot_status` | Read connection status and the current portal. |
+| `hubspot_connect` | Get a one-use console link, valid for 15 minutes. Sign into the same ZeroSettle account and approve HubSpot in the browser. |
+| `hubspot_search_contacts` | Search live HubSpot contacts; `phone_only` defaults to true. |
+| `hubspot_get_contact` | Read the current contact, phone and portal before sending. |
+| `hubspot_upsert_contact` | Create or update explicitly supplied contact properties and source URLs. |
+| `hubspot_import_contacts` | Import selected phone contact IDs into ZeroSettle. |
+| `hubspot_send_contact` | Send one requested text with the portal and phone snapshot from the prior read. |
+
+Customer API keys and team members operate on their effective account.
+The contact bridge and MCP connection handoff require customer credentials.
+
+## GoHighLevel and LeadConnector
+
+Use a **Custom Webhook** action to send messages from your ZeroSettle number
+in a GoHighLevel or LeadConnector workflow.
+
+1. In the ZeroSettle console, open **Settings → API key** and copy your key.
+2. In your HighLevel sub-account, open **Automation → Workflows**. Add
+   **Send Data → Custom Webhook** in place of the **Send SMS** action.
+3. Set **Event** to **Custom** and **Method** to **POST**. Enter
+   `https://portal.zerosettle.io/api/imessage/send` as the URL and select
+   `application/json` as the content type. Choose **Bearer Token** for
+   authorization and paste your ZeroSettle API key into the token field.
+4. Paste the JSON below into **Raw Body** and replace the example `text` with
+   the message you want to send.
+
+```json
+{
+  "to": "{{contact.phone_raw}}",
+  "text": "Thanks for reaching out."
+}
+```
+
+HighLevel fills `{{contact.phone_raw}}` with the contact's phone number. Run
+the draft workflow on a contact record with your own number and confirm the
+message appears in ZeroSettle before publishing the workflow.
+[HighLevel Custom Webhook guide](https://help.gohighlevel.com/support/solutions/articles/155000003305-workflow-action-custom-webhook).
+
+Read and reply to incoming messages in the ZeroSettle inbox. ZeroSettle
+prefers iMessage and can send eligible plain text by carrier SMS on accounts
+with SMS fallback enabled. [Send API](/imessage/send-a-message) ·
+[SMS fallback](/imessage/send-a-message#sms-fallback).
+
+The official ZeroSettle app for GoHighLevel is on the way.
+
+## Zapier
+
+Use your iMessage number in [Zapier](https://zapier.com): start a Zap when a
+message comes in, and send iMessages from any Zap. In the console, open
+**Settings → CRM → Zapier** and choose **Open in Zapier** to add the
+ZeroSettle app to your Zapier account, then connect it with an API key from
+**Settings → API key**. Your active Zaps are listed in the same panel; use
+**Remove** to stop one getting events.
+
+| In Zapier | What it does |
+|---|---|
+| **New iMessage Received** (trigger) | a contact texts one of your numbers |
+| **iMessage Sent** (trigger) | a text from any of your numbers was sent |
+| **iMessage Failed** (trigger) | a text couldn't be sent |
+| **New Reaction Received** (trigger) | a contact reacted to a message |
+| **Send iMessage** (action) | sends `text` to a phone number or email, from the number you pick (optional) |
+| **Show Typing Indicator** (action) | shows the typing bubble to a contact |
+| **Find Conversation** (search) | finds the conversation with a phone number or email |
+
+Each trigger can be limited to one of your numbers. Sends follow the same
+rules as `POST /api/imessage/send`. Every trigger
+gets one event as a JSON object: the message record (the same fields as a
+[webhook](/imessage/webhooks-step-by-step) message) plus a stable `id`, the
+`event`, the message's `date`, and the number it is on.
+
+```json
+{"id": "message.received:1234", "event": "message.received",
+ "message_id": 1234, "direction": "in", "handle": "+15555550100",
+ "text": "See you at 3", "status": "received", "kind": "message",
+ "guid": "8F2C6B3E-…", "ts_ms": 1790000000000,
+ "date": "2026-09-21T14:13:20.000Z", "line": "+16465550100", "line_id": "ln_…"}
+```
+
+A reaction adds `reaction`, `target_id` and `target_guid`; a photo, video or
+voice message adds `image`, `video` or `audio`.
+
+### Zapier's hook endpoints
+
+The Zapier app uses these with your API key; you can use them too.
+
+| Request | Purpose |
+|---|---|
+| `GET /api/imessage/zapier/me` | the account the key belongs to: `{"label", "number", "lines"}` |
+| `GET /api/imessage/zapier/lines` | your numbers: `[{"id": "ln_…", "label": "+1 (646) 555-0100"}]` |
+| `POST /api/imessage/zapier/hooks` | subscribe: `{"target_url": "https://hooks.zapier.com/…", "event": "message.received", "line_id": null}` answers `201` with the hook's `id`. The same `target_url` again updates it. |
+| `DELETE /api/imessage/zapier/hooks/{id}` | unsubscribe; always `{"ok": true}` |
+| `GET /api/imessage/zapier/samples?event=&line_id=` | up to three recent events of that kind, in the delivered shape (or one example) |
+| `GET /api/imessage/integrations/zapier` | `{"available", "invite_url", "hooks": [...]}`: what the console shows |
+
+`event` is one of `message.received`, `message.sent`, `message.failed` and
+`reaction.received`. `target_url` must be an `https://hooks.zapier.com`
+URL (`422 invalid_target_url`), and an account holds up to 100 hooks
+(`429 too_many_hooks`). A hook whose URL answers `410` is removed.

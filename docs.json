@@ -25,9 +25,6 @@
       "apiHost": "https://us.i.posthog.com"
     }
   },
-  "openapi": [
-    "api-reference/openapi.json"
-  ],
   "navigation": {
     "tabs": [
       {
@@ -145,6 +142,85 @@
               "ai/connect",
               "ai/tools",
               "ai/security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "iMessage",
+        "groups": [
+          {
+            "group": "Getting started",
+            "pages": [
+              "imessage/overview",
+              "imessage/your-imessage-number",
+              "imessage/authentication",
+              "imessage/quick-start-for-an-agent"
+            ]
+          },
+          {
+            "group": "Switch to ZeroSettle",
+            "pages": [
+              "imessage/switch-from-photon",
+              "imessage/switch-from-linq",
+              "imessage/switch-from-sendblue"
+            ]
+          },
+          {
+            "group": "Messaging",
+            "pages": [
+              "imessage/send-a-message",
+              "imessage/attachments",
+              "imessage/read-messages",
+              "imessage/typing-indicators"
+            ]
+          },
+          {
+            "group": "Use cases",
+            "pages": [
+              "imessage/retention-offers",
+              "imessage/customer-support",
+              "imessage/sign-in-with-imessage"
+            ]
+          },
+          {
+            "group": "Agent infrastructure",
+            "pages": [
+              "imessage/ai-agent",
+              "imessage/ai-agent-in-the-console",
+              "imessage/connect-your-ai-agent"
+            ]
+          },
+          {
+            "group": "Webhooks & realtime",
+            "pages": [
+              "imessage/webhooks-step-by-step",
+              "imessage/live-stream-sse"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "imessage/mcp",
+              "imessage/crm-integrations"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "imessage/errors-limits-and-compliance"
+            ]
+          },
+          {
+            "group": "FaceTime Audio",
+            "pages": [
+              "imessage/facetime-audio"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "imessage/group-chats"
             ]
           }
         ]

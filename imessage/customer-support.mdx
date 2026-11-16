@@ -1,0 +1,134 @@
+---
+title: "Customer support"
+---
+
+Give customers a support channel that is already on their phone, opens in one
+tap, and shows your name and logo. Replies land in your webhook within a
+second or two, so you can route them to whatever your team already uses.
+
+## Why iMessage for support
+
+- **No app to install, no login.** They text, you answer. The thread persists
+  in Messages forever, on every device they own.
+- **Read receipts and typing indicators do the work of a status page.**
+- **Reactions.** A 👍 on their message says "seen, on it" without a canned
+  reply.
+- **Inbound never uses the new-contact limit.** Anyone who texts you first
+  never counts against it, and each number handles up to 10,000 messages a
+  day, sent and received, with known contacts, so a support line scales with
+  your customer base.
+
+## Let them start the conversation
+
+From your app, open Messages with the thread pre-addressed and pre-filled. iOS
+supports a body on the `sms:` URL; if the recipient is an iMessage line, the
+message goes as iMessage.
+
+```swift
+// "Message us" button. Prefill something that identifies the account.
+func openSupportThread(accountRef: String) {
+    let body = "Hi! I need help with my account (\(accountRef))."
+        .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+    if let url = URL(string: "sms:+18055550100&body=\(body)") {
+        UIApplication.shared.open(url)
+    }
+}
+```
+
+Use a short, opaque reference (an order number, or a per-user support code),
+never an email or a secret. A user who deletes the prefilled text is still
+matched by their phone number the second time you talk.
+
+On the web, `sms:+18055550100&body=…` opens Messages on supported Apple
+devices. On Android, use `sms:+18055550100?body=…` to open the SMS app with the body
+filled in. New signups include SMS fallback, so customers can text the same
+number from either app.
+
+## Route replies to your team
+
+Your webhook receives every inbound message. The simplest useful integration
+posts each one into a channel your team already watches, and lets the team
+answer from there. Slack, shown here; Intercom, Zendesk, Front, and Linear all
+have equivalent inbound APIs.
+
+```python
+# support_relay.py — run: uvicorn support_relay:app --port 8100
+import hmac, hashlib, json, os, time
+import httpx
+from fastapi import FastAPI, Request, Response, Form
+
+app = FastAPI()
+ZS = "https://portal.zerosettle.io"
+TOKEN, SECRET = os.environ["ZEROSETTLE_TOKEN"], os.environ["ZEROSETTLE_WEBHOOK_SECRET"]
+SLACK_WEBHOOK = os.environ["SLACK_WEBHOOK_URL"]
+seen: set[tuple[int, str]] = set()
+
+def verify(header: str, raw: bytes, tolerance: int = 300) -> bool:
+    try:
+        p = dict(x.split("=", 1) for x in header.split(",")); t = int(p["t"])
+    except Exception:
+        return False
+    if abs(time.time() - t) > tolerance:
+        return False
+    exp = hmac.new(SECRET.encode(), f"{t}.".encode() + raw, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(exp, p["v1"])
+
+@app.post("/webhook")
+async def webhook(req: Request):
+    raw = await req.body()
+    if not verify(req.headers.get("X-ZeroSettle-Signature", ""), raw):
+        return Response(status_code=401)
+    ev = json.loads(raw); m = ev.get("message")
+    if m is None:                                            # typing.* events carry no message
+        return {"ok": True}
+    if (m["id"], ev["event"]) in seen:
+        return {"ok": True}
+    seen.add((m["id"], ev["event"]))
+    if ev["event"] == "message.received":
+        customer = lookup_customer(m["handle"])             # your DB: phone -> account
+        text = f"*{customer.name if customer else m['handle']}* ({m['handle']}):\n> {m['text']}\n_reply with_ `/imsg {m['handle']} your answer`"
+        async with httpx.AsyncClient() as c:
+            await c.post(SLACK_WEBHOOK, json={"text": text})
+            # acknowledge instantly with a tapback so they know a human saw it
+            await c.post(f"{ZS}/api/imessage/reactions", headers={"Authorization": f"Bearer {TOKEN}"},
+                         json={"message_id": m["id"], "reaction": "like"})
+    return {"ok": True}
+
+# Slack slash command: /imsg +18055559876 We just refunded that charge.
+@app.post("/slack/imsg")
+async def slack_imsg(text: str = Form(...)):
+    handle, _, reply = text.partition(" ")
+    async with httpx.AsyncClient() as c:
+        r = await c.post(f"{ZS}/api/imessage/send", headers={"Authorization": f"Bearer {TOKEN}"},
+                         json={"to": handle, "text": reply}, timeout=90)
+    return {"response_type": "in_channel", "text": ("Sent." if r.status_code == 200 else f"Failed: {r.json()['error']['message']}")}
+```
+
+Register the receiver once with `PUT /api/imessage/webhook` (see
+[Webhooks](/imessage/webhooks-step-by-step#step-2-register-it)). Every send your team
+makes comes back to the same webhook as `message.sent`, so the Slack thread can
+show both sides.
+
+## Threading and identity
+
+- **The handle is the thread key.** One customer, one phone number, one
+  conversation. Store the E.164 handle on the account the first time they
+  text, then every later message resolves to a customer without asking.
+- **Emails happen.** A customer on an iPad or Mac without a number may show
+  up as an iMessage email address. Treat the handle as an opaque string and
+  match on either.
+- **Reactions are messages too.** `reaction.received` with `kind: "reaction"`
+  and `target_id` pointing at your message. A ❤️ on "Fixed, sorry about that"
+  is your CSAT survey.
+
+## Set expectations in the thread
+
+- Your first reply should say who is answering and when to expect the next
+  one. If nobody is on shift, say so and tapback the message anyway.
+- Sends block until the line hands the message to Apple, normally 2–5
+  seconds; give your send calls a 90-second timeout and surface `502
+  send_failed` to the agent verbatim.
+- Do not send automated marketing into a support thread. It is a different
+  consent, and it is how support lines get reported as spam.
+- **STOP still applies.** If a customer texts STOP, stop. They can text again
+  to reopen.

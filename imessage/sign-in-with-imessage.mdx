@@ -1,0 +1,461 @@
+---
+title: "Sign in with iMessage"
+---
+
+Sign a user in by proving they control an iMessage handle. No password, no
+SMS gateway, no OTP fee, and nothing to type: the user taps a button, Messages
+opens with a code prefilled, they tap Send, and they are in.
+
+Because the **user texts you first**, the flow has no new-contact limit. It
+also gives you the handle Apple attached to the message, which is a stronger
+identifier than a number the user typed.
+
+<Note>
+
+This verifies *possession of an iMessage handle*, the same guarantee
+as SMS OTP. Your auth provider still issues the session. The sections below
+show how to mint that session in Firebase, Supabase, Auth0, and Clerk once
+ZeroSettle has done the verification.
+
+</Note>
+
+## How it works
+
+1. The app asks your backend to start an attempt. The backend returns a short
+   random code (`4F7K2Q`) and stores it with a 10-minute expiry.
+2. The app opens Messages addressed to your line with `SIGNIN 4F7K2Q`
+   prefilled. The user taps Send.
+3. Your webhook receives `message.received` with `handle` and `text`. The
+   backend matches the code, marks the attempt verified with that handle,
+   mints a provider session, and tapbacks 👍 on their message.
+4. The app, back in the foreground, asks your backend for the attempt state,
+   receives the session, and signs in.
+
+The user sees: tap, Messages opens, tap Send, swipe back, signed in. Their
+Messages thread shows one outbound "SIGNIN 4F7K2Q" with a 👍 from your brand.
+
+## The app
+
+```swift
+import UIKit
+
+struct Attempt: Decodable { let id: String; let code: String }
+
+func signInWithiMessage() async throws {
+    let attempt: Attempt = try await api.post("/auth/imessage/start")      // your backend
+    let body = "SIGNIN \(attempt.code)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+    guard let url = URL(string: "sms:+18055550100&body=\(body)") else { return }
+    await UIApplication.shared.open(url)
+    // When the user comes back, poll until verified (or use a push).
+    for _ in 0..<60 {
+        try await Task.sleep(for: .seconds(2))
+        let s: AttemptState = try await api.get("/auth/imessage/status?id=\(attempt.id)")
+        if s.state == "verified" { try await finishSignIn(s); return }
+        if s.state == "expired" { throw SignInError.expired }
+    }
+}
+```
+
+`sms:+18055550100&body=…` opens Messages with the recipient and text filled in.
+Because the recipient is an iMessage line, the message goes as iMessage. On a
+device with no iMessage (an iPad with no number is fine; an Android phone is
+not), fall back to your existing sign-in.
+
+## From the browser
+
+The same flow works on the web, with the same backend: only the "open
+Messages" step changes. There are two cases, and one page handles both.
+
+- **An Apple device with Messages** — a plain link opens Messages with
+  the recipient and text filled in, exactly like the app. The user taps Send,
+  switches back to the tab, and the page has already signed them in.
+- **Everything else** (Windows, Linux, a Mac without Messages, any Android) —
+  show the same `sms:` link as a **QR code** plus the number and code as text.
+  The user scans it with their phone's camera, which opens Messages prefilled;
+  they tap Send, and the *browser tab* signs in — a cross-device login, like
+  WhatsApp Web. Nothing is typed on either end.
+
+Both cases poll your backend for the attempt state, so the session always
+lands in the browser that started the attempt.
+
+```html
+<button id="imsg-btn" hidden>Sign in with iMessage</button>
+<div id="imsg-qr" hidden>
+  <img id="imsg-qr-img" alt="QR code that opens Messages with the sign-in text">
+  <p>Scan with an Apple device, then tap Send. Or text <b id="imsg-code"></b> to <b id="imsg-num"></b>.</p>
+</div>
+<script type="module">
+const LINE = "+18055550100";                                  // your iMessage number
+const attempt = await (await fetch("/auth/imessage/start", { method: "POST" })).json();
+const smsUrl = `sms:${LINE}&body=${encodeURIComponent("SIGNIN " + attempt.code)}`;
+
+// Apple devices open sms: links in Messages; everything else gets the QR.
+const apple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+if (apple) {
+  const b = document.getElementById("imsg-btn");
+  b.hidden = false;
+  b.onclick = () => { location.href = smsUrl; };             // a plain navigation, inside the click
+} else {
+  document.getElementById("imsg-qr").hidden = false;
+  document.getElementById("imsg-qr-img").src = `/auth/imessage/qr?id=${attempt.id}`;   // your backend renders the QR of smsUrl
+  document.getElementById("imsg-code").textContent = "SIGNIN " + attempt.code;
+  document.getElementById("imsg-num").textContent = LINE;
+}
+
+// Poll until verified. Poll immediately when the tab comes back (the user
+// just returned from Messages), otherwise every 2 s for 10 minutes.
+const poll = async () => {
+  const s = await (await fetch(`/auth/imessage/status?id=${attempt.id}`)).json();
+  if (s.state === "verified") { await finishSignIn(s.session); return true; }   // e.g. signInWithCustomToken / set a cookie
+  if (s.state === "expired") { showExpired(); return true; }
+  return false;
+};
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") poll(); });
+const timer = setInterval(async () => { if (await poll()) clearInterval(timer); }, 2000);
+</script>
+```
+
+The QR is just the `sms:` URL as an image; any QR library works
+(`qrcode` on npm, `segno` in Python). Render it on the backend from the
+attempt's code rather than inlining the code in the page URL.
+
+Details that matter:
+
+- **`sms:` links must be a plain navigation inside the click**, not
+  `window.open` after an `await`: Safari drops custom-scheme navigations that
+  are not the direct result of a tap. `location.href = smsUrl` in the click
+  handler is the reliable form. The tab stays open behind Messages.
+- **`&body=` on Apple, `?body=` elsewhere.** iOS and macOS read
+  `sms:+1…&body=…`; Android reads `sms:+1…?body=…`. Only Apple devices can
+  send an iMessage anyway, so the link uses `&body=` and Android users get
+  the QR to scan with an Apple device, or your fallback sign-in.
+- **The attempt id is the secret, the code is not.** The QR and the visible
+  text carry only the code; the code alone cannot fetch a session. Keep the
+  attempt id in the page (or an httpOnly cookie), never in the QR, and keep
+  the `status` endpoint's one-time read: whoever holds the id gets the session
+  exactly once.
+- **Codes are short-lived and single-use.** Ten minutes, consumed by the
+  first matching text (`by_code.pop` above). A second text with the same
+  code, or a replay of the webhook, is ignored.
+- **Desktop shows both.** Even when you show the QR, print the number and the
+  code as text: some people would rather open Messages themselves.
+- **Fallback.** If the attempt expires (the user has no iMessage device at
+  hand), offer your usual sign-in — the page already knows the state.
+
+## The backend
+
+Everything except `mint_session`, which is provider-specific and shown below.
+
+```python
+# auth_imessage.py — the ZeroSettle side of Sign in with iMessage
+import json, os, re, secrets, time
+import httpx
+from fastapi import FastAPI, Request, Response, HTTPException
+
+app = FastAPI()
+ZS = "https://portal.zerosettle.io"
+TOKEN, SECRET = os.environ["ZEROSETTLE_TOKEN"], os.environ["ZEROSETTLE_WEBHOOK_SECRET"]
+ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # no 0/O/1/I
+attempts: dict[str, dict] = {}                     # use Redis in production
+by_code: dict[str, str] = {}
+
+@app.post("/auth/imessage/start")
+def start():
+    aid, code = secrets.token_urlsafe(16), "".join(secrets.choice(ALPHABET) for _ in range(6))
+    attempts[aid] = {"code": code, "exp": time.time() + 600, "state": "pending", "handle": None, "session": None}
+    by_code[code] = aid
+    return {"id": aid, "code": code}
+
+@app.post("/webhook")
+async def webhook(req: Request):
+    raw = await req.body()
+    if not verify(SECRET, req.headers.get("X-ZeroSettle-Signature", ""), raw):   # see Webhooks, step 4
+        return Response(status_code=401)
+    ev = json.loads(raw)
+    if ev["event"] != "message.received":
+        return {"ok": True}
+    m = ev["message"]
+    if (m.get("service") or "iMessage") != "iMessage":
+        return {"ok": True}                                    # carrier texts cannot verify an iMessage handle
+    match = re.search(r"\bSIGNIN\s+([A-Z2-9]{6})\b", (m.get("text") or "").upper())
+    aid = match and by_code.pop(match.group(1), None)
+    a = aid and attempts.get(aid)
+    if not a or a["state"] != "pending" or a["exp"] < time.time():
+        return {"ok": True}                                    # ignore junk, expired, or replayed codes
+    a.update(state="verified", handle=m["handle"], session=await mint_session(m["handle"]))
+    async with httpx.AsyncClient() as c:                       # acknowledge with a tapback; no text needed
+        await c.post(f"{ZS}/api/imessage/reactions", headers={"Authorization": f"Bearer {TOKEN}"},
+                     json={"message_id": m["id"], "reaction": "like"})
+    return {"ok": True}
+
+@app.get("/auth/imessage/status")
+def status(id: str):
+    a = attempts.get(id)
+    if not a:
+        raise HTTPException(404)
+    if a["state"] == "pending" and a["exp"] < time.time():
+        a["state"] = "expired"
+    out = {"state": a["state"]}
+    if a["state"] == "verified":
+        out["session"] = a.pop("session")                      # one-time read
+        attempts.pop(id, None)
+    return out
+```
+
+Only an inbound iMessage verifies a sign-in code. Ignore carrier messages
+before matching the code. On iMessage, `handle` is what Apple attached to the
+message, typically an E.164 number or an email address. Use it as the user's
+verified identifier exactly as returned.
+
+## Minting the session — Firebase
+
+Firebase Phone Auth is tied to Firebase's own SMS delivery, so use a **custom
+token**: your backend, with the Admin SDK, finds or creates the user by the
+verified handle and mints a token the app exchanges for a normal Firebase
+session. Everything downstream (Firestore rules, `request.auth.uid`, other
+providers linked to the account) works exactly as with phone auth.
+
+```python
+# pip install firebase-admin
+import firebase_admin
+from firebase_admin import auth
+firebase_admin.initialize_app()          # GOOGLE_APPLICATION_CREDENTIALS points at a service account
+
+async def mint_session(handle: str) -> dict:
+    try:
+        user = auth.get_user_by_phone_number(handle) if handle.startswith("+") else auth.get_user_by_email(handle)
+    except auth.UserNotFoundError:
+        user = auth.create_user(phone_number=handle) if handle.startswith("+") else auth.create_user(email=handle, email_verified=True)
+    token = auth.create_custom_token(user.uid, {"imessage_verified": True})
+    return {"provider": "firebase", "custom_token": token.decode()}
+```
+
+```swift
+import FirebaseAuth
+
+func finishSignIn(_ s: AttemptState) async throws {
+    // s.session.custom_token is valid for one hour; exchange it immediately.
+    let result = try await Auth.auth().signIn(withCustomToken: s.session.customToken)
+    print("signed in as", result.user.uid, result.user.phoneNumber ?? "")
+}
+```
+
+Notes:
+
+- The user record gets `phoneNumber` set, so `user.phoneNumber` and the
+  Firebase console show the verified number, same as Phone Auth.
+- Custom tokens expire after one hour and are single-purpose; the resulting
+  ID token refreshes on its own.
+- If you use Identity Platform's blocking functions, `beforeSignIn` still
+  runs for custom-token sign-ins, so your existing checks apply.
+- Linking: a user who already signed in with Apple can call
+  `user.link(with:)` later, or you can set `phone_number` on their existing
+  record with `auth.update_user`, instead of creating a second account.
+
+## Minting the session — Supabase
+
+Supabase issues phone sessions only through its own OTP check, but it lets you
+**own the delivery** via the Send SMS hook: when someone requests a phone OTP,
+Supabase calls an HTTPS endpoint you host with the number and the code. For
+Sign in with iMessage you do not send that code anywhere. You hold it, and
+hand it to the app once the inbound `SIGNIN` text has proven the handle. The
+app then completes standard `verifyOTP`, and Supabase remains the only party
+that issues sessions (RLS on `auth.uid()`, refresh tokens, and the dashboard
+all work unchanged).
+
+1. Dashboard: **Authentication → Providers → Phone**, enable it. Then
+   **Authentication → Hooks → Send SMS hook**, choose *HTTPS*, enter your hook
+   URL, copy the generated secret into `SUPABASE_HOOK_SECRET`.
+2. Host the hook and the `mint_session` that drives it:
+
+```python
+# supabase_signin.py
+import asyncio, base64, hmac, hashlib, json, os
+import httpx
+from fastapi import FastAPI, Request, Response
+
+SUPABASE_URL, ANON_KEY = os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"]
+HOOK_SECRET = base64.b64decode(os.environ["SUPABASE_HOOK_SECRET"].split("_", 1)[1])   # "v1,whsec_<base64>"
+held_otps: dict[str, asyncio.Future] = {}          # phone -> the OTP Supabase generated
+
+def verify_standard_webhook(req: Request, raw: bytes) -> bool:
+    # Supabase hooks sign with Standard Webhooks: base64(HMAC-SHA256(secret, "<id>.<timestamp>.<body>"))
+    msg_id, ts, sig = req.headers["webhook-id"], req.headers["webhook-timestamp"], req.headers["webhook-signature"]
+    expected = base64.b64encode(hmac.new(HOOK_SECRET, f"{msg_id}.{ts}.".encode() + raw, hashlib.sha256).digest()).decode()
+    return any(hmac.compare_digest(expected, s.split(",", 1)[1]) for s in sig.split(" ") if s.startswith("v1,"))
+
+@app.post("/hooks/supabase/send-sms")
+async def send_sms(req: Request):
+    raw = await req.body()
+    if not verify_standard_webhook(req, raw):
+        return Response(status_code=401)
+    p = json.loads(raw)
+    phone = "+" + p["user"]["phone"].lstrip("+")
+    fut = held_otps.get(phone)
+    if fut and not fut.done():
+        fut.set_result(p["sms"]["otp"])                # hold it; never deliver it
+    return {}
+
+async def mint_session(handle: str) -> dict:
+    # Called from the webhook after the SIGNIN text proved the handle.
+    if not handle.startswith("+"):
+        raise ValueError("Supabase phone auth needs an E.164 number; fall back to email OTP for iMessage-email handles")
+    held_otps[handle] = asyncio.get_running_loop().create_future()
+    async with httpx.AsyncClient() as c:               # ask Supabase for an OTP; it calls the hook above
+        r = await c.post(f"{SUPABASE_URL}/auth/v1/otp", headers={"apikey": ANON_KEY},
+                         json={"phone": handle, "create_user": True}, timeout=15)
+        r.raise_for_status()
+    otp = await asyncio.wait_for(held_otps.pop(handle), timeout=10)
+    return {"provider": "supabase", "phone": handle, "otp": otp}
+```
+
+3. The app finishes with ordinary Supabase phone verification, using the
+   values your status endpoint returned:
+
+```swift
+import Supabase
+
+func finishSignIn(_ s: AttemptState) async throws {
+    let session = try await supabase.auth.verifyOTP(phone: s.session.phone, token: s.session.otp, type: .sms)
+    print("signed in as", session.user.id)
+}
+```
+
+The OTP travels backend → app → Supabase over your authenticated API, is
+valid for the OTP expiry you set in the dashboard (default 60 seconds, so
+keep the app's polling interval short), and is bound to the phone number that
+just texted you. Set the hook's SMS template to anything; it is never sent.
+
+## Minting the session — Auth0
+
+Auth0 Passwordless SMS has the same shape: Auth0 generates the code and hands
+it to a **Send Phone Message** Action you write. Hold the code in the Action
+instead of sending it, then let the app complete the passwordless login once
+the `SIGNIN` text has proven the handle.
+
+1. **Authentication → Passwordless → SMS**: enable it, set *SMS provider* to
+   *Custom*.
+2. **Actions → Library → Build custom**, trigger *Send Phone Message*. Add
+   `HOLD_URL` (an endpoint on your backend) and `HOLD_SECRET` as secrets:
+
+```js
+// Action: Send Phone Message. Posts the code to your backend instead of sending it.
+const axios = require("axios");
+exports.onExecuteSendPhoneMessage = async (event, api) => {
+  const { recipient, code } = event.message_options;      // recipient is E.164
+  await axios.post(event.secrets.HOLD_URL, { phone: recipient, code },
+    { headers: { Authorization: `Bearer ${event.secrets.HOLD_SECRET}` }, timeout: 5000 });
+};
+```
+
+3. Deploy the Action into the *Send Phone Message* flow. On your backend,
+   `mint_session` starts passwordless for the verified handle and waits for
+   the Action to deliver the code:
+
+```python
+AUTH0 = f"https://{os.environ['AUTH0_DOMAIN']}"
+
+@app.post("/hooks/auth0/hold")
+async def auth0_hold(req: Request):
+    if req.headers.get("Authorization") != f"Bearer {os.environ['HOLD_SECRET']}":
+        return Response(status_code=401)
+    p = await req.json()
+    fut = held_codes.get(p["phone"])
+    if fut and not fut.done():
+        fut.set_result(p["code"])
+    return {}
+
+async def mint_session(handle: str) -> dict:
+    held_codes[handle] = asyncio.get_running_loop().create_future()
+    async with httpx.AsyncClient() as c:
+        r = await c.post(f"{AUTH0}/passwordless/start", json={
+            "client_id": os.environ["AUTH0_CLIENT_ID"], "client_secret": os.environ["AUTH0_CLIENT_SECRET"],
+            "connection": "sms", "phone_number": handle, "send": "code"}, timeout=15)
+        r.raise_for_status()
+    code = await asyncio.wait_for(held_codes.pop(handle), timeout=10)
+    return {"provider": "auth0", "phone": handle, "code": code}
+```
+
+```swift
+import Auth0
+
+func finishSignIn(_ s: AttemptState) async throws {
+    let credentials = try await Auth0.authentication()
+        .login(phoneNumber: s.session.phone, code: s.session.code, audience: "https://api.yourapp.com", scope: "openid profile offline_access")
+        .start()
+    try credentialsManager.store(credentials: credentials)
+}
+```
+
+Passwordless codes in Auth0 are valid for 3 minutes by default. The Action
+runs inside Auth0's 20-second limit; your hold endpoint returns in
+milliseconds.
+
+## Minting the session — Clerk
+
+Clerk's Backend API can mint a **sign-in token** for any user, which is
+exactly what this flow needs. Find or create the user by the verified handle,
+mint a token, and the app redeems it.
+
+```python
+# mint_session for Clerk. pip install httpx
+CLERK = "https://api.clerk.com/v1"
+H = {"Authorization": f"Bearer {os.environ['CLERK_SECRET_KEY']}"}
+
+async def mint_session(handle: str) -> dict:
+    async with httpx.AsyncClient(headers=H, timeout=15) as c:
+        q = {"phone_number": [handle]} if handle.startswith("+") else {"email_address": [handle]}
+        users = (await c.get(f"{CLERK}/users", params=q)).json()
+        if users:
+            uid = users[0]["id"]
+        else:
+            body = {"phone_number": [handle], "skip_legal_checks": True} if handle.startswith("+") else {"email_address": [handle]}
+            uid = (await c.post(f"{CLERK}/users", json=body)).json()["id"]
+        tok = (await c.post(f"{CLERK}/sign_in_tokens", json={"user_id": uid, "expires_in_seconds": 300})).json()
+    return {"provider": "clerk", "ticket": tok["token"]}
+```
+
+```swift
+import ClerkSDK
+
+func finishSignIn(_ s: AttemptState) async throws {
+    try await SignIn.create(strategy: .ticket(s.session.ticket))   // now Clerk.shared.session is set
+}
+```
+
+## Minting the session — anything else (or your own)
+
+The contract is the same for every provider: after ZeroSettle proves the
+handle, your backend issues whatever your app already accepts.
+
+- **Your own JWTs / sessions:** look up or create the user by handle, issue
+  your session cookie or token as you would after any password check.
+- **Providers with custom-token or "ticket" APIs** (Firebase, Clerk, Stytch,
+  Descope, Ory): mint the token server-side, exchange it in the app.
+- **Providers that only issue phone sessions through their own OTP**
+  (Supabase, Auth0, AWS Cognito via the *Custom SMS sender* trigger): use the
+  hold pattern above. Start their OTP for the verified handle, catch the code
+  in their delivery hook, return it to the app, let the app verify.
+- **Sign in with Apple users:** attach the verified handle to the existing
+  account rather than create a second one; most providers expose a link or
+  update-user call for this.
+
+## Security checklist
+
+- Codes are random and single-use, from a 32-character alphabet, 6 long
+  (a billion combinations), and expire in 10 minutes.
+- Match codes with a strict regex on the whole word and ignore every other
+  inbound message. Never act on the text beyond the code.
+- Bind the attempt to the device that started it: return the session only to
+  the caller holding the attempt `id`, once. A stranger who happens to know
+  the code gets nothing without the `id`.
+- Verify the webhook signature on the raw body and dedupe on
+  `(message.id, event)`; retries are real.
+- Store `handle` as returned, on the account, as the verified identifier.
+  Show the user which number they signed in with.
+- Rate-limit `/start` per IP and per device. Inbound texts cost you nothing,
+  but unbounded attempt creation fills your store.
+- Log sign-ins with the ZeroSettle `message.id`; it is your audit trail and
+  it is visible in the console at `/imessage`.
+- A user who texted STOP earlier can still sign in: they are texting you, so
+  nothing is sent to them but a tapback.

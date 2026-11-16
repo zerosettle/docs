@@ -1,0 +1,141 @@
+---
+title: "Connect your AI agent"
+---
+
+Add ZeroSettle to Claude, Cursor, or any MCP client and let the agent do the
+whole job from inside your editor: sign you up for a number, then set up
+**your server** against this API for the use case you want — customer
+support, an iMessage agent, retention offers, or Sign in with iMessage — and
+verify it end to end. Or let the agent text from the line itself. One sign-in
+with your phone number; no token to paste.
+Under the hood this is a remote MCP server at `$BASE/mcp` speaking Streamable
+HTTP with OAuth 2.1 (dynamic client registration + PKCE), so any compliant
+client can discover and connect to it.
+
+<Tip>
+
+The connector sets up your line and texts from it. It signs you up,
+mints your server's API key, registers and tests your webhook, and sends a
+test message to *your own* number. An agent on it (Grok Bot, Claude, an
+always-on agent) can also text people who asked to hear from you with
+`send_imessage` and read their replies with `list_messages`. If the hosted
+AI agent is on, it answers their replies too; switch to `managed_by: "api"`
+first (this turns the agent off for that line group), so replies come to
+you. A
+server uses the REST API instead: it receives on the
+[webhook](/imessage/webhooks-step-by-step) and replies with
+[`POST /api/imessage/send`](/imessage/send-a-message). The same limits and consent
+rules apply either way.
+
+</Tip>
+
+## Claude Code
+
+```bash
+claude mcp add --transport http zerosettle https://portal.zerosettle.io/mcp
+```
+
+Then run `/mcp`, pick `zerosettle`, and choose Authenticate — Claude opens your
+browser to sign in (or sign up and get a number). To share it with your team, add it
+at project scope so it lands in a committable `.mcp.json`:
+
+<CodeGroup>
+
+```bash Shell
+claude mcp add --scope project --transport http zerosettle https://portal.zerosettle.io/mcp
+```
+
+```json Response
+{
+  "mcpServers": {
+    "zerosettle": { "type": "http", "url": "https://portal.zerosettle.io/mcp" }
+  }
+}
+```
+
+</CodeGroup>
+
+## Claude (web, desktop, mobile)
+
+Open **Customize → Connectors → Add custom connector**, enter the URL
+`https://portal.zerosettle.io/mcp`, and choose **Sign in now**. OAuth is
+automatic on web, desktop, and mobile — you sign in with your phone number,
+Google or email and the iMessage tools appear to Claude. New to ZeroSettle?
+The same page gets you a number on the Pro plan and takes you through
+checkout first.
+
+## Cursor
+
+One click: **[Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=zerosettle-imessage&config=eyJ1cmwiOiJodHRwczovL3BvcnRhbC56ZXJvc2V0dGxlLmlvL21jcCJ9)**.
+Or add it to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
+
+```json
+{
+  "mcpServers": {
+    "zerosettle-imessage": { "url": "https://portal.zerosettle.io/mcp" }
+  }
+}
+```
+
+Cursor discovers the OAuth flow from the URL alone and signs you in — no token.
+
+## Grok / xAI
+
+For a developer embedding Grok, add our server as an `mcp` tool on the xAI
+Responses API with a static token (mint one from the console — see
+[Authentication](/imessage/authentication)):
+
+```json
+{
+  "type": "mcp",
+  "server_url": "https://portal.zerosettle.io/mcp",
+  "server_label": "zerosettle-imessage",
+  "authorization": "Bearer PASTE_TOKEN"
+}
+```
+
+In the grok.com app you can instead add it under **Connectors → New Connector →
+Custom** by URL and sign in; the Grok Bot surfaces it as a plugin with the same
+static token.
+
+## Signing in vs. tokens
+
+- **OAuth (recommended, no token):** in Claude, Cursor, or grok.com you sign in
+  the way you signed up (phone number, Google or email). No account yet? The
+  sign-in page creates one, gets you a number on the Pro plan and takes you
+  through checkout, then connects. With several numbers you pick the one the
+  client uses by default (it can still name another of your numbers). The client gets its own token, refreshed automatically and
+  revocable from the console. This is the path for a person building in their
+  IDE.
+- **Static token (for API and CI):** mint a bearer from the console and pass it
+  as `Authorization: Bearer <token>` — the header form of every snippet above.
+  This is the path for the xAI API, Grok Bot, and headless jobs.
+
+## One prompt per use case
+
+The connector ships MCP **prompts** — clients show them as slash commands
+(Claude Code: `/zerosettle:build-sign-in`, Cursor and Claude.ai: the prompts
+menu). Each one is filled in at request time with your account's state
+(`get_line`) and the matching section of this reference, then walks the agent
+through sign-up if needed, the build, the API key, the webhook, and a
+verification on your own phone. Pass `stack` ("Node + Express on Fly.io") or
+the agent asks.
+
+| Prompt | Builds | Reference |
+|---|---|---|
+| `get-started` | Nothing yet — signs you up: number, brand name, test message, payment link. | [Your iMessage number](/imessage/your-imessage-number) |
+| `build-support-bot` | A receiver that routes each inbound text to your team and lets them reply from your number. | [Customer support](/imessage/customer-support) |
+| `build-agent` | A receiver that hands each text plus the thread to your model and replies, with typing. | [AI agent](/imessage/ai-agent) |
+| `build-retention-flow` | The leave-event hook that sends one offer bubble, and the receiver for the reply. | [Retention offers](/imessage/retention-offers) |
+| `build-sign-in` | The attempt store, the `SIGNIN <code>` matcher, the session mint for your auth provider, the tapback. | [Sign in with iMessage](/imessage/sign-in-with-imessage) |
+
+No prompts menu in your client? Paste this instead:
+
+```text Agent prompt
+You have the ZeroSettle iMessage connector. Set up Sign in with iMessage for my app.
+1. Call get_line. If onboarding is not "ready", sign me up first: sign_up (use_cases ["sign_in"]), set_profile with my brand name, send_test_message, then subscribe and give me the checkout link; call get_line until active is true.
+2. Call read_docs('sign in'), read_docs('webhook'), read_docs('compliance').
+3. In my stack (DESCRIBE_YOUR_STACK), build the backend the sign-in section describes: /auth/imessage/start, the webhook receiver that verifies X-ZeroSettle-Signature and matches SIGNIN <code>, the session mint for my auth provider, the 👍 tapback, and /auth/imessage/status. Then the sms: deep link in the client.
+4. Call create_api_key('sign-in') and put the token in the server's env. Expose the server with cloudflared, call set_webhook(url), put the secret in env, then test_webhook until it passes.
+5. Tell me how to run the flow from my phone, and give me a runbook: where the token and secret live and how to rotate them.
+```

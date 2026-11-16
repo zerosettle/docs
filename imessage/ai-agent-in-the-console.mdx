@@ -1,0 +1,191 @@
+---
+title: "AI agent in the console"
+---
+
+Turn on AI replies without writing any code: the hosted AI agent answers
+every text to your number from a business context you write. No server,
+webhook or model of your own. This page walks through the console at
+[portal.zerosettle.io/imessage](https://portal.zerosettle.io/imessage); for
+the API, MCP and every field, see
+[Managed by AI Agent](/imessage/ai-agent#managed-by-ai-agent-no-server).
+
+## What changes
+
+Each sender (its name and photo, and every number that shares it) is
+**Managed by API** or **Managed by AI Agent**:
+
+| | Managed by API | Managed by AI Agent |
+|---|---|---|
+| Incoming texts | sent to your webhook | answered by the AI agent |
+| Typing a reply in the console | works | off |
+| Sending from the API | works | works; the agent treats your texts as its own |
+| Starting a conversation | send a message | the agent sends your first message |
+| Credits | none for texts | one for each text the agent sends |
+
+## Before you start
+
+You need a paid number. Everything below happens in the console's
+**Messaging** tab.
+
+1. Sign in at [portal.zerosettle.io/imessage](https://portal.zerosettle.io/imessage).
+2. Open the settings panel: the right-hand column on a computer, or the
+   menu button on a phone.
+3. Choose the **Messaging** tab.
+4. With more than one sender, pick the one the agent should answer for
+   under **Pick a sender**.
+
+<Tip>
+
+Rather not fill in the form? Once you click **Managed by AI
+Agent**, the **Vibe code your iMessage agent** box has a prompt to paste
+into Claude or ChatGPT. It asks about your business and sets up
+everything below for you over MCP.
+
+</Tip>
+
+## Step 1: Switch to the AI agent
+
+AI replies start the moment you confirm the switch. Until then the agent's
+settings are shown greyed out and can't be edited.
+
+1. Under **Who answers**, click **Managed by AI Agent**. The settings appear
+   below, greyed out; your server still answers.
+2. Click **Switch to AI agent**.
+3. Read the confirmation (it says how many free credits you get) and click
+   **Switch**.
+
+From then on your webhook isn't called and the console's composer is off
+until you switch back.
+
+<Warning>
+
+The business context starts as an example for a made-up
+software business, and the agent would tell people about it. If the
+confirmation says **Switch with the example business context?**, do
+step 2 right away, or set everything up first with the Vibe code prompt.
+
+</Warning>
+
+## Step 2: Tell the agent about your business
+
+The agent knows only what you write in **Business Context**, and never
+makes up facts it doesn't give. Replace the example with your business and
+click **Save**. Cover:
+
+- who it is texting and why (new leads, customers, people who booked)
+- what you sell, with prices and any offers it may make
+- policies: refunds, cancellations, hours, shipping
+- when to send people to a person, and how to reach one
+- answers to common questions and objections
+- what it must never say or promise
+- a few short sample exchanges in your voice
+
+Up to 40,000 characters. A short example:
+
+```text
+You are Bright Smile Dental's assistant, texting patients who asked
+about an appointment on our website. Answer their questions and get
+them booked.
+
+About us: a family dental office at 120 Main St, Austin.
+Open Mon-Fri, 8am-5pm.
+Prices: cleaning and exam $129. New-patient special $99 (first visit
+only). We take Delta Dental and Cigna.
+Policies: cancel at least 24 hours ahead or there is a $50 fee.
+Anyone with pain, swelling or an emergency: tell them to call
+(512) 555-0142 right away.
+Never give medical advice or quote prices not listed here.
+
+Example:
+Them: do you take kids?
+You: We do! Kids are welcome from age 3. Want me to find you a time
+this week?
+```
+
+Then pick how it texts under **Personality**. Each choice saves when you
+click it.
+
+| Setting | Options | Default |
+|---|---|---|
+| Personality | Bubbly salesperson, Zoomer, Super casual, Friend, Professional, or Make your own | Friend |
+| Response time | Instant, Human-like (5 to 10 min), Busy (30 to 60 min), Don't Reply (first message only) | Instant |
+
+## Step 3: Test it from your phone
+
+1. Set **Response time** to **Instant** while you test.
+2. In Messages, text your number with a question a real customer would ask, such as a price or your hours.
+3. You'll see "…" typing, then one to three texts. The conversation shows
+   up in the console's inbox.
+4. Ask something your business context doesn't cover. It should say it
+   doesn't know or send you to a person, not guess.
+5. Fix anything that sounds wrong in **Business Context**, click **Save**,
+   and text again.
+
+When you're happy, set **Response time** to the speed you want.
+
+## Optional settings
+
+The agent works with a business context alone. These boxes, further down
+the Messaging tab, let it do more.
+
+| Box | What it does | Default |
+|---|---|---|
+| Goal | Pick Purchases, Trial starts or Demos booked and add a link, such as a Stripe payment link or a booking page. The agent shares it when they're interested. | on, Purchases, no link |
+| First message | 1 to 3 texts sent exactly as written when the agent starts a conversation. End on a question. Off: the agent writes its own opener. | on, a two-text opener |
+| Connectors: Files | Price lists, menus, catalogs, FAQs or policies (PDF, Excel, CSV, Word or text, up to 10 MB). The agent reads every file before it answers. | none |
+| Connectors: Add MCP server | Lets the agent use your tools: look up an order, check availability, book a time. Paste the server's link, and an access token if it needs one. | none |
+| Triggers | Texts the agent sends on its own. **Once**: some days after a conversation's last message (a follow-up). **Every day**: in every conversation. Each lands in the morning (9–11), afternoon (1–3) or evening (6–8). | one follow-up a day after they go quiet |
+
+MCP tools that only look things up start on. Ones that can change
+something start off: anyone who texts your number can ask the agent to use
+them, so turn those on only when that's safe.
+
+## Start a conversation
+
+The agent answers whoever texts you. To have it text someone first, use the
+**Start a conversation** box: enter their phone number, and their name if
+you know it (the agent uses it), then click **Start**. It sends your first
+message, or writes its own opener, and answers whatever they reply. Each
+text uses a credit, and the new-contact limits apply.
+
+Everyone you've started with is listed under it, newest first, with whether
+they've replied. It shows five; **Show all** opens the rest, and a row opens
+that conversation. From code it's `POST /api/imessage/agent/start` or MCP
+`start_conversation` ([details](/imessage/ai-agent#managed-by-ai-agent-no-server)).
+
+## Credits and limits
+
+Each text the agent sends uses one credit. Free credits come once, when
+the account first uses them, and never expire.
+
+| | Pro | Growth |
+|---|---|---|
+| Free credits (once) | 500 | 1,000 |
+| New contacts a day, per number | 5 | 50 |
+
+- What's left shows in the top bar and in the **Credits** box on the
+  Profile tab. A banner appears when you're low and when you're out.
+- **Buy credits** adds 1,000 for $50 or 5,000 for $200.
+- People who text you first don't count as new contacts.
+- The agent honors STOP and sends at most 2 messages to someone who hasn't
+  replied.
+
+More in [Credits](/imessage/ai-agent#credits).
+
+## Troubleshooting
+
+To pause the agent, click **Managed by API** under **Who answers** and
+confirm **Switch to API**.
+
+| Problem | Likely cause | Fix |
+|---|---|---|
+| The settings are greyed out | you're previewing; your server still answers | click **Switch to AI agent** |
+| It talks about "Example App" | the example business context is still saved | replace it in **Business Context** and click **Save** |
+| It doesn't answer at all | out of credits, or the subscription isn't paid | **Buy credits**, or update your card under Settings → Billing |
+| It answers late | **Response time** isn't Instant | pick **Instant** under Personality |
+| It went quiet with one person | 60 replies to them today | it answers again after midnight UTC |
+| It skipped a reply | they said something like "thanks!" after it wrapped up | nothing; that's on purpose |
+| It got a fact wrong or dodged a question | the fact isn't in your context or files | add it to **Business Context** or upload a file |
+| You can't type in the console | the sender is managed by the AI agent | switch to **Managed by API**, or send with the API |
+| Saving the business context fails | it's over 40,000 characters | shorten it, or move long lists into a file |
+| Starting a conversation hits a limit | today's new contacts are used up | wait until tomorrow, or upgrade to Growth for 50 a day |

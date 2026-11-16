@@ -1,0 +1,768 @@
+---
+title: "Attachments"
+---
+
+A line sends three kinds of attachment: a **voice message**, a **photo** and
+a **video**. A voice message arrives as Messages' native audio bubble —
+waveform, play button, and the transcript the recipient's Messages app generates. A
+photo arrives as Messages' native photo bubble, with your caption underneath
+it in the same bubble, and a video as Messages' native video bubble (a frame
+of it with a play button) the same way. Each is one call, on the same
+endpoint as text (a video is uploaded first), and both directions are
+covered: a photo, video or voice message someone sends the line is delivered
+to you with the file. The console at `/imessage` sends photos and videos
+too: the camera button next to the message box (or paste / drop a picture or
+a video into it), add a caption if you like, send.
+
+On a line that supports photo packs, several photos in one iMessage arrive in
+one `message.received` event with an `attachments` array. Older line software
+delivers only the first photo. For several videos, or a mix of photos and
+videos, ask the sender to put each video in a separate iMessage.
+
+Attachments go only to people who have replied: until a contact has sent
+the line anything, a photo, video or voice message to them is refused with
+`403 attachment_before_reply` and nothing is sent. Text them first.
+
+Videos use [credits](/imessage/ai-agent#credits): **1 for every 3 MB** of the
+video, rounded up (at least 1), for each video sent, per recipient. The
+converted file counts: `size_bytes` from `GET /api/imessage/videos/{id}`
+once it is `ready`; a full minute is about 16 MB, so 6 credits. A
+[broadcast](/imessage/send-a-message#broadcast-to-many-recipients) of a 6 MB video to
+20 people is 40; one send into a [group chat](/imessage/group-chats) is 2.
+On an account with videos enabled, each video it receives uses 1 per 3 MB of
+the file as it arrived too, once it can be watched (free when fewer are
+left).
+
+## Send a voice message
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "audio_b64": "<base64 audio>", "audio_format": "m4a"}
+```
+
+- `to`: same as a text send — a phone number or an iMessage email.
+- `audio_b64`: the recording, base64-encoded. Up to 6 MB decoded.
+- `audio_format`: the file's extension (`m4a`, `mp3`, `wav`, `aiff`/`aif`,
+  `caf`, `flac`, `aac`, `mp4`, `amr`; up to 8 characters). Optional — ZeroSettle
+  sniffs the bytes without it, and an unknown value is ignored — but pass it
+  when you know it.
+- Send **either** `text` or `audio_b64`, never both. Messages has no caption on
+  a voice bubble; if you want words too, send a second message.
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"to\":\"+18055559876\",\"audio_b64\":\"$(base64 -i hello.m4a)\",\"audio_format\":\"m4a\"}" \
+  $BASE/api/imessage/send
+```
+
+```python Python
+import base64, requests
+
+def send_voice(to: str, path: str) -> dict:
+    with open(path, "rb") as f:
+        audio = base64.b64encode(f.read()).decode()
+    r = requests.post(f"{BASE}/api/imessage/send",
+                      headers={"Authorization": f"Bearer {TOKEN}"},
+                      json={"to": to, "audio_b64": audio, "audio_format": path.rsplit(".", 1)[-1]},
+                      timeout=120)
+    return r.json()
+```
+
+```js Node
+import { readFile } from "node:fs/promises";
+
+async function sendVoice(to, path) {
+  const audio = (await readFile(path)).toString("base64");
+  const r = await fetch(`${BASE}/api/imessage/send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ to, audio_b64: audio, audio_format: path.split(".").pop() }),
+  });
+  return r.json();
+}
+```
+
+</CodeGroup>
+
+The call blocks until the line has handed the message to Apple, like a text
+send. Budget a few seconds more: ZeroSettle converts the audio first.
+
+## Send a photo
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "image_b64": "<base64 image>", "image_format": "jpg", "text": "Here's the view"}
+```
+
+- `to`: same as a text send.
+- `image_b64`: the image, base64-encoded. Up to 5 MB decoded. JPEG, PNG, GIF,
+  HEIC, WebP, TIFF, and BMP are accepted; the type is detected from the bytes.
+- `image_format`: the file's extension (`jpg`/`jpeg`, `png`, `gif`,
+  `heic`/`heif`, `webp`, `tif`/`tiff`, `bmp`; up to 8 characters). Optional —
+  the bytes always decide — but pass it when you know it.
+- `text`: an optional caption. Unlike a voice message, a photo carries text
+  in the **same bubble**, exactly as Messages shows a photo with a caption.
+  Leave it out for a photo alone.
+- `image_b64` and `audio_b64` never go together, nor either with a video.
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"to\":\"+18055559876\",\"image_b64\":\"$(base64 -i view.jpg)\",\"image_format\":\"jpg\",\"text\":\"Here's the view\"}" \
+  $BASE/api/imessage/send
+```
+
+```python Python
+import base64, requests
+
+def send_photo(to: str, path: str, caption: str = "") -> dict:
+    with open(path, "rb") as f:
+        image = base64.b64encode(f.read()).decode()
+    r = requests.post(f"{BASE}/api/imessage/send",
+                      headers={"Authorization": f"Bearer {TOKEN}"},
+                      json={"to": to, "image_b64": image, "image_format": path.rsplit(".", 1)[-1],
+                            "text": caption},
+                      timeout=120)
+    return r.json()
+```
+
+```js Node
+import { readFile } from "node:fs/promises";
+
+async function sendPhoto(to, path, caption = "") {
+  const image = (await readFile(path)).toString("base64");
+  const r = await fetch(`${BASE}/api/imessage/send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ to, image_b64: image, image_format: path.split(".").pop(), text: caption }),
+  });
+  return r.json();
+}
+```
+
+</CodeGroup>
+
+ZeroSettle converts HEIC, WebP, TIFF, BMP, and images over 2048 px on their
+long edge to JPEG before sending and strips EXIF metadata (including GPS) in
+the process. A JPEG, PNG, or GIF within that size goes out as sent, and GIFs
+keep their animation.
+
+When supported, a send can reuse an already prepared image. Other recipients
+on the same line can reuse the cached image bytes. Preparation itself is
+recipient-specific. You can prepare an image ahead of a send with the media API
+below. The cache is best effort, so a send can fall back to the original bytes.
+
+## Upload once and reuse a GIF or photo
+
+Upload frequently used images before sending them. The upload does not send a
+message or count against messaging limits. Reusing its ID avoids uploading the
+image from your application with every send. Preparing it for a recipient can
+also reduce send latency.
+
+```http
+POST /api/imessage/media
+Content-Type: application/json
+{"image_b64": "<base64 GIF or photo>"}
+```
+
+The image formats and 5 MB decoded limit are the same as `image_b64` on `/send`.
+Identical bytes uploaded by the same account return the same ID. GIF bytes keep
+their animation.
+
+```json
+{
+  "id": "med_0123456789abcdef0123456789abcdef",
+  "content_type": "image/gif",
+  "size_bytes": 148230,
+  "width": 480,
+  "height": 320,
+  "sha256": "<64-character SHA-256 digest>",
+  "created_at": "2026-10-30T12:00:00+00:00",
+  "url": "/api/imessage/media/med_0123456789abcdef0123456789abcdef"
+}
+```
+
+Send the returned ID through the ordinary send endpoint. A caption is optional;
+`media_id` cannot be combined with another attachment or a poll.
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "media_id": "med_0123456789abcdef0123456789abcdef", "text": "Hello!"}
+```
+
+`media_id` also works with `/api/imessage/broadcast`. Responses, recipient
+protections, routing, and messaging limits match an ordinary image send. The
+same upload is available across your account's lines and remains available
+after its original conversation is deleted. Another account cannot list,
+download, import, or send your uploads; an unknown or inaccessible ID returns
+`404 not_found`.
+
+To reuse an image already stored in message history, import it without first
+downloading it:
+
+```http
+POST /api/imessage/media
+Content-Type: application/json
+{"message_id": 44}
+```
+
+Provide either `image_b64` or `message_id`. The message must have an image stored
+on one of your account's lines. A text, voice message, missing image, or another
+account's message returns `404 not_found`.
+
+`GET /api/imessage/media?limit=50&offset=0` lists the newest uploads as
+`{"media": [...]}`, with the same metadata as the upload response and no image
+bytes. `limit` accepts 1–100. Fetch an upload's `url` with the same bearer token
+to retrieve the image.
+
+## Prepare a GIF before sending
+
+Once you know the recipient, start preparing an uploaded GIF or photo ahead of
+the send. This starts the upload while your application prepares the reply or
+the user writes a caption.
+
+```http
+POST /api/imessage/media/med_0123456789abcdef0123456789abcdef/prepare
+Content-Type: application/json
+{"to": "+18055559876"}
+```
+
+```json
+{
+  "ok": true,
+  "status": "submitted",
+  "media_id": "med_0123456789abcdef0123456789abcdef",
+  "to": "+18055559876",
+  "line": "+18055550100",
+  "line_id": "ln_…",
+  "expires_in_seconds": 3599
+}
+```
+
+`submitted` confirms the line accepted the preparation request. Uploading may
+still be in progress. The request sends no message and shows no typing indicator.
+Preparation uses the account's ordinary recipient routing; specify `line` or
+`line_id` in the body or query to choose a line, as on `/send`. A recipient who
+opted out is refused.
+
+Send the same `media_id` through `/send` or `/broadcast` as usual. Cached bytes
+can be reused for another recipient on the same line. Recipient-specific
+preparation still requires its own `/prepare` request. If the prepared copy
+is unavailable before the send begins, the line sends the original image once.
+Preparation preserves the GIF's content and animation.
+
+A line without this capability returns `409 image_prepare_unsupported`.
+Ordinary uploads and sends still work. If the line is busy, preparation
+returns `429 line_busy`. You can retry later. Preparation does not consume a
+message or create a conversation.
+
+
+## Send a video
+
+Videos are enabled by default for **all current and future accounts**, with
+individual account overrides managed by ZeroSettle. `GET /api/imessage/line`
+includes `"videos": true` when enabled, and the console accepts videos from
+its attachment button or by pasting or dropping a file. The sending line
+must support video. Videos use **iMessage only**, including on accounts with
+[SMS fallback](/imessage/send-a-message#sms-fallback) enabled.
+
+A video is up to **a minute** long. Upload the file, wait until it is ready,
+then send it by its id:
+
+```
+POST /api/imessage/videos
+Content-Type: video/mp4
+
+<the raw video file>
+```
+
+- The body is the file itself, not JSON and not base64: up to **100 MB**,
+  with `Content-Type` `video/mp4`, `video/quicktime` (a `.mov`), another
+  `video/*` type, or `application/octet-stream`.
+- ZeroSettle reads it before answering: a file that isn't an MP4, MOV or
+  WebM is `422 video_invalid` ("This file isn't a video we can read."), and
+  so is one with no video in it or one longer than a minute, each with a
+  plain-English `error.message`; over 100 MB is `413 video_too_large`.
+- The answer is `202`: the upload is stored and converting. A file that
+  already is what goes out (H.264 within 1280 × 720, see
+  [Preparing the video](/imessage/attachments#preparing-the-video)) is usually
+  converted before the answer, which then says `"status": "ready"`: send it
+  at once.
+- An account may have **3 videos processing** at once (uploads and
+  `video_b64` sends together), and ZeroSettle 10 in all. Past that the
+  upload is `429 rate_limited` with `Retry-After: 30` (`error.retry_after_s`
+  30) and nothing is stored: wait for one to be `ready`, then retry.
+
+```json
+{"video": {"id": "vid_3f9c2a7be1d04c5f8a6b2e9d1c0f7a43", "status": "processing",
+           "duration_ms": 12480, "width": 1080, "height": 1920}}
+```
+
+Otherwise ask for it until `status` is `ready` (every half second for the
+first few seconds, then every second or two):
+
+```http
+GET /api/imessage/videos/{id}
+```
+
+```json
+{"video": {"id": "vid_3f9c2a7be1d04c5f8a6b2e9d1c0f7a43", "status": "ready",
+           "duration_ms": 12480, "width": 720, "height": 1280,
+           "size_bytes": 3145728, "content_type": "video/mp4"}}
+```
+
+- `status` is `processing`, `ready` or `failed`; a failed video also has
+  `error`, saying why. `width` and `height` are as it plays (a portrait video
+  is taller than wide).
+- Converting takes about a second for a file that is already 720p H.264,
+  and longer (up to a couple of minutes for a full minute of 4K) when it has to
+  be re-encoded. See [Preparing the video](/imessage/attachments#preparing-the-video).
+- An upload belongs to your account: any of your numbers can send it, and
+  the same `video_id` can be sent again to someone else or in a broadcast.
+  Sent to the same person (or chat) from the same number within 10 minutes,
+  it is answered with that first send (`duplicate: true`) instead of going
+  again. `GET` on an id that isn't one of your uploads is `404 not_found`.
+
+Then send it:
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "video_id": "vid_3f9c2a7be1d04c5f8a6b2e9d1c0f7a43", "text": "Quick tour of the new app"}
+```
+
+- `to`: same as a text send (or `chat_id` for a [group chat](/imessage/group-chats)).
+- `video_id`: the upload's `id`. Send it once `GET /api/imessage/videos/{id}`
+  says `ready`. A send naming one still processing waits for it up to a
+  minute (then `409 video_processing`, nothing sent), but that wait comes on
+  top of the send's own (below), enough for the call to end without an
+  answer: it is a fallback, not the way to wait. A video that failed
+  processing is `422 video_invalid`; an id that isn't one of your uploads is
+  `404 not_found`.
+- `text`: an optional caption, in the **same bubble** as the video, as for a
+  photo. Leave it out for a video alone.
+- `reply_to`, `effect` and `line` / `line_id` work as for a photo.
+- A video never goes with `image_b64`, `audio_b64` or `poll`.
+
+**A video send can take about 90 seconds** (the line downloads the file,
+then sends it). Give your client a timeout of at least 100 s. If the call
+ends without a JSON answer (your client times out, the connection drops, or
+a `5xx` page that isn't JSON comes back, such as a gateway's `524`), the video
+may still have gone. **Retrying the same call within 10 minutes is safe.** If
+the first send went, the retry answers `200` with `"duplicate": true` and
+that send's `id` and `record`, and nothing is sent or charged again (even
+with too few credits left by then). If the first send is still in
+progress, the retry waits for it. If it failed, the retry sends it. After 10
+minutes, look for a `kind: "video"` message to that person in `GET
+/api/imessage/messages?handle=…&after_id=…` before sending again. Retries
+are most reliable with `video_id`.
+
+A short clip that already is what goes out (see below: H.264, 8-bit 4:2:0,
+with AAC sound or none, within 1280 × 720, 15 MB and about 2.5 Mbps) can skip
+the upload: pass it as `video_b64` instead of `video_id`. It becomes an
+upload like any other: processed in the background, and it counts toward
+the 3 an account may have processing at once. The send waits up to a minute
+for it. If it is still processing after that, the send answers `409
+video_processing` with the new upload's id in `error.video_id` and nothing
+is sent: send that `video_id` once `GET /api/imessage/videos/{id}` says
+`ready`. A file that has to be re-encoded is better uploaded first.
+
+```http
+POST /api/imessage/send
+Content-Type: application/json
+{"to": "+18055559876", "video_b64": "<base64 video>", "video_format": "mp4", "text": "Quick tour of the new app"}
+```
+
+- `video_b64`: the file, base64-encoded, up to **25 MB** decoded. The same
+  checks apply (`422 video_invalid`).
+- `video_format`: the file's extension (`mp4`, `mov`, `m4v`…; up to 8
+  characters). Optional — the bytes decide — but pass it when you know it.
+- Pass `video_id` **or** `video_b64`, never both. The upload is the better
+  path for anything else: the file travels as itself, not a third bigger as
+  base64, and it is converted before the send instead of while it waits.
+
+Each video sent uses **1 [credit](/imessage/ai-agent#credits) per 3 MB** of the
+converted file (rounded up, at least 1; `size_bytes` once it is `ready`),
+taken as it goes to the line; one that isn't sent (refused, busy, offline,
+or failed) uses none. With fewer left than it costs, the send is `402
+ai_credits_exhausted` and nothing is sent:
+
+```json
+{"error": {"code": "ai_credits_exhausted",
+           "message": "This account doesn't have enough credits (3 left; a video needs 6). Buy more at https://portal.zerosettle.io/imessage#credits.",
+           "left": 3, "needed": 6, "resets_at": null,
+           "buy_url": "https://portal.zerosettle.io/imessage#credits"},
+ "detail": "This account doesn't have enough credits (3 left; a video needs 6). …"}
+```
+
+With none left, the message says the account `is out of credits (0 left; …)`.
+
+`409 video_unsupported` means videos are disabled for the account, or this
+line requires an update to send videos; nothing
+was sent, stored or charged.
+
+<CodeGroup>
+
+```bash cURL
+# 1. upload the file
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: video/mp4' \
+  --data-binary @tour.mp4 $BASE/api/imessage/videos
+# 2. unless the upload already said "status":"ready", repeat until it does
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/videos/vid_3f9c…
+# 3. send it, with a caption
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"+18055559876","video_id":"vid_3f9c…","text":"Quick tour of the new app"}' \
+  $BASE/api/imessage/send
+```
+
+```python Python
+import time, requests
+
+def send_video(to: str, path: str, caption: str = "") -> dict:
+    auth = {"Authorization": f"Bearer {TOKEN}"}
+    kind = "video/quicktime" if path.lower().endswith(".mov") else "video/mp4"
+    with open(path, "rb") as f:                      # streamed from disk, not read into memory
+        r = requests.post(f"{BASE}/api/imessage/videos", data=f,
+                          headers={**auth, "Content-Type": kind}, timeout=300)
+    if r.status_code != 202:                         # 413 video_too_large, 422 video_invalid, 429, 503…
+        raise RuntimeError(f"upload: {r.status_code} {r.text[:300]}")
+    video = r.json()["video"]                        # often "ready" already
+    for i in range(460):                             # every 0.5 s at first, then 2 s, up to 15 minutes
+        if video["status"] != "processing":
+            break
+        time.sleep(0.5 if i < 10 else 2)
+        r = requests.get(f"{BASE}/api/imessage/videos/{video['id']}", headers=auth, timeout=15)
+        if r.status_code == 200:                     # anything else (a 503, a deploy): ask again
+            video = r.json()["video"]
+    if video["status"] != "ready":
+        raise RuntimeError(video.get("error") or "the video is still processing")
+    try:
+        r = requests.post(f"{BASE}/api/imessage/send", headers=auth, timeout=120,
+                          json={"to": to, "video_id": video["id"], "text": caption})
+        return r.json()                              # message_sent, or the API's error
+    except (requests.Timeout, requests.ConnectionError, ValueError):
+        # No JSON answer: it may have gone. Retrying this same call within 10 minutes
+        # is safe (a video that went comes back with duplicate: true); or wait for
+        # its message.sent / message.failed webhook.
+        return {"ok": False, "status": "unknown", "video_id": video["id"]}
+```
+
+```js Node
+import { openAsBlob } from "node:fs";                // Node 20+: streamed from disk, not read into memory
+
+async function sendVideo(to, path, caption = "") {
+  const auth = { Authorization: `Bearer ${TOKEN}` };
+  const type = path.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4";
+  let r = await fetch(`${BASE}/api/imessage/videos`, {
+    method: "POST", headers: { ...auth, "Content-Type": type }, body: await openAsBlob(path),
+  });
+  if (r.status !== 202)                               // 413 video_too_large, 422 video_invalid, 429, 503…
+    throw new Error(`upload: ${r.status} ${(await r.text()).slice(0, 300)}`);
+  let { video } = await r.json();
+  for (let i = 0; i < 450 && video.status === "processing"; i++) {   // every 2 s, up to 15 minutes
+    await new Promise((done) => setTimeout(done, 2000));
+    r = await fetch(`${BASE}/api/imessage/videos/${video.id}`, { headers: auth });
+    if (r.ok) ({ video } = await r.json());           // anything else (a 503, a deploy): ask again
+  }
+  if (video.status !== "ready") throw new Error(video.error || "the video is still processing");
+  try {
+    r = await fetch(`${BASE}/api/imessage/send`, {
+      method: "POST", signal: AbortSignal.timeout(120_000),
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ to, video_id: video.id, text: caption }),
+    });
+    return await r.json();                            // message_sent, or the API's error
+  } catch {
+    // No JSON answer: it may have gone. Retrying this same call within 10 minutes
+    // is safe (a video that went comes back with duplicate: true); or wait for
+    // its message.sent / message.failed webhook.
+    return { ok: false, status: "unknown", video_id: video.id };
+  }
+}
+```
+
+</CodeGroup>
+
+What goes out is an MP4 Messages plays everywhere: H.264 video at up to
+720p, AAC sound, at most 15 MB. A file that is already H.264 (8-bit 4:2:0)
+with AAC sound or none, within 1280 × 720 (either way up), 15 MB and about
+2.5 Mbps is only repackaged, so its picture is exactly as you made it;
+anything else is re-encoded to fit, at up to 30 frames a second: a bigger
+picture or another format (HEVC from a phone camera, 1080p, 4K, WebM…), and
+also an H.264 file whose sound isn't AAC (PCM, MP3 or Opus, common in screen
+recordings). Either way its metadata, including the location a camera
+records, is removed.
+
+## What you get back
+
+The response has the same shape as a text send. A voice message's stored
+record is `kind: "audio"` with a placeholder `text` and an `audio` object
+pointing at the recording; a photo's is `kind: "image"` with your caption as
+`text` (or the placeholder `📷 Photo` without one) and an `image` object
+pointing at the file; a video's is `kind: "video"` with your caption as
+`text` (or the placeholder `🎬 Video` without one) and a `video` object
+pointing at the file and its poster. All are kept so you (and the console)
+can play or show them back.
+
+```json
+{
+  "ok": true,
+  "status": "message_sent",
+  "message": "Sent voice message to +18055559876 (message id …).",
+  "id": 44,
+  "record": {"id": 44, "kind": "audio", "direction": "out", "handle": "+18055559876",
+             "text": "🎤 Voice message", "status": "sent", "guid": "…", "ts_ms": 1757400000000,
+             "audio": {"url": "/api/imessage/messages/44/audio", "content_type": "audio/mp4", "duration_ms": null}}
+}
+```
+
+```json
+{
+  "ok": true,
+  "status": "message_sent",
+  "message": "Sent photo to +18055559876 (message id …).",
+  "id": 45,
+  "record": {"id": 45, "kind": "image", "direction": "out", "handle": "+18055559876",
+             "text": "Here's the view", "status": "sent", "guid": "…", "ts_ms": 1757400000000,
+             "image": {"url": "/api/imessage/messages/45/image", "content_type": "image/jpeg",
+                       "width": 1600, "height": 1200}}
+}
+```
+
+`width` and `height` are the stored image's pixel size when it can be read
+from the file (always for JPEG, PNG, and GIF), else `null`.
+
+```json
+{
+  "ok": true,
+  "status": "message_sent",
+  "message": "Sent video to +18055559876 (message id …).",
+  "id": 46,
+  "record": {"id": 46, "kind": "video", "direction": "out", "handle": "+18055559876",
+             "text": "Quick tour of the new app", "status": "sent", "guid": "…", "ts_ms": 1757400000000,
+             "video": {"url": "/api/imessage/messages/46/video", "content_type": "video/mp4",
+                       "duration_ms": 12480, "width": 720, "height": 1280,
+                       "poster_url": "/api/imessage/messages/46/video/poster"}}
+}
+```
+
+A video's `width` and `height` are as it plays; `poster_url` is a still
+from half a second in, as a JPEG.
+
+A video send may also carry `"duplicate": true`: this number already sent
+this video to them in the last 10 minutes, `id` and `record` are that
+send's, and nothing was sent or charged again.
+
+## Play a voice message back
+
+`GET /api/imessage/messages/{id}/audio` (same bearer) returns the recording of
+any `kind: "audio"` message, sent or received:
+
+- **Sent** messages return exactly the bytes you uploaded (`content_type` is
+  detected from the file, not from `audio_format`).
+- **Received** voice messages arrive in `message.received` with the same
+  `audio` object. ZeroSettle converts Messages' Opus/CAF recording to AAC in an
+  `.m4a` (`audio/mp4`) before uploading, so it plays in every browser, and
+  `duration_ms` is filled in.
+- `audio` is `null` when no recording is stored: messages from before
+  recordings were kept, or an inbound message whose file never finished
+  downloading to the line.
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" https://portal.zerosettle.io/api/imessage/messages/44/audio -o voice.m4a
+```
+
+## Fetch a photo
+
+`GET /api/imessage/messages/{id}/image` (same bearer) returns the photo of
+any `kind: "image"` message, sent or received:
+
+- **Sent** photos return exactly the bytes you uploaded (`content_type` is
+  detected from the file, not from `image_format`).
+- **Received** photos arrive in `message.received` with the same `image`
+  object and the sender's caption as `text`. ZeroSettle converts HEIC and
+  oversized images to JPEG for browser compatibility. A JPEG, PNG, or GIF
+  within 4 MB and 4032 px comes through as sent. A Live Photo is delivered as its still. `width` and
+  `height` are filled in.
+- `image` is `null` when no file is stored: an inbound photo whose download
+  never finished.
+- The route serves only the kind it names: a photo's bytes never come out of
+  `/audio`, and vice versa.
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" https://portal.zerosettle.io/api/imessage/messages/45/image -o view.jpg
+```
+
+### Receive several photos in one message
+
+On updated lines, `message.received` and `GET /api/imessage/messages` include
+`attachments` for iMessages with several photos. The console shows the photos
+together with one caption. Each attachment has `kind: "image"` and, when available, its own
+`url`, `content_type`, `width` and `height`. Fetch any attachment URL with the
+same bearer. MCP `list_messages` lists the photo URLs too.
+
+`attachment_count` is the number of photos in the pack, and
+`attachment_delivered_count` is how many files ZeroSettle could store. An
+unavailable photo has `unavailable: true` and no URL. If the counts differ,
+ask the sender to resend the missing photos. The existing `image` field
+points to the first available photo, or is `null` if none are available.
+The array holds up to 100 photos. `attachment_count` includes any photos
+beyond that limit.
+
+## Fetch a video
+
+`GET /api/imessage/messages/{id}/video` (same bearer) answers `302` with a
+short-lived link to the video of any `kind: "video"` message, sent or
+received; follow it to get the file.
+
+- **Sent** videos return the MP4 that went out (see
+  [Send a video](/imessage/attachments#send-a-video)).
+- **Received** videos arrive in `message.received` with the same `video`
+  object and the sender's caption as `text`, as soon as the message reaches
+  the line, often before the line has the whole file. If you fetch `url`
+  while the file is still on its way, the request waits for it (up to about
+  20 seconds) and then answers as usual; if it still isn't there, it answers
+  `503` with `Retry-After`: ask again then. Right after the file arrives,
+  ZeroSettle converts it to the same 720p MP4 and makes its poster. Until
+  that is done (usually within a minute or two) the route returns the file
+  as it was sent (often a `.mov`), there is no poster yet, and the webhook's
+  `video` can have `content_type` `video/quicktime` and `null`
+  `duration_ms`, `width` and `height`; `GET /api/imessage/messages` has them
+  once it is converted.
+- A received video **longer than five minutes**, or one that can't be
+  converted, stays as it was sent: `url` keeps serving the original, it
+  never gets a poster, and `duration_ms`, `width` and `height` stay `null`.
+  Every received video is converted or given up on within 15 minutes of its
+  file arriving (45 minutes after its message for one whose file is still on
+  its way from the line), so don't wait for them longer than that.
+- `video` is `null` when no file is stored: a received video over 60 MB, or
+  one whose download to the line never finished. Its caption still arrives.
+  A video whose file never comes after its message went out answers `404`
+  from then on.
+- `GET /api/imessage/messages/{id}/video/poster` answers `302` with a link to
+  the poster JPEG, or `404` when there is none (yet).
+- `?link=1` answers with the links as JSON instead of redirecting:
+  `{"url": "https://…", "poster_url": "https://…", "expires_in": 600}`.
+  `poster_url` is `null` while there is no poster (a received video still
+  converting, or one that couldn't be), so check it before using it as an
+  `<img src>`. The links work without a bearer for `expires_in` seconds, so
+  a browser can play the video straight from them (`<video src>`,
+  `<img src>`) without seeing your token. Ask again when they expire rather
+  than storing them.
+- The links point at another host. Send your bearer only to ZeroSettle:
+  `curl -L`, Python `requests` and `fetch` drop it on a redirect to another
+  host on their own; with a client that doesn't, use `?link=1` and fetch
+  `url` without it.
+- The route serves only the kind it names: a video never comes out of
+  `/image` or `/audio`.
+
+```sh
+curl -L -H "Authorization: Bearer $TOKEN" https://portal.zerosettle.io/api/imessage/messages/46/video -o tour.mp4
+```
+
+Each of these records reaches your webhook as `message.sent` (or
+`message.failed`), shows in the console as a voice, photo or video bubble,
+and comes back from `GET /api/imessage/messages` with `kind: "audio"`,
+`kind: "image"` or `kind: "video"`. The media URL is relative to the base
+URL and needs the bearer, so a webhook consumer fetches it itself. Reactions
+work on any of them like on any message: `POST /api/imessage/reactions` with
+its `id`.
+
+## Preparing the audio
+
+- **Any common format is fine.** ZeroSettle converts whatever you send into the
+  mono Opus CAF that Messages itself records, so there is nothing to
+  pre-process. `m4a` (AAC) and `wav` are the safest inputs; `mp3`, `aiff`,
+  `flac`, and a ready `caf` also work.
+- **Text-to-speech output works as-is.** A TTS API's `mp3`/`wav`/`m4a` can go
+  straight into `audio_b64`.
+- **Keep it short.** A voice message is listened to, not skimmed: under a
+  minute lands; two or three sentences land best. Long recordings also cost
+  the recipient a download before they can play.
+- **Size.** 6 MB decoded is the cap — a minute of speech in any format is well
+  under 1 MB. If you are close to the cap, downsample: speech needs nothing
+  above 24 kHz mono.
+- **One channel is enough.** Stereo is mixed to mono anyway; sending
+  mono halves the upload for nothing lost.
+
+## Preparing the image
+
+- **Send what you have.** JPEG, PNG, GIF, HEIC, WebP, TIFF, and BMP all work;
+  ZeroSettle converts the ones Messages recipients can't reliably display.
+- **Downscale first if you can.** Anything over 2048 px on its long edge is
+  re-encoded anyway, so a 1600–2048 px JPEG at quality 0.85 is
+  the sweet spot: sharp on a phone screen, well under 1 MB, and sent
+  untouched. 5 MB decoded is the cap.
+- **Captions are text.** Up to 4000 characters, same rules as a text message;
+  links in a caption are tappable.
+- **No metadata leaves the line.** EXIF (orientation is baked in first),
+  GPS, and camera data are dropped from anything ZeroSettle re-encodes; a
+  pass-through JPEG keeps whatever you put in it, so strip it yourself if it
+  matters.
+
+## Preparing the video
+
+- **Send MP4, MOV or WebM.** M4V and 3GP (MP4 family) and MKV work too.
+  Any other container (AVI, MPEG-TS, FLV, WMV…) is refused with `422
+  video_invalid` ("This file isn't a video we can read."). Whatever comes
+  in, ZeroSettle sends an H.264 MP4 of up to 720p, which Messages plays on
+  every device.
+- **A minute at most.** Anything longer is refused (`422 video_invalid`);
+  trim it first. Short clips land best, and every second is a download for
+  the recipient.
+- **720p is what they get.** Anything larger is scaled down (never up) to
+  fit 1280 × 720, either way up, at up to 30 frames a second. Exporting at
+  720p H.264 yourself saves the conversion: a file that is already H.264
+  (8-bit 4:2:0) with AAC sound or none, within 720p, 15 MB and about
+  2.5 Mbps is only repackaged. Other sound (PCM, MP3, Opus) means a full
+  re-encode, even when the picture already fits.
+- **Sizes.** 100 MB for an upload, 25 MB as `video_b64`; what is sent is
+  at most 15 MB.
+- **Captions are text.** Up to 4000 characters, same rules as a text
+  message; links in a caption are tappable.
+- **No metadata leaves the line.** Location, camera and other metadata are
+  removed from every video, converted or not.
+
+## Errors
+
+| Status | `error.code` | Why |
+|---|---|---|
+| `422` | `invalid_request` | `text` and `audio_b64` together; `audio_b64` and `image_b64` together; `video_id` or `video_b64` with each other, `audio_b64`, `image_b64` or `poll`; none of `text` / `audio_b64` / `image_b64` / `video_id` / `video_b64`; a media field not base64; bytes that are not an accepted image; audio over 6 MB, an image over 5 MB or a `video_b64` over 25 MB; `poll` with `text`, `image_b64` or `audio_b64`, or a poll that breaks its rules (2–12 different options of up to 150 characters, a question of up to 300). `error.fields` is a list of `{"field", "message"}` naming the offender. |
+| `422` | `video_invalid` | The video isn't MP4/MOV/WebM or can't be read, has no picture, or runs longer than a minute; or the `video_id` failed processing (its `error` says why). `error.message` says what is wrong. Nothing was sent. |
+| `413` | `video_too_large` | An upload to `POST /api/imessage/videos` over 100 MB. Trim or compress it first. |
+| `409` | `video_processing` | The `video_id` was still processing after a minute's wait (a broadcast waits only a few seconds; `error.video_id` names the video, for a `video_b64` the upload it became). Nothing was sent. Try again in a few seconds. |
+| `429` | `rate_limited` | A video upload (`POST /api/imessage/videos`, or a send with `video_b64`) while the account already has 3 videos processing, or 10 are processing across ZeroSettle. `Retry-After: 30`, `error.retry_after_s` 30. Nothing was stored or sent. Wait for one to be `ready` (or 30 s), then retry. |
+| `409` | `video_unsupported` | A video when videos are disabled for the account, or the line requires an update to send videos. Nothing was sent, stored or charged. |
+| `402` | `ai_credits_exhausted` | A video when the account has fewer [credits](/imessage/ai-agent#credits) than it needs (1 per 3 MB; `error.needed` says how many, `left` and `buy_url` as for the agent). Nothing was sent. |
+| `502` | `send_failed` | The line could not decode the audio or image, or the line couldn't download or send the video (`message` says so; a video's credits come back). Re-encode as `m4a`/`wav` or `jpg`/`png`, or retry the video. |
+| `429` | `new_contact_limit` | A voice message, photo or video to a new number counts as a new contact like a text does. Wait `retry_after_s`. |
+| `404` | `not_found` | `GET …/{id}/audio`, `…/{id}/image`, `…/{id}/video` or `…/{id}/video/poster` for a message that has no stored file of that kind (wrong kind, `audio` / `image` / `video` is `null`, no poster yet, or no such message); `GET /api/imessage/videos/{id}`, or a `video_id` on `POST /api/imessage/send` or `/broadcast`, that isn't one of your uploads (nothing was sent). |
+| `503` | `unavailable` | Video storage is briefly unavailable (an upload, a video send or a `/video` fetch). Nothing was sent or charged. Retry in a minute. A `/video` fetch also answers `503` with `Retry-After` while a received video's file is still on its way from the line: ask again after that many seconds. |
+
+Everything else (`401`, `402`, `503 phone_offline` / `phone_timeout`) behaves
+exactly as for a text send; a video that isn't sent never uses credits. A
+video send that ends without a JSON answer may still have gone: retrying it
+within 10 minutes is safe (see [Send a video](/imessage/attachments#send-a-video)).
+
+## Not (yet) attachments
+
+- **Other files** (documents, contact cards, locations…) cannot be sent.
+  Voice messages, photos and videos are the attachment types; text is the
+  answer for everything else for now.
+- **Inbound files other than these are not delivered.** A document someone
+  sends the line arrives as a message row with its text (empty for an
+  attachment-only message) and no file. A message with several videos
+  delivers the first video. A message with both photos and videos delivers
+  the photos on updated lines and the first photo on older lines.
+  A number that hasn't had the update for videos yet
+  delivers a received video the same way as a document: text, no file.
+- **MCP `send_imessage`** sends text, photos, voice messages and polls, and
+  replies with `reply_to` and effects with `effect`, like REST, but not
+  videos: send those with REST. `list_messages` names a photo's or a video's
+  URL so an agent can fetch it.

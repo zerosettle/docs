@@ -1,0 +1,164 @@
+---
+title: "Read messages"
+---
+
+Everything that happened on the line — both directions, every attempt — is
+stored and readable through the conversation list and the message history
+cursor. Use them to load history, poll for messages, or find a conversation to
+delete. A separate lookup reports the latest delivery receipts by message ID.
+
+## Conversations
+
+```http
+GET /api/imessage/conversations
+```
+
+<CodeGroup>
+
+```bash cURL
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/conversations
+```
+
+```json Response
+[
+  {"handle": "+18055559876", "count": 7,
+   "last": {"id": 43, "direction": "out", "text": "Hi from the line", "status": "sent", "ts_ms": 1757400000000}}
+]
+```
+
+</CodeGroup>
+
+Newest conversation first (by the id of its latest row), at most 200.
+`handle` is the other party; `count` is the number of messages, voice
+messages, photos, and videos (reactions are not counted, though `last` can be one).
+A [group chat](/imessage/group-chats) is one entry with `chat_id`, `name` and
+`participants`, and its `handle` is the chat id.
+
+## Messages
+
+```http
+GET /api/imessage/messages?after_id=0&limit=100[&handle=+18055559876][&before_id=…]
+```
+
+Messages come back in id order, both directions. `after_id` pages forward
+(pass the previous response's `next_after_id`; it equals your `after_id` when
+nothing is new); `before_id` returns the `limit` rows before that id, still
+in ascending order, for loading history. `limit` is 1–500, default 100.
+`handle` restricts to one conversation (URL-encode the `+` as `%2B`);
+`chat_id` instead restricts to one [group chat](/imessage/group-chats).
+
+```json
+{"messages": [
+   {"id": 44, "kind": "message", "direction": "in", "handle": "+18055559876", "text": "hey!",
+    "status": "received", "guid": "5A6F…", "ts_ms": 1757400012000},
+   {"id": 45, "kind": "image", "direction": "in", "handle": "+18055559876", "text": "📷 Photo",
+    "status": "received", "guid": "5A70…", "ts_ms": 1757400020000,
+    "image": {"url": "/api/imessage/messages/45/image", "content_type": "image/jpeg", "width": 1600, "height": 1200}}
+ ],
+ "next_after_id": 45}
+```
+
+`kind` is `message`, `audio`, `image`, `video`, `poll`, `poll_vote`,
+`reaction`, or `background`; see [Attachments](/imessage/attachments) for the
+`audio` / `image` / `video` objects, [Polls](/imessage/send-a-message#polls) for `poll` / `poll_vote` and
+[Chat backgrounds](/imessage/send-a-message#chat-backgrounds) for `background`. A message that is an
+inline reply also carries `reply_to` ([Replies](/imessage/send-a-message#replies)), and
+one sent with an effect carries `effect` ([Effects](/imessage/send-a-message#effects)).
+A message in a group chat carries `chat_id`, and a rename or membership
+change there is `kind: "group_event"` ([Group chats](/imessage/group-chats)). On an
+account enabled for [SMS fallback](/imessage/send-a-message#sms-fallback), incoming and
+outgoing SMS records carry `service: "SMS"`; the separate first-SMS opt-out
+notice is a normal outbound message with its own ID.
+
+## Delivery receipts
+
+Look up the latest delivery status of outbound 1:1 messages using the same
+bearer token as the send. Use the message IDs from `/send`, `/broadcast`, or
+message history.
+
+```text
+GET /api/imessage/messages/delivery?ids=61,62
+```
+
+<CodeGroup>
+
+```bash cURL
+curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/imessage/messages/delivery?ids=61,62"
+```
+
+```json Response
+{"messages": [
+  {"id": 61, "status": "delivered", "delivered_at_ms": 1757400016000},
+  {"id": 62, "status": "unconfirmed"}
+]}
+```
+
+</CodeGroup>
+
+Pass 1–100 comma-separated positive message IDs, each fitting in a signed
+64-bit integer. Results follow the order of the first occurrence of each ID.
+The API omits missing IDs, messages outside your account, incoming messages,
+group messages, and carrier messages hidden from message history.
+
+| `status` | What the line reported |
+|---|---|
+| `unconfirmed` | There is no confirmed outcome. This includes iMessages still awaiting receipts, multipart sends with incomplete receipts, and SMS. |
+| `delivered` | Messages reported delivery. For a multipart send, every part has a delivery receipt. The response includes `delivered_at_ms` when the delivery time is known, in Unix epoch milliseconds. |
+| `failed` | Messages reported a delivery failure for at least one part. |
+| `delivered_as_junk` | Messages reported delivery as junk and no other delivery failure. |
+
+Receipts can arrive seconds or hours after the line accepts the send. The API
+retains reported receipts for 30 days. An `unconfirmed` outcome can have
+several causes and a resend may create a duplicate. Poll the same IDs to check
+for later receipts. The send response, message history status, and
+`message.sent` / `message.failed` webhooks report whether the line accepted
+the send.
+
+## Polling recipe (no webhook)
+
+If you cannot host a public URL, poll:
+
+```python
+import time, requests
+cursor = 0
+while True:
+    r = requests.get(f"{BASE}/api/imessage/messages",
+                     params={"after_id": cursor, "limit": 100},
+                     headers={"Authorization": f"Bearer {TOKEN}"}, timeout=15).json()
+    for m in r["messages"]:
+        if m["direction"] == "in":
+            handle(m)
+    cursor = r["next_after_id"]
+    time.sleep(3)
+```
+
+Inbound messages appear here within about 1–2 seconds of arriving on the
+line. Prefer a webhook: it is pushed, signed, and does not burn requests.
+
+## Delete a conversation
+
+```http
+DELETE /api/imessage/conversations/{handle}
+```
+
+Removes every stored row for that handle (both directions, including
+reactions and media) from the line. Nothing already
+delivered is unsent, and nothing is sent to the other party. Because the line then has
+no history with that handle, the next message to it counts as the first
+message of a conversation again: the name and photo are re-shared, and it is
+a **new contact** for the limit — unless they text you first.
+
+<CodeGroup>
+
+```bash cURL
+curl -s -X DELETE -H "Authorization: Bearer $TOKEN" "$BASE/api/imessage/conversations/%2B18055559876"
+```
+
+```json Response
+{"ok": true, "deleted": 7}
+```
+
+</CodeGroup>
+
+The live stream gets a `conversation` event (`"event": "conversation.deleted"`)
+so an open console drops the thread; the webhook is not called.

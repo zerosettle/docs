@@ -1,0 +1,100 @@
+---
+title: "Typing indicators"
+---
+
+Show the "…" bubble on the other party's screen while you work on a reply. It
+is first-class like a send: one call, same auth, same error shape.
+
+```http
+POST /api/imessage/typing
+Content-Type: application/json
+{"to": "+18055559876", "state": "start", "ttl_s": 25}
+```
+
+- `to`: a handle you already have a conversation with (they texted you, or
+  you have messaged them). Typing at a number the line has never spoken to is
+  refused with `409 no_conversation` — a "…" is not a way to probe a number.
+- `state`: `start` (default) or `stop`.
+- `ttl_s`: how long to keep the indicator up, 1–60, default 25. It clears on
+  its own at the deadline, and the moment you send anything to that handle.
+- `line_id` (optional, an account with [more than one number](/imessage/your-imessage-number#choosing-the-line)):
+  the line whose conversation with `to` shows it (or `line`, its number).
+  Without it, the line the conversation is on.
+- `chat_id` (optional, a number with [group chats](/imessage/group-chats) on):
+  show the "…" in that group instead of to one person. Pass `to` or
+  `chat_id`, not both.
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"+18055559876","state":"start"}' $BASE/api/imessage/typing
+```
+
+Response (`200`):
+
+```json
+{"ok": true, "status": "typing_started", "handle": "+18055559876", "expires_at_ms": 1757400025000,
+ "message": "Typing indicator shown to +18055559876 for 25 s."}
+```
+
+`stop` answers `{"ok": true, "status": "typing_stopped", "handle": "+18055559876", "message": "…"}`.
+`handle` is `to` normalized the same way a send normalizes it.
+
+Semantics:
+
+- **Not sticky.** iMessage itself drops an indicator after about a minute of
+  silence, so `start` always carries a deadline. Repeating `start` extends
+  it; the call is idempotent, so a loop that re-asserts every 20–30 s is the
+  way to cover a long-running job. Nothing is queued: a `start` after the
+  deadline shows a fresh bubble, not a stale one.
+- **A send clears it.** You do not need to `stop` before `POST /send`; the
+  delivered message replaces the bubble. Use `stop` only when you decided
+  not to reply after all.
+- **Ordered with sends.** Typing and sends share the per-line queue, so a
+  `start` followed by a `send` shows the bubble first, then the text, in
+  that order — the same sequencing Apple recommends for Messages for
+  Business.
+- **Not a message.** Nothing is stored, it is not in `GET /api/imessage/messages`,
+  it is not billed, and it never counts as a new contact. The console shows
+  it on the thread while it is live.
+- **Fast.** The call returns once the line has raised the bubble, normally
+  under 2 seconds. It holds the line's send lock for that long, so a
+  concurrent send waits behind it (never `line_busy` from typing alone).
+
+With [instant typing](/imessage/webhooks-step-by-step#instant-typing) on (the
+default), your "…" is already up when the text reaches your webhook, and it
+clears itself after 20 seconds; a `start` keeps it up for a longer reply.
+On supported lines, the same setting also shows "…" as an outgoing
+photo, GIF, video or voice message starts sending in an eligible one-to-one
+iMessage conversation. No separate typing call or delay before sending is needed.
+
+Use it when a reply will take a noticeable moment — a model call, a lookup,
+a human in the loop. Skip it for replies you can send inside ~2 seconds; a
+bubble that flashes before a text reads worse than no bubble.
+
+| HTTP | `status` / `code` | What happened | What to do |
+|---|---|---|---|
+| 200 | `typing_started` / `typing_stopped` | The line raised or cleared the bubble. | — |
+| 409 | `no_conversation` | No prior message either way with `to`. | Send a message first (subject to the new-contact limit). |
+| 429 | `line_busy` | The line was busy for the whole retry window. | Retry after 2 s. |
+| 503 | `phone_offline` / `phone_timeout` | The line is temporarily unreachable or did not answer. | Retry with backoff; the indicator is best-effort. |
+| 502 | `typing_failed` | The line could not find the chat (e.g. a bad handle). | Fix the input. |
+
+## When they type
+
+Their "…" is an event you can subscribe to as well — `typing.started` and
+`typing.stopped` — always on the [live stream](/imessage/live-stream-sse) (`event:
+typing`) and, opt-in, on the [webhook](/imessage/webhooks-step-by-step#typing-events)
+(`"typing_events": true` when you register it). The console shows it on the
+thread the way Messages does. There is no `message` in a typing event; the
+body carries a `typing` object:
+
+```json
+{"event": "typing.started",
+ "typing": {"handle": "+18055559876", "state": "start", "direction": "in", "ts_ms": 1757400030000}}
+```
+
+A `started` is always closed: by their `stopped`, by their message (the
+`message.received` follows at once), or after 60 s of silence. Only iMessage
+conversations produce them, never SMS. In a [group chat](/imessage/group-chats) (a
+number with group chats on), `typing` also carries `chat_id`, and `handle`
+is the member typing.

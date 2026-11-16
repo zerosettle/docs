@@ -1,0 +1,301 @@
+---
+title: "Group chats"
+---
+
+Every number can start an iMessage group with up to
+31 people, send into it, read it, and rename it, add or remove members, or
+leave it. Groups the number is added to by someone else work the same way.
+Everything else in this reference still applies; this page covers what is
+different in a group.
+
+## Availability
+
+Group chats are **on for every number**, current and new; there is nothing
+to request or switch on. A number with them on shows `"group_chats": true`
+in `GET /api/imessage/line` (and on its entry in `lines`). ZeroSettle can
+turn them off for an individual number; such a number has no `group_chats`
+key at all, and nothing it returns changes. On a number without them:
+
+- every group call (creating a group, sending or typing with `chat_id`,
+  updating or leaving a group, reacting or replying to a group message) is
+  refused with `403 group_chats_not_enabled` ("Group chats are not enabled
+  on this number."), and nothing is sent;
+- messages people send in a group that includes the number are not reported
+  as group messages: they carry no `chat_id`.
+
+A line that requires an update to support group chats answers
+`409 client_update_required` without sending. Try again after the update.
+
+## The chat id
+
+A group is named by its `chat_id`, a string such as
+`iMessage;+;chat123456789` (at most 128 characters). Store it as it is; it
+never changes for the life of the group, even when the group is renamed or
+its members change. In a URL, encode it
+(`iMessage%3B%2B%3Bchat123456789`).
+
+Wherever a 1:1 conversation is keyed by `handle`, a group is keyed by its
+`chat_id`: a conversation is either one contact (`handle`) or one group
+(`chat_id`), on one line. A group lives on the line that is in it; calls that
+name a `chat_id` act on that line, so `line` / `line_id` are not needed
+(`404 unknown_chat` when none of your lines has that group).
+
+## Start a group
+
+```http
+POST /api/imessage/groups
+Content-Type: application/json
+{"to": ["+18055559876", "+13105550000", "jane@example.com"], "text": "Welcome to the launch group!", "name": "Launch crew"}
+```
+
+- `to`: 2–31 handles (phone numbers or emails, each as in `/send`), the
+  other members. Your number is always in the group; don't list it.
+- `text` (required): the first message, 1–4000 characters after trimming.
+  The group is created by sending it.
+- `name` (optional): the group's name, up to 60 characters. Without one,
+  Messages shows the members' names.
+- `line_id` / `line` (optional, an account with
+  [more than one number](/imessage/your-imessage-number#choosing-the-line)): the
+  number that creates the group. It must have group chats on.
+
+Every member is checked as if you were texting them 1:1, and nothing is
+sent if any check fails:
+
+- **STOP:** a member who texted STOP to any of your numbers →
+  `403 recipient_opted_out` (`error.handle` says who).
+- **New contacts:** each member the line has never exchanged a message with
+  (1:1 or in another of its groups) **counts as one new contact** toward the
+  line's day → `429 new_contact_limit` when they don't all fit.
+- **On iMessage:** each new member must be on iMessage → `422
+  not_on_imessage` (`error.handle` says who).
+
+Response (`200`), the shape of a send plus the group:
+
+```json
+{
+  "ok": true, "status": "message_sent", "message": "…", "id": 70,
+  "record": {"id": 70, "kind": "message", "direction": "out", "handle": "iMessage;+;chat123456789",
+             "text": "Welcome to the launch group!", "status": "sent", "guid": "7B1D…",
+             "ts_ms": 1757400200000, "chat_id": "iMessage;+;chat123456789"},
+  "chat": {"chat_id": "iMessage;+;chat123456789", "name": "Launch crew",
+           "participants": ["+18055559876", "+13105550000", "jane@example.com"]}
+}
+```
+
+`participants` are always the **other** members, never your own number. With
+several numbers, `chat` also carries `line` and `line_id`.
+
+**Sent, group id pending.** Rarely, the first message goes out to everyone
+before the group's id is known. The answer is still `200` with `"ok": true`,
+but `"status": "group_unconfirmed"` and `"chat": null`. The message is
+stored and counted (`record`), and each member counts as a contact, so
+**don't send it again**: a retry starts a second group. The group shows up,
+with its real `chat_id`, in `GET /api/imessage/groups` (and a `group.updated`
+on the live stream) once someone in it replies.
+
+## Send to a group
+
+`POST /api/imessage/send` with `chat_id` instead of `to` (pass exactly one
+of them):
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"chat_id":"iMessage;+;chat123456789","text":"Doors open at 7"}' $BASE/api/imessage/send
+```
+
+- Everything a 1:1 send takes works in a group: `text`, `image_b64` /
+  `audio_b64`, `video_id` / `video_b64`, `poll`, `reply_to` and `effect`. A
+  video into a group uses its [credits](/imessage/ai-agent#credits) (1 per 3 MB) once
+  per send, however many members it has.
+- The response is a normal send response; its `record` carries `chat_id`
+  and its `handle` is the chat id.
+- **STOP:** if any member has texted STOP, the send is refused with
+  `403 recipient_opted_out` (`error.handle` says who) and nothing is sent.
+  Remove them from the group, or leave it.
+- The unanswered-message rule (`awaiting_reply`), the on-iMessage check and
+  the automatic name-and-photo share are 1:1 rules: a group send skips them.
+
+## Read groups and their messages
+
+```http
+GET /api/imessage/groups
+```
+
+```json
+{"groups": [{"chat_id": "iMessage;+;chat123456789", "name": "Launch crew",
+             "participants": ["+18055559876", "+13105550000", "jane@example.com"],
+             "created_at_ms": 1757400200000, "updated_at_ms": 1757400200000}]}
+```
+
+Every group on your numbers that have group chats on (with `line` and
+`line_id` when you have several numbers). `name` is `null` when the group has
+none. Groups your number has left are not listed.
+
+**Messages.** A group message has the same shape as any other, plus
+`chat_id`; a 1:1 message never has the key:
+
+```json
+{"id": 71, "kind": "message", "direction": "in", "handle": "+13105550000", "text": "See you there",
+ "status": "received", "guid": "8C2E…", "ts_ms": 1757400230000, "chat_id": "iMessage;+;chat123456789"}
+```
+
+- **Inbound:** `handle` is the member who sent it.
+- **Outbound:** `handle` is the chat id.
+- `GET /api/imessage/messages?chat_id=…` returns one group's messages
+  (`chat_id` and `handle` can't be combined). `?handle=` returns only the
+  1:1 conversation with that contact, never their group messages; without
+  either, you get everything, groups included.
+
+**Conversations.** `GET /api/imessage/conversations` lists each group as one
+conversation, next to the 1:1 ones:
+
+```json
+{"handle": "iMessage;+;chat123456789", "chat_id": "iMessage;+;chat123456789", "name": "Launch crew",
+ "participants": ["+18055559876", "+13105550000", "jane@example.com"], "count": 12,
+ "last": {"id": 71, "direction": "in", "text": "See you there", "status": "received", "ts_ms": 1757400230000}}
+```
+
+Branch on `chat_id`: when it is present, the entry is a group and `handle`
+is its chat id. A group your number has left (or was removed from) is still
+listed with its messages, with `"left": true`; nothing can be sent into it
+(`404 unknown_chat`). `DELETE /api/imessage/conversations/{handle}` with an
+encoded chat id deletes that group's stored messages; like a 1:1 delete, nothing is
+unsent and nobody in the group is told.
+
+## Rename, add, remove, leave
+
+```http
+POST /api/imessage/groups/update
+Content-Type: application/json
+{"chat_id": "iMessage;+;chat123456789", "name": "Launch crew 2026", "add": ["+16465550199"], "remove": ["jane@example.com"]}
+```
+
+- `name` (optional): the new name, up to 60 characters.
+- `add` / `remove` (optional): handles to add to, or remove from, the
+  group. A member added who has texted STOP is refused with `403
+  recipient_opted_out`, and someone new to the line counts as a new
+  contact on the day you add them, as when you start a group.
+- Response: `{"ok": true, "chat": {"chat_id": …, "name": …, "participants": […]}}`,
+  the group after the change.
+
+```http
+POST /api/imessage/groups/leave
+Content-Type: application/json
+{"chat_id": "iMessage;+;chat123456789"}
+```
+
+Answers `{"ok": true}`. Your number leaves the group: it stops receiving its
+messages, and the group drops out of `GET /api/imessage/groups`. The stored
+messages stay readable.
+
+## Typing, reactions, replies and polls
+
+- **Typing:** `POST /api/imessage/typing` with `chat_id` instead of `to`
+  shows your "…" in the group. When a member types, the `typing` object of
+  `typing.started` / `typing.stopped` carries `chat_id`, and its `handle` is
+  the member typing.
+- **Reactions:** `POST /api/imessage/reactions` with the `message_id` of a
+  group message sends the tapback into that group; the stored reaction
+  carries `chat_id`. Members' tapbacks arrive with `chat_id` and their own
+  `handle`.
+- **Replies:** `reply_to` on a group send must name a message in that same
+  group (`422 invalid_reply_to` otherwise).
+- **Polls:** `poll` with `chat_id` sends a poll to the group; every member
+  can vote, and `voters` lists each member's handle.
+
+## Webhooks and the live stream
+
+Group messages arrive as the same events as 1:1 ones (`message.received`,
+`message.sent`, `message.failed`, `reaction.*`, `poll.voted`), each
+`message` carrying `chat_id`. Two things are new.
+
+**Group events.** A rename, a member added or removed, a member leaving and
+a new group photo are stored as a message of `kind: "group_event"` and
+delivered as their own event, `group.event` (never `message.received`, so an
+auto-responder that acts only on `message.received` never answers one). The
+body has `message` like every message event. `handle` is who did it, `text`
+says what happened, and `group_event` has the details:
+
+```json
+{"id": 72, "kind": "group_event", "direction": "in", "handle": "+18055559876",
+ "text": "Renamed the group “Launch crew 2026”", "status": "received", "guid": "9D3F…",
+ "ts_ms": 1757400300000, "chat_id": "iMessage;+;chat123456789",
+ "group_event": {"type": "renamed", "name": "Launch crew 2026"}}
+```
+
+`group_event.type` is `renamed` (with `name`), `member_added` or
+`member_removed` (with `handle`, the member added or removed; without
+`handle`, **your number** was removed: the group is then left, as with
+`/groups/leave`), `member_left`, or `photo_changed`.
+
+```
+X-ZeroSettle-Event: group.event
+```
+
+**`group.updated`.** Whenever a group's name or members change (you start or
+update it, or a group event changes it), the [live stream](/imessage/live-stream-sse)
+gets a `group.updated` event with the group as it is now. It is **not sent to
+your webhook**: read the group with `GET /api/imessage/groups`, or follow
+`group.event` messages.
+
+```
+event: group
+data: {"type":"group","event":"group.updated","chat":{"chat_id":"iMessage;+;chat123456789","name":"Launch crew 2026",…}}
+```
+
+It carries the whole group, so keep the one with the newest `updated_at_ms`.
+
+## MCP
+
+When at least one of your numbers has group chats on, the
+[MCP](/imessage/mcp) connector adds them too (an account without them sees the same
+tools as before):
+
+| Tool | Arguments | Does |
+|---|---|---|
+| `send_imessage` | `chat_id?` (instead of `to`) | Sends into a group. |
+| `list_messages` | `chat_id?` | One group's messages, each labeled with its sender. |
+| `show_typing` | `chat_id?` (instead of `to`) | "…" in a group. |
+| `create_group_chat` | `to`, `text`, `name?`, `line?` | Same as `POST /api/imessage/groups`. |
+| `list_group_chats` | — | Same as `GET /api/imessage/groups`. |
+| `update_group_chat` | `chat_id`, `name?`, `add?`, `remove?`, `leave?` | Same as `/groups/update`, or `/groups/leave` with `leave: true`. |
+
+`list_conversations` shows each group by its name (or its members).
+
+## Errors
+
+| HTTP | `code` | Meaning | What to do |
+|---|---|---|---|
+| 403 | `group_chats_not_enabled` | A group call on a number without group chats. Nothing was sent. | Group chats are on for every number; contact ZeroSettle support, which may have turned them off for this one. |
+| 404 | `unknown_chat` | No line on your account has that `chat_id`. Nothing was sent. | Use a `chat_id` from `GET /api/imessage/groups` or a message. |
+| 409 | `client_update_required` | This line requires an update to support group chats. Nothing was sent. | Try again after the update. |
+| 403 | `recipient_opted_out` | A member (or a member you are adding) has an active opt-out. `error.handle` says who. | Remove them from the group, or leave it. |
+| 429 | `new_contact_limit` | Starting a group, or adding members, would go over the line's new contacts. | Wait `retry_after_s`, or start with fewer new people. |
+| 422 | `not_on_imessage` | A new member isn't on iMessage. | Leave them out. |
+| 422 | `invalid_request` | Both or neither of `to` and `chat_id`, fewer than 2 or more than 31 members, a name over 60 characters… `error.fields` lists them. | Fix the input. |
+
+## Limits and compliance
+
+- **Each new person is a new contact.** Starting a group, or adding someone
+  to one, counts every member the line has never exchanged a message with as
+  a new contact (see [Limits](/imessage/errors-limits-and-compliance#limits)). After
+  that, members are known contacts: a 1:1 text to one of them is not new.
+- Group messages containing **STOP** are delivered as ordinary messages. A
+  member can opt out by texting STOP directly to your number. Sends into any
+  group they are in are refused while their opt-out is active.
+- **Consent covers everyone.** A group message reaches every member, and
+  each of them must have agreed to hear from you
+  ([Compliance](/imessage/errors-limits-and-compliance#compliance-you-need-consent)).
+
+## Not covered
+
+- **Broadcast is not a group.** `POST /api/imessage/broadcast` still sends
+  each recipient their own 1:1 message; use a group when the members should
+  see each other.
+- **Only messages sent through ZeroSettle are recorded from your side**: the
+  API, MCP and the console.
+- **The hosted [AI agent](/imessage/ai-agent) answers in groups** on a number it
+  manages: into the group, only when a message is for it, and never to
+  another ZeroSettle number; triggers never fire into a group.
+- **CRMs:** group messages are not logged in Close or HubSpot.
+- **Chat backgrounds** set in a group are not reported.
