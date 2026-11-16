@@ -18,7 +18,7 @@
       "light": "#ffffff"
     }
   },
-  "favicon": "/favicon.png",
+  "favicon": "/logo/favicon-blue.png",
   "integrations": {
     "posthog": {
       "apiKey": "phc_orFeZtj7qj9yGWHRKzfw4CpnaZwDZf4jcmrey6ugnbSq",
@@ -351,10 +351,7 @@
       "anchors": []
     }
   },
-  "logo": {
-    "light": "/logo/logo.png",
-    "dark": "/logo/logo-dark.png"
-  },
+  "logo": "/logo/logomark.png",
   "navbar": {
     "links": [
       {
