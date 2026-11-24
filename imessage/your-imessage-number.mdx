@@ -21,37 +21,36 @@ Pro and Growth are billed monthly by Stripe with a **30-day money-back
 guarantee** (ask within 30 days and you are refunded in full and the
 subscription is cancelled). Enterprise is available through sales.
 
-- **Pro** — one iMessage number, **$49/month**, with **5 new contacts a
-  day** (people who text you first, and ongoing conversations, don't count
-  toward it) and **10,000 messages a day, sent and received, with known
-  contacts**. Sign up yourself from
-  [portal.zerosettle.io/imessage](https://portal.zerosettle.io/imessage).
-  Need more? [Upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for 50 a day per
-  number at $199 a month per number.
-- **Growth** — from **$199/month** when upgrading one Pro number. New
-  signups start with **two iMessage numbers** that work as
-  one, **25 new outbound contacts per day per number** (50 across both), and
-  **team members**. The standard invite is **$599/month** and each additional
-  number is **$199/month**. Partner and custom invite prices appear at signup.
+- **Pro** — **\$49/month** for one dedicated iMessage number. With inbound-only Pro,
+  people text you first and you can reply through the API, the console, or the
+  hosted AI agent. Each number supports **10,000 messages a day**, sent and
+  received, with known contacts. [Sign up for Pro](https://portal.zerosettle.io/imessage).
+- **Growth** — starts at **\$199/month** to start conversations with up to
+  **50 opted-in new contacts per day**. Add capacity to reach up to **500 new
+  contacts per day**. Budget about **\$200/month for each additional 50 new
+  contacts per day**. Your Growth offer confirms your daily allowance and
+  monthly price. Growth includes team members.
   Existing Pro customers can upgrade the numbers on their subscription in the
-  [console](https://portal.zerosettle.io/imessage#upgrade) for **$199/month per
+  [console](https://portal.zerosettle.io/imessage#upgrade) for **\$199/month per
   number**. The upgrade is prorated today. A free trial ends at the upgrade
   and the first Growth month is charged.
 - **Enterprise** — custom pricing through sales for high volume and
   compliance needs.
 
-Pro and Growth can add numbers whenever you want, from the console or the API
-(see [Add a line](/imessage/your-imessage-number#add-a-line)); each one is billed
-monthly and has its own daily allowance for new contacts. Pro allows 5 per
-number. Growth allows 25 per number with CAP25 and 50 at the standard limit.
+Pro and Growth can add numbers from the console or the API. Each number is
+billed monthly. See [Add a line](/imessage/your-imessage-number#add-a-line)
+for how to check the price and add a number.
+
+For current deletion options and the status of configurable message retention
+and HIPAA support, see [Message retention and HIPAA](/imessage/errors-limits-and-compliance#message-retention-and-hipaa).
 
 Both include **credits** for the [hosted AI agent](/imessage/ai-agent), which
 answers your numbers for you with no server: each text it sends uses one.
 A new account gets **500 free** on Pro and **1,000** on Growth, once (upgrading
 from Pro adds the difference), for the whole account: every number shares
 them, and they never expire. Need more?
-Buy a pack in the console (**Buy credits**): **1,000 for $50** or
-**5,000 for $200**, paid once, and they never expire. Credits also pay for
+Buy a pack in the console (**Buy credits**): **1,000 for \$50** or
+**5,000 for \$200**, paid once, and they never expire. Credits also pay for
 [videos](/imessage/attachments#send-a-video): every video a number sends, from the
 API or the console, uses **1 per 3 MB** of the normalized file, rounded up
 (at least 1), per recipient. On an account with videos enabled, every video
@@ -101,8 +100,7 @@ webhook and the live stream exactly like a real one.
 
 ## More than one number
 
-An account can have more than one iMessage number: Growth includes several,
-and any plan can [add more](/imessage/your-imessage-number#add-a-line). Each one is a
+An account can [add more than one iMessage number](/imessage/your-imessage-number#add-a-line). Each one is a
 *line*. Your API key, requests, webhook and live stream stay exactly the
 same; the lines work as one:
 
@@ -122,11 +120,11 @@ same; the lines work as one:
   conversation is on, so each person hears from one number only. A new
   contact goes to the line with the most room left today. To choose the line
   yourself, pass `line_id` (see *Choosing the line* below).
-- **New contacts are counted per line.** Each line can reach its plan's new
-  contacts per day (**50** on Growth, with 3 per 15 minutes; **5** on Pro),
-  reset at 3 AM Eastern.
-  `usage.new_contacts` in `GET /api/imessage/line` is the account total, so three Growth lines show
-  `"limit": 150`; `lines` lists each line (`id`, `number`, `group_id`) with its own usage, primary first:
+- **New contacts are counted per line.** On Growth, daily capacity is allocated
+  across the account's numbers and resets at 3 AM Eastern. In `GET /api/imessage/line`,
+  `usage.new_contacts` shows totals for the account. `lines` lists each line
+  (`id`, `number`, `group_id`) with its own usage, primary first. This example
+  shows a Growth account with three numbers.
 
   ```json
   {"handle": "+18055550100", "usage": {"new_contacts": {"used": 38, "limit": 150, "period": "day", "resets_at": "…"}, …},
@@ -202,12 +200,10 @@ send, `line_id` on typing and share answers (each next to its `line`).
 ## Add a line
 
 Add numbers to your account from code: the same purchase as **Add number**
-in the console, on any plan with a card subscription (Pro included). Each
-line has its own day of new contacts (5 on Pro, 50 on Growth) and is billed
-monthly with your subscription; today's part, prorated to
-your renewal date, is charged to the card on file. Up to 5 lines per
-request. Only the account owner's key can buy (a team member's key can
-quote).
+in the console, on any plan with a card subscription (Pro included). The quote
+shows what you'll pay today and how the purchase changes your monthly bill.
+You can buy up to 5 lines per request. Only the account owner's key can buy
+lines. A team member's key can request a quote.
 
 **Choose the sender.** The name and photo people see belong to a line
 group (see *A name and photo per line group* above). A new line either
