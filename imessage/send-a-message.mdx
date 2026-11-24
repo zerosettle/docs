@@ -3,8 +3,9 @@ title: "Send a message"
 ---
 
 One call sends a text from your line to a phone number or iMessage email and
-returns once the line accepts the message for sending. The line prefers
-iMessage and uses [SMS fallback](/imessage/send-a-message#sms-fallback) for eligible plain text from the same number.
+returns once the line accepts the message for sending. The line attempts
+iMessage first. [SMS fallback](/imessage/send-a-message#sms-fallback) can deliver
+eligible plain text as SMS from the same number when iMessage is unavailable.
 This endpoint also sends iMessage voice messages, photos, videos and polls.
 
 ```http
@@ -14,8 +15,7 @@ Content-Type: application/json
 ```
 
 - `to`: a phone number **or an email address** (up to 128 characters).
-  SMS fallback supports phone numbers only. See [SMS fallback](/imessage/send-a-message#sms-fallback) for how the line
-  chooses a service.
+  SMS fallback supports phone numbers only. See [SMS fallback](/imessage/send-a-message#sms-fallback) for the retry rules.
   - Phone number: include a country code and it is honoured — as a leading `+`
     (`+44…`), or an international dialing prefix (`00`/`011`). With no country
     code the US is assumed, so a bare 10-digit number (or `1` + 10 digits)
@@ -67,10 +67,9 @@ The call waits for the line to accept the send, normally 2–5 seconds
 and at most about 75 for a text (about 105 for a voice message or photo,
 which ZeroSettle converts first, and about 90 for a ready video; see
 [Send a video](/imessage/attachments#send-a-video) for a call that ends without an
-answer). Your account's first SMS to a recipient can add up to 15
-seconds for its separate opt-out notice attempt. `id` and `record` still
-refer to your original message, which also arrives on the console's live
-stream and at your webhook as `message.sent`. For 1:1 iMessages, use
+answer). `id` and `record` refer to the original send, which also arrives on
+the console's live stream and at your webhook as `message.sent`. Check message
+history for the eventual fallback transport. For 1:1 iMessages, use
 [Delivery receipts](/imessage/read-messages#delivery-receipts) to check what happened
 after the line accepted the send.
 
@@ -78,7 +77,7 @@ after the line accepted the send.
 
 | HTTP | `status` | What happened | What to do |
 |---|---|---|---|
-| 200 | `message_sent` | The line accepted the message for sending through iMessage or SMS. | — |
+| 200 | `message_sent` | The line accepted the message for sending. For a direct text, check message history for later SMS fallback. | — |
 | 429 | `busy` | The line was busy with another request for the whole retry window (~12 s). Error code `line_busy`. | Retry after 2 s. Sends are serialized per line. |
 | 429 | — | Too many new contacts. Error code `new_contact_limit`. | Wait `error.retry_after_s`. On Pro (5 a day), [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for 50 a day per number ($199 a month per number). |
 | 403 | — | They texted STOP. Error code `recipient_opted_out`; nothing was sent or stored. | Don't retry. They can text START to opt back in. |
@@ -105,31 +104,36 @@ your code did.
 
 ## SMS fallback
 
-SMS fallback sends and receives one-to-one plain text from the same ZeroSettle
-number you use for iMessage. ZeroSettle turns it on when a new account claims
-its first number. The setting applies to all numbers on the account; contact
-ZeroSettle if you need to check SMS access on an existing account.
+**Original sends always attempt iMessage.** The same
+`POST /api/imessage/send` request, bearer token and `to` / `text` fields are
+used without a recipient availability lookup. A negative directory result or
+an unavailable local iMessage account never changes the original send to SMS.
 
-To send, use the same `POST /api/imessage/send` request, bearer token and
-`to` / `text` fields. No extra public request parameter is needed:
+**SMS fallback can reach phones without iMessage, including Android.** When
+fallback is available on your line, an eligible one-to-one plain text can be
+retried once as carrier SMS from the **same line number** after a confirmed
+native iMessage error that permits fallback. Pending, unknown, delivered and
+junk outcomes do not trigger an SMS retry. An uncertain carrier handoff is
+never replayed. Use the same send request with `to` and `text`.
 
-1. The line prefers iMessage when it is available.
-2. If the recipient's phone number is not registered with iMessage, plain text
-   uses carrier SMS from the **same line number**. If iMessage is unavailable
-   on the sending line, plain text can also use SMS.
-3. For a phone number, an unknown or failed iMessage lookup sends nothing.
-   An uncertain iMessage handoff is never retried automatically as SMS.
+Lines with carrier-message access can receive SMS from Android and other
+SMS-capable phones.
+
+Carrier fallback is paused while a line is marked **Failing sends**. Sends
+continue through iMessage, and eligible carrier retries wait until the line
+recovers.
 
 Fallback supports **one-to-one plain-text SMS to phone numbers**. Email
 destinations, photos, voice messages, videos, polls, effects, inline replies,
 reactions, group chats, typing indicators and name-and-photo sharing use
-iMessage. The send API does not fall back to MMS or RCS.
+iMessage. Outbound fallback is limited to SMS, so it does not send MMS or RCS.
 
 Incoming SMS uses your existing message history, live stream and
-`message.received` webhook. SMS message records carry `"service": "SMS"`, in
-both directions. The same field appears in a send's `record`, history and
-webhook message object. Existing iMessage records keep their previous shape
-and may omit `service`. There is no `was_downgraded` field.
+`message.received` webhook. SMS message records carry `"service": "SMS"`. The
+fallback runs after the original send response. When the line accepts the
+SMS attempt, the existing outgoing history record is updated to
+`"service": "SMS"`. Read `GET /api/imessage/messages` to see the final transport.
+Existing iMessage records may omit `service`.
 
 For example, an SMS message in history can be:
 
@@ -146,32 +150,13 @@ read it. Check history before retrying an uncertain send. The
 `GET /api/imessage/availability` endpoint checks only iMessage registration;
 its answer is not an SMS delivery result or an account-feature check.
 
-### Opt-out notice after the first SMS
+### Customer-controlled message content
 
-After the first successful SMS handoff to a recipient on your account,
-ZeroSettle sends this **separate second SMS from the same line**:
-
-```text
-Reply STOP to opt out.
-```
-
-Your original text is unchanged. The separate notice is sent even if your
-original message already contains that sentence. It has its own message ID,
-history entry, `message.sent` webhook and usage count; your send response still
-returns the original message's ID and record.
-
-The notice is once per **account and recipient**, across all your lines.
-Later SMS messages to that recipient do not repeat it. Changing the sending
-line, deleting conversation history or restarting the service does not reset
-that state. Failed or unconfirmed original handoffs, and iMessage sends, do
-not trigger a notice.
-
-A recognized opt-out recorded before the notice's final enqueue check blocks
-it. Before dispatch, ZeroSettle also checks that SMS is still enabled and the
-original line still belongs to the same account; failed checks suppress the
-follow-up. A proven pre-handoff busy/offline failure can delay the notice;
-an uncertain notice handoff is not resent automatically. A failed or deferred
-notice does not turn your successful original send into an API error.
+ZeroSettle sends your supplied text without adding an opt-out footer or a
+separate automatic follow-up, including first contact and SMS fallback retries.
+You choose and include any opt-out instructions needed for your messaging flow.
+Existing historical notice records remain available, but pending notices are
+never replayed automatically.
 
 The existing customer-message limits and [STOP enforcement](/imessage/errors-limits-and-compliance#stop-is-enforced)
 apply to SMS too. See the [consent guidance](/imessage/errors-limits-and-compliance#compliance-you-need-consent)

@@ -66,8 +66,8 @@ inline reply also carries `reply_to` ([Replies](/imessage/send-a-message#replies
 one sent with an effect carries `effect` ([Effects](/imessage/send-a-message#effects)).
 A message in a group chat carries `chat_id`, and a rename or membership
 change there is `kind: "group_event"` ([Group chats](/imessage/group-chats)).
-Incoming and outgoing SMS records carry `service: "SMS"`; the separate first-SMS opt-out
-notice is a normal outbound message with its own ID.
+Incoming SMS and outgoing texts accepted through SMS fallback carry
+`service: "SMS"`. An outgoing fallback updates the existing message record.
 
 ## Delivery receipts
 

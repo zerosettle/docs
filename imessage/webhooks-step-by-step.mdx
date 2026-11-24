@@ -156,10 +156,10 @@ The body is compact JSON with keys sorted. `message` is the same object
 as a `message.sent` event after the line accepts it. Use
 [delivery receipts](/imessage/read-messages#delivery-receipts) to check what happened
 after acceptance for a 1:1 iMessage.
-SMS messages use these same events and carry `message.service: "SMS"`. The
-separate first-SMS opt-out notice produces its own `message.sent` event;
-ignore it when deciding whether an inbound message needs a reply. SMS sent
-events confirm acceptance by the line. Carrier delivery is a separate step.
+Incoming [SMS](/imessage/send-a-message#sms-fallback) uses `message.received`
+and carries `message.service: "SMS"`. For an outgoing fallback, check message
+history for `service: "SMS"` after the retry. The original `message.sent`
+event only confirms that the line accepted the initial send.
 
 ## Line ready
 

@@ -294,8 +294,8 @@ message appears in ZeroSettle before publishing the workflow.
 [HighLevel Custom Webhook guide](https://help.gohighlevel.com/support/solutions/articles/155000003305-workflow-action-custom-webhook).
 
 Read and reply to incoming messages in the ZeroSettle inbox. ZeroSettle
-prefers iMessage and can send eligible plain text by carrier SMS from the
-same number. [Send API](/imessage/send-a-message) ·
+attempts iMessage first. SMS fallback can deliver eligible plain text by SMS
+from the same number when iMessage is unavailable. [Send API](/imessage/send-a-message) ·
 [SMS fallback](/imessage/send-a-message#sms-fallback).
 
 The official ZeroSettle app for GoHighLevel is on the way.

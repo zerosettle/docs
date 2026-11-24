@@ -6,8 +6,7 @@ The whole API in seven `curl`s, in the order an integration uses them; run
 them top to bottom against a paid line to see every piece work before you
 write real code. Each one is explained in the pages that follow; the
 [reference page](/imessage/errors-limits-and-compliance) has every error code and
-limit. The text send below prefers iMessage and uses [SMS fallback](/imessage/send-a-message#sms-fallback) for eligible
-plain text.
+limit. The text send below attempts iMessage first. [SMS fallback](/imessage/send-a-message#sms-fallback) can deliver eligible plain text as SMS when iMessage is unavailable.
 
 ```bash
 export BASE=https://portal.zerosettle.io TOKEN=pt_mcp_…
