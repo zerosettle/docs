@@ -9,6 +9,9 @@ users have turned off) never arrives. Done right, the first text lands about
 two seconds after their thumb leaves the screen — while the phone is still in
 their hand.
 
+Use Growth to send a first message to an opted-in customer. On Pro, a customer
+texts your number before you can reply with an offer.
+
 ## The moment
 
 Pick one trigger per offer and debounce it. Good ones:
@@ -222,11 +225,10 @@ at `/imessage` shows every send and its status as it happens.
   it to your backend). Nothing promotional before 8 am or after 9 pm.
 - **Honor STOP** in the same webhook: mark the handle opted out and never
   message it again.
-- **New-contact limit.** The first message to a user who has never texted you
-  counts as a new contact (5 a day on Pro; 3 per 15 minutes and 50 a day on
-  Growth). Queue offers and
-  drain them at that rate; a `429 new_contact_limit` tells you how long to wait
-  in `error.retry_after_s`.
+- **New-contact limit.** A first message to a user who has never texted you
+  counts toward your Growth account's daily allowance. Queue first messages
+  within the [new-contact limits](/imessage/errors-limits-and-compliance#limits).
+  A `429 new_contact_limit` tells you how long to wait in `error.retry_after_s`.
 - **No link until they reply.** A link to someone who has never texted you
   can't be tapped (see [Links in a first message](/imessage/send-a-message#links-in-a-first-message)).
   Ask for the YES first and send the deep link with the confirmation, as above.

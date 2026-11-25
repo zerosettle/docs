@@ -139,7 +139,8 @@ someone who never replies pauses after two, so end it on an easy question),
 and the caps. Changing when a trigger goes moves it in every conversation; a new
 `once` trigger starts with each conversation's next message.
 
-Start a conversation with a phone number. The agent sends `first_message`
+To start a conversation with a new contact, use Growth and get the contact's
+consent. The agent sends `first_message`
 (or, with it off, writes its own opener), answers whatever they reply, and
 its triggers take it from there. `name` is optional: their name, which the agent
 knows for the whole conversation (it is not put into `first_message`):
@@ -158,9 +159,10 @@ curl -X POST https://portal.zerosettle.io/api/imessage/agent/start \
 
 </CodeGroup>
 
-Every agent message follows the same rules as yours: STOP is honored, at most
-2 messages before a contact's first reply, and the new-contact limits (a `429` with
-`retry_after_s`; on Pro, 5 new contacts a day per number). `409 not_managed` means the group is still managed by API.
+The agent honors STOP and sends at most 2 messages before a contact's first reply.
+The same [new-contact limits](/imessage/errors-limits-and-compliance#limits) apply.
+On Growth, a `429 new_contact_limit` gives `error.retry_after_s`. `409 not_managed`
+means the group is still managed by API.
 The conversation stays readable in the console, `GET /api/imessage/messages`
 and the live stream. In the console, **Start a conversation** (the
 Messaging tab) does the same.
@@ -384,8 +386,8 @@ it can be watched (free when fewer are left). See
   with `first_message_enabled: false` answers `429 agent_call_limit` (wait
   `error.retry_after_s`).
 - **Buying more.** In the console: **Buy credits** (in the Messaging
-  tab, Settings → Billing, or the banner), pick **1,000 for $50** or
-  **5,000 for $200**, and pay on Stripe's page; they are added when you come
+  tab, Settings → Billing, or the banner), pick **1,000 for \$50** or
+  **5,000 for \$200**, and pay on Stripe's page; they are added when you come
   back (or as soon as Stripe confirms the payment). Or answer them yourself:
   **Answer yourself** in the banner (or `managed_by: "api"`) hands the
   conversations back to your server, which uses none (videos aside).

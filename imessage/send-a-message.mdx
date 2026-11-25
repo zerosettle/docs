@@ -8,6 +8,9 @@ iMessage first. [SMS fallback](/imessage/send-a-message#sms-fallback) can delive
 eligible plain text as SMS from the same number when iMessage is unavailable.
 This endpoint also sends iMessage voice messages, photos, videos and polls.
 
+Pro lets you reply to people who text you first. Use Growth to start
+conversations with opted-in new contacts. See [plans and upgrades](/imessage/your-imessage-number#pricing).
+
 ```http
 POST /api/imessage/send
 Content-Type: application/json
@@ -79,7 +82,7 @@ after the line accepted the send.
 |---|---|---|---|
 | 200 | `message_sent` | The line accepted the message for sending. For a direct text, check message history for later SMS fallback. | — |
 | 429 | `busy` | The line was busy with another request for the whole retry window (~12 s). Error code `line_busy`. | Retry after 2 s. Sends are serialized per line. |
-| 429 | — | Too many new contacts. Error code `new_contact_limit`. | Wait `error.retry_after_s`. On Pro (5 a day), [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for 50 a day per number ($199 a month per number). |
+| 429 | — | The send would exceed the line's new-contact allowance. Error code `new_contact_limit`. | On Growth, wait `error.retry_after_s` before retrying. On Pro, ask the contact to text you first or [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade). |
 | 403 | — | They texted STOP. Error code `recipient_opted_out`; nothing was sent or stored. | Don't retry. They can text START to opt back in. |
 | 403 | — | They have never replied, and you already sent them 2 messages. Error code `awaiting_reply`; nothing was sent or stored. | Wait for their first reply. |
 | 403 | — | A photo, video, voice message or poll to someone who has never replied to this number. Error code `attachment_before_reply`; nothing was sent or stored. | Send text until they reply. |

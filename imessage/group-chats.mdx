@@ -63,9 +63,10 @@ sent if any check fails:
 
 - **STOP:** a member who texted STOP to any of your numbers →
   `403 recipient_opted_out` (`error.handle` says who).
-- **New contacts:** each member the line has never exchanged a message with
-  (1:1 or in another of its groups) **counts as one new contact** toward the
-  line's day → `429 new_contact_limit` when they don't all fit.
+- **New contacts.** Use Growth to start a group with people who haven't
+  messaged your number. Each new member **counts as one new contact** under the
+  line's daily allowance. The API returns `429 new_contact_limit` if the group
+  would exceed that allowance.
 - **On iMessage:** each new member must be on iMessage → `422
   not_on_imessage` (`error.handle` says who).
 
@@ -270,7 +271,7 @@ tools as before):
 | 404 | `unknown_chat` | No line on your account has that `chat_id`. Nothing was sent. | Use a `chat_id` from `GET /api/imessage/groups` or a message. |
 | 409 | `client_update_required` | This line requires an update to support group chats. Nothing was sent. | Try again after the update. |
 | 403 | `recipient_opted_out` | A member (or a member you are adding) has an active opt-out. `error.handle` says who. | Remove them from the group, or leave it. |
-| 429 | `new_contact_limit` | Starting a group, or adding members, would go over the line's new contacts. | Wait `retry_after_s`, or start with fewer new people. |
+| 429 | `new_contact_limit` | Starting a group or adding members would exceed the line's new-contact allowance. | On Pro, ask the new contacts to text you first or upgrade to Growth. On Growth, wait `retry_after_s` or add fewer new members. |
 | 422 | `not_on_imessage` | A new member isn't on iMessage. | Leave them out. |
 | 422 | `invalid_request` | Both or neither of `to` and `chat_id`, fewer than 2 or more than 31 members, a name over 60 characters… `error.fields` lists them. | Fix the input. |
 

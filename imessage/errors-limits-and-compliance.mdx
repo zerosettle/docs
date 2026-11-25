@@ -18,11 +18,6 @@ Every error on `/api/imessage/*` is JSON with a machine-readable `code`:
  "detail": "This line can message at most 3 new contacts per 15m …"}
 ```
 
-On Pro, a `new_contact_limit` message ends with how to get more: `Pro
-includes 5 new contacts a day per number. Need more? Upgrade to Growth for
-50 a day per number at $199 a month per number:
-https://portal.zerosettle.io/imessage#upgrade`. The code and fields are the same on every plan.
-
 Branch on `error.code`, show `error.message` to a human. Rate-limited
 responses also carry a `Retry-After` header (`2` for `line_busy`, `30` for `rate_limited`). A
 validation error carries `error.fields`, a list of `{"field", "message"}`.
@@ -68,7 +63,7 @@ A failed send or reaction keeps its `record` (the stored row with
 | 429 | `line_busy` | The line was busy for the whole retry window. | Retry after 2 s. |
 | 429 | `rate_limited` | A video upload (`POST /api/imessage/videos`, or a send with `video_b64`) while the account already has 3 videos processing, or 10 are processing across ZeroSettle. `Retry-After: 30`, `error.retry_after_s` 30. Nothing was stored or sent. | Wait for one to be `ready` (or 30 s), then retry. |
 | 429 | `daily_limit` | The number has sent and received 10,000 messages today (see below). `error.used`, `error.limit`. | Wait `retry_after_s` (the next 3 AM Eastern). |
-| 429 | `new_contact_limit` | Too many *new* contacts in the window (see below). | Wait `retry_after_s`. On Pro, [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console for more a day ($199 a month per number). |
+| 429 | `new_contact_limit` | The send would exceed the line's new-contact allowance (see below). | On Growth, wait `error.retry_after_s` before retrying. On Pro, ask the contact to text you first or [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade). |
 | 429 | `agent_call_limit` | `POST /api/imessage/agent/start` with `first_message_enabled: false` when the AI agent was already asked to write to that contact 60 times today (UTC), counting the times it decided to send nothing. Nothing was sent. | Wait `retry_after_s`. |
 | 503 | `phone_offline` / `phone_timeout` | The line is temporarily unreachable or did not answer. | Retry with backoff. |
 | 503 | `unavailable` | Video storage is briefly unavailable (an upload, a video send, or fetching a video or its poster). Nothing was sent or charged. | Retry in a minute. |
@@ -90,7 +85,7 @@ for videos, credits:
 | Usage | Allowance | Enforced? |
 |---|---|---|
 | Messages, sent and received | **10,000 / day** per number, reset at 3 AM Eastern | Yes — `429 daily_limit` |
-| New contacts | Pro: **5 / day**. Growth: **25 / day** per number with CAP25, **50 / day** at the standard limit, and **3 / 15 min**. Daily limits reset at 3 AM Eastern. | Yes — `429 new_contact_limit` |
+| New contacts | **Pro** is inbound-only. **Growth** starts with **50 new contacts/day** across the account, with options up to **500/day**. On Growth, a number can start conversations with up to **3 new contacts per 15 minutes**. Daily limits reset at 3 AM Eastern. | Yes — `429 new_contact_limit` |
 | Unanswered messages | **2** per contact until their first reply | Yes — `403 awaiting_reply` |
 | Photos, videos, voice messages and polls | Only to contacts who have replied at least once | Yes — `403 attachment_before_reply` |
 | Texts the hosted AI agent sends | **500 free credits** on Pro, **1,000** on Growth, once per account; packs add more ([credits](/imessage/ai-agent#credits)) | Yes — the agent goes quiet; `402 ai_credits_exhausted` on `/agent/start` |
@@ -103,14 +98,12 @@ for videos, credits:
   JPEG or PNG, 3 MB. A received video is delivered up to 60 MB.
 - Handles: E.164 phone numbers or iMessage email addresses, up to 128
   characters.
-- **New contacts**: on Pro, a line may reach out to at most **5 new
-  contacts per day**; need more? [Upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade) in the console ($199 a month per number).
-  On Growth, a line may reach out to at most **3 new contacts per 15
-  minutes** (a rolling window). New Growth signups get CAP25, which limits
-  each number to **25 new contacts per day**. The standard Growth limit is
-  **50 per day**. The day runs 3 AM to 3 AM
-  Eastern, EST or EDT — midnight Pacific: `usage.new_contacts` counts since
-  the last 3 AM Eastern and resets to 0 then; the 429's `window` is `"day"`. A
+- **New contacts.** Pro lets you reply to people who text you first. To start
+  conversations with opted-in contacts, [upgrade to Growth](https://portal.zerosettle.io/imessage#upgrade)
+  for \$199/month per number. Check `usage.new_contacts.limit` in
+  `GET /api/imessage/line` for your account's daily allowance. Growth also has
+  a rolling limit of **3 new contacts per 15 minutes per number**. The daily
+  count resets at 3 AM Eastern. A daily-limit response has `window: "day"`. A
   "new contact" is a handle the line delivers a text, voice message, photo,
   or video to **first**; reactions, typing, profile shares, and failed sends never
   count. Anyone who texted the line first never counts, and neither does an
@@ -144,7 +137,18 @@ for videos, credits:
   Inbound is pushed; nothing polls for it, so inbound never delays a send.
 - Webhook: HTTPS only (HTTP for localhost), 10 s timeout, 3 retries, no redirects
   followed.
-- Retention: messages are kept indefinitely for now.
+
+## Message retention and HIPAA
+
+Automatic message expiration is currently unavailable. You can remove stored
+messages using the [delete-conversation endpoint](/imessage/read-messages#delete-a-conversation).
+Configurable message retention is planned as part of the HIPAA update at no
+extra charge. The release date is unannounced.
+
+HIPAA plan eligibility, pricing and availability are unannounced. You must
+have a signed Business Associate Agreement (BAA) with ZeroSettle before using
+the service for protected health information (PHI). See the
+[iMessage API Terms of Service](https://zerosettle.io/legal/imessage-terms/).
 
 <a id="compliance-you-need-consent" />
 

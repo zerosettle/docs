@@ -8,6 +8,9 @@ write real code. Each one is explained in the pages that follow; the
 [reference page](/imessage/errors-limits-and-compliance) has every error code and
 limit. The text send below attempts iMessage first. [SMS fallback](/imessage/send-a-message#sms-fallback) can deliver eligible plain text as SMS when iMessage is unavailable.
 
+Before testing the send calls, text your ZeroSettle number from your own phone.
+Use that phone's number as `to`. Pro can reply to people who text you first.
+
 ```bash
 export BASE=https://portal.zerosettle.io TOKEN=pt_mcp_…
 curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/line          # 1. am I a line?

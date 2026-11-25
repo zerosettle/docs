@@ -53,8 +53,8 @@ curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/imessage/line
 </CodeGroup>
 
 `handle` is the line's own number (the one people text); `phone` is the
-number you were invited on. `usage.new_contacts.limit` is your plan's day of
-new contacts: 5 on Pro (the example above is a Growth number, 50).
+number you were invited on. For Growth, `usage.new_contacts.limit` shows your
+account's daily new-contact allowance. The example shows an allowance of 50.
 `usage.new_contacts.resets_at` is when today's
 new-contact count goes back to 0: the next 3 AM Eastern, in UTC. `profile` is `null` until a name and photo are
 set; `last_delivery` is `null` until the first webhook attempt. An account
